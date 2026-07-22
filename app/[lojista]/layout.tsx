@@ -24,7 +24,7 @@ export default async function LojaLayout({ children, params }: LojaLayoutProps) 
     return value;
   }));
 
-  let categorias = [];
+  let categorias: any[] = [];
   try {
     const q = query(collection(db, "lojistas"), where("dadosLoja.dsSlug", "==", lojista), limit(1));
     const snap = await getDocs(q);
