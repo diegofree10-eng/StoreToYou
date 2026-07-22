@@ -1,0 +1,94 @@
+/* Reset padrão */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', Arial, sans-serif; /* Adicionei Inter para um ar mais moderno */
+  background: #f5f5f5;
+  color: #1e293b;
+  overflow-x: hidden;
+}
+
+/* Ajuste global para imagens */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ANIMAÇÃO DO LOADER (Obrigatório para o AdminLayout)
+   Isso faz com que o círculo de "Protegendo acesso" gire.
+*/
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Classe utilitária caso você precise em outros lugares */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Opcional: Melhorar a aparência do scrollbar no Admin */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* --- ESTILOS DE IMPRESSÃO (Substitua todo o seu bloco @media print anterior por este) --- */
+@media print {
+  /* Oculta tudo na tela, exceto o que queremos imprimir */
+  body, html {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  body * {
+    visibility: hidden;
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+  }
+
+  .area-impressao, .area-impressao * {
+    visibility: visible;
+  }
+
+  /* FORÇAMOS o posicionamento no topo esquerdo */
+  .area-impressao {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Evita quebra de página no meio de uma etiqueta */
+  .area-impressao > div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  @page {
+    margin: 0.5cm; /* Margem pequena para garantir que não corte nas bordas */
+  }
+}
