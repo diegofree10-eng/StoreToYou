@@ -206,7 +206,7 @@ export default function VariacoesModal({
             />
             <button
               onClick={() => {
-                setDraftTabela(prev => {
+                setDraftTabela((prev: any) => {
                   const novaTabela = { ...prev };
 
                   // Em vez de iterar sobre o draftTabela (que está vazio),

@@ -227,7 +227,8 @@ export default function AdminConfig() {
       if (novaLogo) {
         const storageRef = ref(storage, `logos_lojistas/${uid}`);
         await uploadBytes(storageRef, novaLogo);
-        dadosParaSalvar.dadosLoja.dsLogoLoja = await getDownloadURL(storageRef);
+        
+        (dadosParaSalvar.dadosLoja as any).dsLogoLoja = await getDownloadURL(storageRef);
       }
 
       const comprimirImagem = (file: File): Promise<Blob> => {

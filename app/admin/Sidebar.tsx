@@ -58,12 +58,12 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout }: SidebarPr
               // Lógica de bloqueio
               if (tsVencimento && now > tsVencimento && statusAtual === 'ativo') {
                 await updateDoc(docRef, { "dadosLoja.dsStatusLoja": 'suspenso' });
-                window.location.replace = "/atendimentoSuporte";
+                window.location.replace("/atendimentoSuporte");
                 return;
               }
 
               if (statusAtual === 'suspenso') {
-                window.location.replace = "/atendimentoSuporte";
+               window.location.replace("/atendimentoSuporte");
                 return;
               }
 

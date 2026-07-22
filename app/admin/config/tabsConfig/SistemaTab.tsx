@@ -116,7 +116,7 @@ export default function SistemaTab({
         value={String(config.sistema?.isLojaAberta ?? true)}
         onChange={e => {
           const valor = e.target.value === "true";
-          setConfig(prev => ({
+          setConfig((prev: any) => ({
             ...prev,
             sistema: {
               ...(prev.sistema || {}),
