@@ -15,6 +15,7 @@ interface SecaoClienteEnderecoProps {
   safeCartLength: number;
   loadingFrete: boolean;
   opcoesFrete: any[];
+  setOpcoesFrete: (frete: any) => void; // <--- Adicione esta linha aqui
   freteSel: any;
   setFreteSel: (frete: any) => void;
   setFreteBackup: (frete: any) => void;
