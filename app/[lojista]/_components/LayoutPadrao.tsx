@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useParams, useRouter } from "next/navigation";
-import { FiSearch, FiShoppingCart, FiMenu, FiX, FiGrid } from "react-icons/fi";
+import { FiSearch, FiShoppingCart, FiMenu, FiX, FiGrid, FiChevronDown, FiCornerDownRight } from "react-icons/fi";
 import { FaInstagram, FaFacebook, FaWhatsapp, FaTiktok, FaYoutube, FaTwitter } from "react-icons/fa";
 import { useCart } from "@/context/CartContext";
 import { useLoja } from "./LojaContext";
@@ -21,6 +21,13 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
 
     const slug = params.lojista as string;
     const [menuMobileAberto, setMenuMobileAberto] = useState(false);
+    
+    // Estado para controlar quais categorias estão expandidas (mostrando subcategorias)
+    const [catExpandida, setCatExpandida] = useState<{ [key: string]: boolean }>({});
+
+    const toggleCategoria = (catId: string) => {
+        setCatExpandida(prev => ({ ...prev, [catId]: !prev[catId] }));
+    };
 
     const lojaObj = dadosLoja?.dadosLoja || dadosLoja || {};
     const ap = dadosLoja?.aparencia || {};
@@ -71,18 +78,22 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
 
     const totalCarrinho = Array.isArray(cart) ? cart.reduce((a, b) => a + (b.qty || b.quantidade || 1), 0) : 0;
 
-    const irParaCategoria = (nomeCat: string) => {
+    const irParaCategoria = (nomeCat: string, nomeSub?: string) => {
         setMenuMobileAberto(false);
-        router.push(`/${slug}/PagCategoria?cat=${encodeURIComponent(nomeCat)}`);
+        if (nomeSub) {
+            router.push(`/${slug}/PagCategoria?cat=${encodeURIComponent(nomeCat)}&sub=${encodeURIComponent(nomeSub)}`);
+        } else {
+            router.push(`/${slug}/PagCategoria?cat=${encodeURIComponent(nomeCat)}`);
+        }
     };
 
     return (
-        <div style={{ backgroundColor: config.corFundoSite, color: config.corTextoCard, minHeight: '100vh', fontFamily: 'sans-serif', boxSizing: 'border-box', paddingBottom: '60px', overflowX: 'hidden', position: 'relative' }}>
+        <div style={{ backgroundColor: config.corFundoSite, color: config.corTextoCard, minHeight: '100vh', fontFamily: 'sans-serif', boxSizing: 'border-box', paddingBottom: '0px', overflowX: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
 
             {/* TOPO DE AVISOS */}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', padding: '8px 20px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', textAlign: 'center' }}>
                 <span>🚚 Frete para todo o Brasil</span>
-                <span className="hide-mobile">💳 Parcele em até 12x sem juros</span>
+                <span className="hide-mobile">💳 Pague com pix</span>
                 <span>📞 Atendimento</span>
             </div>
 
@@ -135,7 +146,7 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                         ))}
                     </div>
                     <div className="hide-mobile divisor-desktop" style={{ width: '1px', height: '22px', backgroundColor: '#e2e8f0' }}></div>
-                    
+
                     {/* Botão do menu sanduíche real para mobile */}
                     <button className="menu-sanduiche-mobile-btn" onClick={() => setMenuMobileAberto(true)} style={{ background: '#f1f5f9', border: 'none', cursor: 'pointer', color: config.corTextoCard, display: 'none', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold' }}>
                         <FiMenu size={16} /> Categorias
@@ -153,43 +164,114 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
             </header>
 
             {/* CONTAINER GLOBAL CENTRALIZADO */}
-            <div style={{ maxWidth: '1300px', margin: '20px auto 0', padding: '0 15px', boxSizing: 'border-box' }}>
+            <div style={{ maxWidth: '1300px', margin: '20px auto 40px', padding: '0 15px', boxSizing: 'border-box', flex: 1, width: '100%' }}>
 
-                {/* LINHA SUPERIOR COM ALTURA FIXA IGUAL PARA AMBAS */}
-                <div style={{ display: 'flex', alignItems: 'stretch', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
+                {/* LINHA SUPERIOR COM ALTURA FIXA IGUAL PARA AMBAS (Exibida apenas se houver bannerTopo) */}
+                {bannerTopo && (
+                    <div style={{ display: 'flex', alignItems: 'stretch', gap: '20px', width: '100%', boxSizing: 'border-box', marginBottom: '20px' }}>
 
-                    {/* Sidebar de Categorias */}
-                    <aside className="sidebar-categorias" style={{ width: '260px', height: '400px', backgroundColor: config.corSecundaria, borderRadius: '12px', padding: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-                        <div style={{ backgroundColor: config.corPrimaria, color: '#fff', padding: '12px 15px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexShrink: 0 }}>
-                            <FiGrid /> Categorias ({categorias.length})
-                        </div>
-                        <div className="lista-categorias-scroll" style={{ height: '335px', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            {categorias.length > 0 ? (
-                                categorias.map((cat: any) => (
-                                    <div key={cat.id} onClick={() => irParaCategoria(cat.nome)} style={{ padding: '10px 12px', fontSize: '13px', color: config.corTextoCard, borderRadius: '6px', cursor: 'pointer', textTransform: 'uppercase', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', flex: '1 1 auto' }}>
-                                        {cat.nome}
-                                    </div>
-                                ))
-                            ) : (
-                                <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>Carregando...</div>
-                            )}
-                        </div>
-                    </aside>
+                        {/* Sidebar de Categorias */}
+                        <aside className="sidebar-categorias" style={{ width: '260px', height: '400px', backgroundColor: config.corSecundaria, borderRadius: '12px', padding: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                            <div style={{ backgroundColor: config.corPrimaria, color: '#fff', padding: '12px 15px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexShrink: 0 }}>
+                                <FiGrid /> Categorias ({categorias.length})
+                            </div>
+                            {/* Scroll interno da Sidebar */}
+                            <div className="lista-categorias-scroll" style={{ height: '335px', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {categorias.length > 0 ? (
+                                    categorias.map((cat: any) => {
+                                        const temSubs = cat.subcategorias && cat.subcategorias.length > 0;
+                                        const estaExpandida = catExpandida[cat.id];
 
-                    {/* Main da Direita acompanha 100% da altura da sidebar de forma flexível */}
-                    <main className="main-conteudo-topo" style={{ flex: 1, height: '400px', minWidth: 0, boxSizing: 'border-box', margin: 0, display: 'flex', overflow: 'hidden', backgroundColor: config.corFundoSite, borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-                        <div style={{ width: '100%', height: '100%' }}>
-                            {bannerTopo}
-                        </div>
-                    </main>
-                </div>
+                                        return (
+                                            <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', borderRadius: '6px', backgroundColor: '#f8fafc', overflow: 'hidden', flexShrink: 0 }}>
+                                                <div 
+                                                    onClick={() => {
+                                                        if (temSubs) {
+                                                            toggleCategoria(cat.id);
+                                                        } else {
+                                                            irParaCategoria(cat.nome);
+                                                        }
+                                                    }} 
+                                                    style={{ padding: '10px 12px', fontSize: '13px', color: config.corTextoCard, cursor: 'pointer', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: temSubs ? 'bold' : 'normal' }}
+                                                >
+                                                    <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {cat.nome}
+                                                    </span>
+                                                    {temSubs && (
+                                                        <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '2px', display: 'flex', alignItems: 'center' }}>
+                                                            <FiChevronDown size={14} style={{ transform: estaExpandida ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                                                        </span>
+                                                    )}
+                                                </div>
 
-                {/* MAIN 2 (Logo abaixo, ocupando a largura total de ponta a ponta) */}
-                <div style={{ width: '100%', marginTop: '20px', boxSizing: 'border-box' }}>
+                                                {/* Subcategorias no Desktop */}
+                                                {temSubs && estaExpandida && (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', paddingBottom: '4px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                                                        {cat.subcategorias.map((sub: string, index: number) => (
+                                                            <div 
+                                                                key={index} 
+                                                                onClick={() => irParaCategoria(cat.nome, sub)}
+                                                                style={{ padding: '8px 12px 8px 24px', fontSize: '12px', color: config.corTextoCard, opacity: 0.85, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                            >
+                                                                <FiCornerDownRight size={12} color={config.corTextoCard} style={{ opacity: 0.6 }} />
+                                                                <span>{sub}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>Carregando...</div>
+                                )}
+                            </div>
+                        </aside>
+
+                        {/* Main da Direita */}
+                        <main className="main-conteudo-topo" style={{ flex: 1, height: '400px', minWidth: 0, boxSizing: 'border-box', margin: 0, display: 'flex', overflow: 'hidden', backgroundColor: config.corFundoSite, borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
+                            <div className="main-interno-wrapper" style={{ width: '100%', height: '100%' }}>
+                                {bannerTopo}
+                            </div>
+                        </main>
+                    </div>
+                )}
+
+                {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
+                <div style={{ width: '100%', boxSizing: 'border-box' }}>
                     {children}
                 </div>
 
             </div>
+
+            {/* RODAPÉ PADRÃO DA LOJA DE PONTA A PONTA */}
+            <footer style={{
+                backgroundColor: config.corSecundaria,
+                width: '100%',
+                margin: '0',
+                borderTop: '1px solid #e2e8f0',
+                boxSizing: 'border-box'
+            }}>
+                <div style={{
+                    maxWidth: '1200px',
+                    margin: '0 auto',
+                    padding: '12px 25px',
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '10px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {logoUrl ? <img src={logoUrl} style={{ width: '25px', height: '25px', objectFit: 'contain' }} alt={nomeLoja} /> : <span>🛍️</span>}
+                        <span style={{ fontSize: '13px', fontWeight: 'bold', color: config.corTextoCard }}>{nomeLoja.toUpperCase()}</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b', textAlign: 'center' }}>
+                        Todos os direitos reservados © {new Date().getFullYear()}
+                    </div>
+                </div>
+            </footer>
 
             {/* BOTÃO FLUTUANTE DO WHATSAPP */}
             {linkWhatsappFlutuante && (
@@ -223,7 +305,7 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
             {/* MODAL MOBILE */}
             {menuMobileAberto && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex' }}>
-                    <div style={{ width: '280px', backgroundColor: config.corSecundaria, height: '100%', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div className="modal-menu-mobile-conteudo" style={{ width: '80%', maxWidth: '280px', backgroundColor: config.corSecundaria, height: '100%', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '12px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', fontSize: '16px', color: config.corTextoCard }}>
                                 <FiGrid color={config.corPrimaria} /> Menu
@@ -231,11 +313,50 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                             <button onClick={() => setMenuMobileAberto(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><FiX size={24} /></button>
                         </div>
                         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
-                            {categorias.map((cat: any) => (
-                                <div key={cat.id} onClick={() => irParaCategoria(cat.nome)} style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 'bold', color: config.corTextoCard, borderRadius: '8px', cursor: 'pointer', backgroundColor: '#f8fafc' }}>
-                                    {cat.nome}
-                                </div>
-                            ))}
+                            {categorias.map((cat: any) => {
+                                const temSubs = cat.subcategorias && cat.subcategorias.length > 0;
+                                const estaExpandida = catExpandida[cat.id];
+
+                                return (
+                                    <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', borderRadius: '8px', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
+                                        <div 
+                                            onClick={() => {
+                                                if (temSubs) {
+                                                    toggleCategoria(cat.id);
+                                                } else {
+                                                    irParaCategoria(cat.nome);
+                                                }
+                                            }}
+                                            style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 'bold', color: config.corTextoCard, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                                        >
+                                            <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1 }}>
+                                                {cat.nome}
+                                            </span>
+                                            {temSubs && (
+                                                <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '2px', display: 'flex', alignItems: 'center' }}>
+                                                    <FiChevronDown size={14} style={{ transform: estaExpandida ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Subcategorias no Mobile */}
+                                        {temSubs && estaExpandida && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', paddingBottom: '4px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                                                {cat.subcategorias.map((sub: string, index: number) => (
+                                                    <div 
+                                                        key={index} 
+                                                        onClick={() => irParaCategoria(cat.nome, sub)}
+                                                        style={{ padding: '8px 12px 8px 24px', fontSize: '12px', fontWeight: 'normal', color: config.corTextoCard, opacity: 0.85, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                    >
+                                                        <FiCornerDownRight size={12} color={config.corTextoCard} style={{ opacity: 0.6 }} />
+                                                        <span>{sub}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                     <div style={{ flex: 1 }} onClick={() => setMenuMobileAberto(false)} />
@@ -248,30 +369,48 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                 .lista-categorias-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
                 @media (max-width: 1024px) {
+                    .main-conteudo-topo {
+                        height: auto !important;
+                        overflow: visible !important;
+                        width: 100% !important;
+                        box-sizing: border-box !important;
+                    }
+                    .main-conteudo-topo > div {
+                        height: auto !important;
+                        width: 100% !important;
+                        box-sizing: border-box !important;
+                    }
+
                     .header-loja {
                         display: flex !important;
                         flex-direction: column !important;
                         height: auto !important;
                         padding: 10px 15px !important;
                         gap: 10px !important;
+                        width: 100% !important;
+                        box-sizing: border-box !important;
                     }
 
                     .header-loja > div:nth-child(1) {
                         width: 100% !important;
                         justify-content: space-between !important;
+                        box-sizing: border-box !important;
                     }
                     
                     .sidebar-categorias { display: none !important; }
                     
                     .search-box {
                         width: 100% !important;
+                        max-width: 100% !important;
                         order: 3 !important;
                         margin: 0 !important;
                         padding: 8px 16px !important;
+                        box-sizing: border-box !important;
                     }
                     
                     .header-actions-right {
                         width: 100% !important;
+                        max-width: 100% !important;
                         justify-self: auto !important;
                         order: 2 !important;
                         display: flex !important;
@@ -279,6 +418,7 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                         align-items: center !important;
                         border-top: 1px solid #f1f5f9 !important;
                         padding-top: 8px !important;
+                        box-sizing: border-box !important;
                     }
 
                     .menu-sanduiche-mobile-btn { display: flex !important; }

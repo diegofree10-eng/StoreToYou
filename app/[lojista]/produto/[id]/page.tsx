@@ -237,26 +237,27 @@ export default function ProdutoAgrupadoPage() {
   if (!produto) return <div style={styles.center}>Produto não encontrado.</div>;
 
   return (
-    <LayoutPadrao 
+    <LayoutPadrao
       categorias={categoriasState}
       bannerTopo={
         <div className="banner-topo-produto" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', height: '400px', maxHeight: '400px', boxSizing: 'border-box' }}>
-          
+
           {/* Bloco Esquerdo: Minicards + Card Principal */}
           <div className="bloco-galeria-produto" style={{ display: 'flex', gap: '100px', height: '400px', alignItems: 'center', marginLeft: '15px' }}>
-            
+
             {/* 1. Minicards na Vertical */}
-            <div className="minicards-container" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: '70px', height: '400px', flexShrink: 0 }}>
+            <div className="minicards-container" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '12px', width: '70px', height: '400px', flexShrink: 0 }}>
               {imagensGaleria.slice(0, 4).map((img: string, idx: number) => (
-                <div 
-                  key={idx} 
-                  onClick={() => setImgAtiva(img)} 
-                  style={{ 
-                    width: '100%', 
-                    aspectRatio: '1/1', 
-                    borderRadius: '8px', 
-                    overflow: 'hidden', 
-                    cursor: 'pointer', 
+                <div
+                  key={idx}
+                  onClick={() => setImgAtiva(img)}
+                  style={{
+                    width: '100%',
+                    height: '70px', // Deixamos a altura fixa proporcional para garantir o quadrado perfeito
+                    minHeight: '70px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
                     border: imgAtiva === img ? `2px solid ${config.corDestaque}` : '1px solid #e2e8f0',
                     backgroundColor: '#ffffff',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
@@ -268,16 +269,17 @@ export default function ProdutoAgrupadoPage() {
               ))}
             </div>
 
+
             {/* 2. Card Principal com Imagem */}
-            <div className="card-principal-foto" style={{ width: '400px', minWidth: '400px', maxWidth: '400px', height: '400px', maxHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', flexShrink: 0, overflow: 'hidden', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-              <img src={imgAtiva || produto.capa} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt={produto.nome} />
+            <div className="card-principal-foto" style={{ width: '400px', minWidth: '400px', maxWidth: '400px', height: '400px', maxHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', flexShrink: 0, overflow: 'hidden', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', padding: '10px' }}>
+              <img src={imgAtiva || produto.capa} style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }} alt={produto.nome} />
             </div>
 
           </div>
 
           {/* 3. Quadro de Variações da Direita */}
           <div className="quadro-variacoes-produto" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '400px', maxHeight: '400px', width: '300px', minWidth: '300px', boxSizing: 'border-box', gap: '10px' }}>
-            
+
             {/* Sub-main Superior: Informações e Variações */}
             <div style={{ flex: 1, backgroundColor: '#fff', borderRadius: '12px', padding: '18px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: config.corTextoDestaque, margin: 0, lineHeight: '1.2' }}>{produto.nome}</h1>
@@ -293,9 +295,18 @@ export default function ProdutoAgrupadoPage() {
                       const valor = (item.v1 || item.sabor || item.cor || item.modelo || "").trim();
                       const ativo = v1Selecionada === valor;
                       return (
-                        <div key={i} onClick={() => { setV1Selecionada(valor); if (item.foto) setImgAtiva(item.foto); }} style={{ width: '50px', textAlign: 'center', borderRadius: '6px', overflow: 'hidden', cursor: 'pointer', backgroundColor: '#fff', border: ativo ? `2px solid ${config.corDestaque}` : '1px solid #ddd', padding: '2px' }}>
+                        <div
+                          key={i}
+                          onClick={() => {
+                            setV1Selecionada(valor);
+                            console.log("DADOS DA VARIAÇÃO CLICADA:", item); // <--- Agora vai aparecer com certeza!
+                            const fotoDesejada = item.foto || item.imagem || item.url || item.fotoCapa;
+                            if (fotoDesejada) setImgAtiva(fotoDesejada);
+                          }}
+                          style={{ width: '50px', textAlign: 'center', borderRadius: '6px', overflow: 'hidden', cursor: 'pointer', backgroundColor: '#fff', border: ativo ? `2px solid ${config.corDestaque}` : '1px solid #ddd', padding: '2px' }}
+                        >
                           <div style={{ width: '100%', height: '34px', borderRadius: '4px', overflow: 'hidden' }}>
-                            {item.foto ? <img src={item.foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={valor} /> : <div style={{ background: '#f0f0f0', height: '100%' }} />}
+                            {(item.foto || item.imagem || item.url) ? <img src={item.foto || item.imagem || item.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={valor} /> : <div style={{ background: '#f0f0f0', height: '100%' }} />}
                           </div>
                           <span style={{ fontSize: '8px', padding: '1px 0', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{valor}</span>
                         </div>
@@ -398,25 +409,31 @@ export default function ProdutoAgrupadoPage() {
           .bloco-galeria-produto {
             width: 100% !important;
             height: auto !important;
-            flex-direction: column-reverse !important;
+            flex-direction: column !important; 
             gap: 15px !important;
             margin-left: 0 !important;
             align-items: center !important;
+            justify-content: center !important;
           }
           .card-principal-foto {
             width: 100% !important;
             min-width: 100% !important;
             max-width: 100% !important;
-            height: 320px !important;
-            max-height: 320px !important;
+            height: 350px !important;
+            max-height: 350px !important;
+            background-color: #f8fafc !important;
+            order: 1 !important;
           }
           .minicards-container {
             width: 100% !important;
             height: 70px !important;
             flex-direction: row !important;
-            justify-content: flex-start !important;
+            justify-content: center !important; 
+            align-items: center !important;
             gap: 10px !important;
             overflow-x: auto !important;
+            margin: 0 auto !important;
+            order: 2 !important; /* Mini cards ficam logo abaixo da foto */
           }
           .minicards-container > div {
             width: 60px !important;
@@ -427,6 +444,7 @@ export default function ProdutoAgrupadoPage() {
             min-width: 100% !important;
             height: auto !important;
             max-height: none !important;
+            order: 3 !important; /* Quadro de variações e botão vêm por último */
           }
         }
       `}</style>

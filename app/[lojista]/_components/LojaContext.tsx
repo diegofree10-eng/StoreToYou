@@ -14,8 +14,8 @@ const LojaContext = createContext<LojaContextType>({
 });
 
 export function LojaProvider({ children, dadosLoja }: { children: React.ReactNode; dadosLoja: any }) {
-  // Lê corretamente a flag de férias salva dentro de dadosLoja no AdminConfig
-  const isLojaAberta = dadosLoja?.dadosLoja?.isLojaAberta !== false;
+  // Lê a flag de funcionamento de dentro do objeto 'sistema' no Firestore
+  const isLojaAberta = dadosLoja?.sistema?.isLojaAberta !== false;
 
   return (
     <LojaContext.Provider value={{ dadosLoja, isLojaAberta }}>

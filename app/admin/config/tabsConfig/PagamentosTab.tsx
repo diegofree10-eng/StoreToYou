@@ -5,17 +5,66 @@ export default function PagamentosTab({
   setConfig,
   masterLiberouMeioPagamento
 }: any) {
+
+  // Função auxiliar para atualizar o tipo de chave ou o valor da chave mantendo a estrutura
+  const handleChavePixChange = (campo: "tipo" | "valor", valor: string) => {
+    const pagamentosAtual = config.pagamentos || {};
+    
+    // Se a chave pix salva for uma string simples, convertemos para objeto interno, ou mantemos organizado
+    let pixAtual = typeof pagamentosAtual.dsChavePix === 'object' 
+      ? { ...pagamentosAtual.dsChavePix } 
+      : { tipo: "telefone", valor: typeof pagamentosAtual.dsChavePix === 'string' ? pagamentosAtual.dsChavePix : "" };
+
+    pixAtual[campo] = valor;
+
+    // Se mudou o tipo, podemos limpar ou manter o valor atual
+    setConfig({
+      ...config,
+      pagamentos: {
+        ...pagamentosAtual,
+        dsChavePix: pixAtual
+      }
+    });
+  };
+
+  // Extrai o tipo e o valor com segurança para os inputs
+  const pixObj = typeof config.pagamentos?.dsChavePix === 'object' 
+    ? config.pagamentos.dsChavePix 
+    : { tipo: "telefone", valor: config.pagamentos?.dsChavePix || "" };
+
   return (
     <section>
       <h3 style={styles.h3}>Recebimento Manual</h3>
-      <div style={{ marginBottom: '25px' }}>
-        <label style={styles.label}>Sua Chave PIX</label>
+      
+      <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <label style={styles.label}>Tipo de Chave PIX</label>
+        <select
+          style={styles.select}
+          value={pixObj.tipo || "telefone"}
+          onChange={e => handleChavePixChange("tipo", e.target.value)}
+        >
+          <option value="telefone">Celular / Telefone</option>
+          <option value="cpf">CPF</option>
+          <option value="cnpj">CNPJ</option>
+          <option value="email">E-mail</option>
+          <option value="aleatoria">Chave Aleatória (EVP)</option>
+        </select>
+
+        <label style={styles.label}>Chave PIX ({pixObj.tipo?.toUpperCase() || "TELEFONE"})</label>
         <input
           style={styles.input}
-          value={config.pagamentos.dsChavePix || ""}
-          onChange={e => setConfig({ ...config, pagamentos: { ...config.pagamentos, dsChavePix: e.target.value } })}
-          placeholder="E-mail, CPF ou Celular"
+          value={pixObj.valor || ""}
+          onChange={e => handleChavePixChange("valor", e.target.value)}
+          placeholder={
+            pixObj.tipo === 'telefone' ? 'Ex: 11999999999 (Apenas DDD + Número)' :
+            pixObj.tipo === 'cpf' ? 'Ex: 000.000.000-00' :
+            pixObj.tipo === 'email' ? 'Ex: seuemail@loja.com' :
+            'Digite sua chave Pix'
+          }
         />
+        <span style={{ fontSize: '11px', color: '#64748b' }}>
+          {pixObj.tipo === 'telefone' && '💡 Digite apenas o DDD e o número. O sistema ajustará o formato automaticamente para o padrão do Banco Central.'}
+        </span>
       </div>
 
       <h3 style={styles.h3}>Gateways de Checkout Ativos</h3>
@@ -143,6 +192,7 @@ export default function PagamentosTab({
 const styles: any = {
   h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
   label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "4px", display: 'block' },
-  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none' },
+  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', backgroundColor: '#fff' },
+  select: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', backgroundColor: '#fff', cursor: 'pointer' },
   helpText: { fontSize: '12px', color: '#64748b', marginBottom: '20px', background: '#f1f5f9', padding: '10px', borderRadius: '8px', borderLeft: '4px solid #2563eb' }
 };

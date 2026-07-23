@@ -2,7 +2,7 @@ import { db } from "@/lib/firebase";
 import { doc, runTransaction, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export const executarFluxoPedido = async ({
-  lojistaId, cliente, endereco, safeCart, personalizacoes,
+  lojistaId, cliente, endereco, safeCart, personalizacoes, requisitosDoBanco,
   valorSubtotalProdutos, valorDesconto, totalGeral, whatsappNumero,
   dadosLoja, logistica, cupomDigitado, freteGratisConfig
 }: any) => {
@@ -18,38 +18,69 @@ export const executarFluxoPedido = async ({
       return String(proximo).padStart(4, '0');
     });
 
-    // 2. Montagem dos itens formatados
+    // 2. Montagem dos itens formatados com as respostas dos requisitos padronizadas
     const itensFormatados = safeCart.map((item: any, index: number) => {
-      const key = item.cartItemKey || `item_${index}`;
-      const rawRespostas = personalizacoes[key] || {};
-      const requisitos = item.requisitos;
+      const chaveUnica = `${item.cartItemId || item.id || 'prod'}_${index}`;
+      const rawRespostas = personalizacoes[chaveUnica] || personalizacoes[item.cartItemKey] || {};
       
+      // Pega os requisitos cadastrados no produto
+      const requisitos = item.requisitos || requisitosDoBanco?.[item.id] || [];
       const respostasFormatadas: Record<string, string> = {};
 
-      if (Array.isArray(requisitos)) {
+      if (Array.isArray(requisitos) && requisitos.length > 0) {
         requisitos.forEach((req: any) => {
-          const val = rawRespostas[req.id] || rawRespostas[req.label] || "";
-          if (val) respostasFormatadas[req.label || req.id] = val;
+          const campoId = String(req.id || "");
+          const labelCampo = req.nome || req.label || "Campo";
+          
+          // Busca o valor digitado pelo ID ou pelo label do requisito
+          const val = rawRespostas[campoId] || rawRespostas[labelCampo] || "";
+          if (val) {
+            respostasFormatadas[labelCampo] = val;
+          }
+        });
+      } else {
+        // Fallback caso não encontre a lista de requisitos estruturada
+        Object.keys(rawRespostas).forEach((key) => {
+          if (rawRespostas[key]) {
+            respostasFormatadas[key] = rawRespostas[key];
+          }
         });
       }
 
       return {
         id: item.id || "",
         idProduto: item.idProduto || item.id,
-        nome: item.nome || item.title || "Produto",
+        nome: item.dsNomeProduto || item.nome || item.title || "Produto",
         qty: Number(item.qty || 1),
         preco: Number(item.preco || item.price || 0),
         variacao: item.variacao || "",
         precisaFrete: item.precisaFrete !== false,
-        respostasFormatadas: respostasFormatadas,
+        respostasFormatadas: respostasFormatadas, // 👈 Requisitos salvos com rótulos e valores corretos
         foto: item.foto || item.imagem || item.url || "",
         sku: item.sku || (item.variacaoSelecionada ? item.variacaoSelecionada.sku : "SEM-SKU")
       };
     });
 
-    // 3. Objeto estruturado com novo padrão (prefixos e organização)
+    // 3. Estrutura padronizada de Dados do Cliente e Endereço com sufixo Cliente
+    const dadosCliente = {
+      nmNomeCliente: cliente?.nmNomeCliente || cliente?.nome || "Cliente", 
+      dsCpfCliente: cliente?.dsCpfCliente || cliente?.cpf || "",
+      dsEmailCliente: cliente?.dsEmailCliente || cliente?.email || "",
+      dsTelefoneCliente: cliente?.dsTelefoneCliente || cliente?.dsTelefone || ""
+    };
+
+    const dadosEnderecoCliente = {
+      dsCepCliente: endereco?.dsCepCliente || endereco?.cep || cliente?.dsCepCliente || cliente?.cep || "",
+      dsRuaCliente: endereco?.dsRuaCliente || endereco?.rua || "",
+      dsNumeroCliente: endereco?.dsNumeroCliente || endereco?.numero || "",
+      dsBairroCliente: endereco?.dsBairroCliente || endereco?.bairro || "",
+      dsCidadeCliente: endereco?.dsCidadeCliente || endereco?.cidade || endereco?.city || "",
+      dsUfCliente: endereco?.dsUfCliente || endereco?.uf || "",
+      dsComplementoCliente: endereco?.dsComplementoCliente || endereco?.complemento || ""
+    };
+
+    // 4. Objeto estruturado para salvar no Firebase
     const dadosDoPedidoParaSalvar = {
-      // Identificação
       nrPedido: Number(numPedidoSequencial),
       dsStatus: "pendente",
       isPago: false,
@@ -57,24 +88,11 @@ export const executarFluxoPedido = async ({
       dtCriacao: new Date().toISOString(),
       mesAno: new Date().toISOString().substring(0, 7),
 
-      // Cliente
-      cliente: { 
-        nmNome: cliente?.nome || "Cliente", 
-        dsCpf: cliente?.cpf || "",
-        dsEmail: cliente?.email || "",
-        dsTelefone: cliente?.dsTelefone || ""
-      },
-
-      // Endereço
-      endereco: {
-        dsCep: endereco?.cep || cliente?.cep || "",
-        dsRua: endereco?.rua || "",
-        dsNumero: endereco?.numero || "",
-        dsBairro: endereco?.bairro || "",
-        dsCidade: endereco?.cidade || endereco?.city || "",
-        dsUf: endereco?.uf || "",
-        dsComplemento: endereco?.complemento || ""
-      },
+      // Cliente & Endereço Padronizados
+      cliente: dadosCliente,
+      dadosCliente: dadosCliente,
+      endereco: dadosEnderecoCliente,
+      dadosEndereco: dadosEnderecoCliente,
 
       // Financeiro
       financeiro: { 
@@ -110,12 +128,12 @@ export const executarFluxoPedido = async ({
     // Salvando na coleção de pedidos
     await addDoc(collection(db, "lojistas", lojistaId, "pedidos"), dadosDoPedidoParaSalvar);
 
-    // 4. Mensagem WhatsApp
+    // 5. Mensagem WhatsApp
     const msg = `*NOVO PEDIDO #${numPedidoSequencial}*
-👤 *CLIENTE:* ${cliente?.nome || "Cliente"}
-📱 *WHATSAPP:* ${cliente?.dsTelefone || ""}
-📦 *ITENS:*
-${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.nome || i.title || "Produto"}`).join('\n')}
+👤 *CLIENTE:* ${dadosCliente.nmNomeCliente}
+📱 *WHATSAPP:* ${dadosCliente.dsTelefoneCliente}
+${dadosCliente.dsEmailCliente ? `✉️ *E-MAIL:* ${dadosCliente.dsEmailCliente}\n` : ""}📦 *ITENS:*
+${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.title || "Produto"}`).join('\n')}
 
 💰 *TOTAL:* R$ ${Number(totalGeral || 0).toFixed(2).replace('.', ',')}
 Acesse seu painel para processar este pedido!`;

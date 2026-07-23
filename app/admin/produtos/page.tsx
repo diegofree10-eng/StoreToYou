@@ -19,6 +19,7 @@ import ModalGeradorSKU from "@/app/admin/_components/ModalGeradorSKU";
 import EtiquetaModal from "@/app/admin/_components/EtiquetaModal";
 
 import { getPlanoEfetivo } from "@/utils/planoAtivo";
+import ImageCropperModal from "@/app/admin/_components/ImageCropperModal";
 
 // --- CONFIGURAÇÃO DE SEGURANÇA E PLANOS ---
 
@@ -80,6 +81,10 @@ export default function CadastroProdutos() {
   const [tabelaPrecos, setTabelaPrecos] = useState<any>({});
 
   const [produtoIdAtual, setProdutoIdAtual] = useState<string | null>(null);
+
+  const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
+  const [tipoCropAtual, setTipoCropAtual] = useState<"principal" | "variacao">("principal");
+  const [chaveVariacaoAtual, setChaveVariacaoAtual] = useState<string | null>(null);
 
   const getProdutoId = useCallback(() => {
     if (editId) return editId;
@@ -401,15 +406,34 @@ export default function CadastroProdutos() {
       }
 
       // 2. LIMPEZA INTELIGENTE (só deleta se não estiver mais na lista)
+      // 2. LIMPEZA INTELIGENTE DE FOTOS ANTIGAS NA EDIÇÃO
       if (editId) {
         const docRefAntigo = doc(db, "lojistas", uid, "produtos", editId);
         const docSnapAntigo = await getDoc(docRefAntigo);
+
         if (docSnapAntigo.exists()) {
           const dadosAntigos = docSnapAntigo.data();
           const fotosAntigas = dadosAntigos.imagens || [];
-          for (const url of fotosAntigas) {
-            if (!novasImagens.includes(url)) {
-              try { await deleteObject(ref(storage, url)); } catch (e) { console.warn("Erro ao deletar:", e); }
+
+          // Recolhe também todas as fotos de variações antigas que porventura existirem
+          const fotosVariacoesAntigas = (dadosAntigos.variacoes || []).map((v: any) => v.foto).filter(Boolean);
+
+          // Junta tudo o que era foto antiga desse produto
+          const todasFotosAntigas = [...fotosAntigas, ...fotosVariacoesAntigas];
+
+          // Fotos que continuam sendo usadas (novas da galeria + novas variações)
+          const fotosNovasVariacoes = Object.values(tabelaPrecos).map((v: any) => v.foto).filter((f: any) => f && typeof f === 'string' && f.startsWith('http'));
+          const todasFotosAtuais = [...novasImagens, ...fotosNovasVariacoes];
+
+          // Se a foto antiga NÃO está na lista atual, apaga do Storage sem dó!
+          for (const urlAntiga of todasFotosAntigas) {
+            if (!todasFotosAtuais.includes(urlAntiga)) {
+              try {
+                await deleteObject(ref(storage, urlAntiga));
+                console.log("Foto órfã removida do Storage:", urlAntiga);
+              } catch (e) {
+                console.warn("Aviso ao deletar foto antiga:", e);
+              }
             }
           }
         }
@@ -660,7 +684,17 @@ export default function CadastroProdutos() {
         </div>
 
         <button style={styles.btnUpload}>
-          <input type="file" multiple accept="image/*" onChange={e => setFiles(Array.from(e.target.files || []))} style={styles.fileInvis} />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={e => {
+              if (e.target.files && e.target.files[0]) {
+                setTipoCropAtual("principal");
+                setArquivoParaCortar(e.target.files[0]);
+              }
+            }}
+            style={styles.fileInvis}
+          />
           {uploading ? "Enviando..." : "📷 Fotos *"}
         </button>
         {/*{files.length > 0 && <button onClick={uploadImagens} style={styles.btnConfirmImgs}>Confirmar Fotos</button>}*/}
@@ -780,6 +814,31 @@ export default function CadastroProdutos() {
           })}
         </div>
       </div>
+
+      {arquivoParaCortar && (
+        <ImageCropperModal
+          file={arquivoParaCortar}
+          onCropComplete={async (croppedBlob) => {
+            setArquivoParaCortar(null);
+            const arquivoFinal = new File([croppedBlob], `produto_${Date.now()}.jpg`, { type: "image/jpeg" });
+
+            if (tipoCropAtual === "principal") {
+              setFiles(prev => [...prev, arquivoFinal]);
+            } else if (tipoCropAtual === "variacao" && chaveVariacaoAtual) {
+              const reader = new FileReader();
+              reader.readAsDataURL(croppedBlob);
+              reader.onloadend = () => {
+                const base64data = reader.result as string;
+                setTabelaPrecos((prev: any) => ({
+                  ...prev,
+                  [chaveVariacaoAtual]: { ...prev[chaveVariacaoAtual], foto: base64data }
+                }));
+              };
+            }
+          }}
+          onCancel={() => setArquivoParaCortar(null)}
+        />
+      )}
     </div>
   );
 }

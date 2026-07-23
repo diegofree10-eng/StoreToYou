@@ -5,37 +5,12 @@ import { shopeeStyles, styles } from "../produtos/styles";
 
 import { storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
+import ImageCropperModal from "@/app/admin/_components/ImageCropperModal"; // <--- Importação do Cropper
 
 const formatarMoeda = (valor: string) => {
   const limpo = valor.replace(/\D/g, "");
   if (!limpo) return "";
   return (parseInt(limpo) / 100).toFixed(2);
-};
-
-const comprimirImagem = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (e) => {
-      const img = new Image();
-      img.src = e.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = 1000;
-        canvas.height = 1000;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return reject("Erro no canvas");
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, 1000, 1000);
-        const ratio = Math.min(1000 / img.width, 1000 / img.height);
-        const w = img.width * ratio;
-        const h = img.height * ratio;
-        ctx.drawImage(img, (1000 - w) / 2, (1000 - h) / 2, w, h);
-        resolve(canvas.toDataURL("image/webp", 0.85));
-      };
-    };
-    reader.onerror = reject;
-  });
 };
 
 interface VariacoesModalProps {
@@ -51,7 +26,7 @@ interface VariacoesModalProps {
   setOpcoesVar2: (val: string[]) => void;
   tabelaPrecos: any;
   onSave: (novaTabela: any) => void;
-  onCancel: () => void; // <--- Adicione esta linha
+  onCancel: () => void;
   gerarCombinacoes: () => any[];
   sugerirSkus: (tabela: any, setTabela: any) => void;
 }
@@ -82,6 +57,10 @@ export default function VariacoesModal({
   const [draftTabela, setDraftTabela] = useState(tabelaPrecos);
   const [showVar2, setShowVar2] = useState(nomeVar2 !== "" || opcoesVar2.length > 0);
 
+  // Estados para controlar o CROPPER nas variações
+  const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
+  const [combsParaAtualizar, setCombsParaAtualizar] = useState<any[]>([]);
+
   useEffect(() => {
     if (showVarModal) {
       setDraftTabela(tabelaPrecos);
@@ -93,12 +72,9 @@ export default function VariacoesModal({
   const combinacoesValidas = gerarCombinacoes();
   const temVariaçõesVisiveis = opcoesVar1.some(op => op.trim() !== "");
 
-  // Altere para async
   const handleDraftInput = async (key: string, campo: string, valor: string) => {
-    // SEÇÃO DE LIMPEZA DO STORAGE
     if (campo === "foto" && valor === "") {
       const fotoAntiga = draftTabela[key]?.foto;
-      // Verifica se a URL é do Firebase antes de tentar deletar
       if (fotoAntiga && fotoAntiga.includes("firebasestorage.googleapis.com")) {
         try {
           await deleteObject(ref(storage, fotoAntiga));
@@ -107,9 +83,6 @@ export default function VariacoesModal({
         }
       }
     }
-
-    // APLICAÇÃO DA MÁSCARA
-    // Se for foto, mantém o valor original. Se for preco ou custo, usa a função formatarMoeda.
 
     setDraftTabela((prev: any) => ({
       ...prev,
@@ -201,28 +174,21 @@ export default function VariacoesModal({
             <input
               placeholder="0,00"
               value={custoGlobal}
-              onChange={(e) => setCustoGlobal(formatarMoeda(e.target.value))} // Corrigido aqui
+              onChange={(e) => setCustoGlobal(formatarMoeda(e.target.value))}
               style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1 }}
             />
             <button
               onClick={() => {
                 setDraftTabela((prev: any) => {
                   const novaTabela = { ...prev };
-
-                  // Em vez de iterar sobre o draftTabela (que está vazio),
-                  // iteramos sobre as combinações que você já sabe que existem:
                   combinacoesValidas.forEach(comb => {
-                    const key = comb.key; // A chave da combinação
-
-                    // Atualiza ou cria a entrada na tabela, independente de ter SKU ou não
+                    const key = comb.key;
                     novaTabela[key] = {
-                      ...(novaTabela[key] || {}), // Mantém o que já existia, se existir
+                      ...(novaTabela[key] || {}),
                       preco: precoGlobal,
                       custo: custoGlobal
                     };
                   });
-
-                  console.log("Valores aplicados via combinações:", novaTabela);
                   return novaTabela;
                 });
               }}
@@ -235,7 +201,7 @@ export default function VariacoesModal({
           {/* TABELA DINÂMICA */}
           {temVariaçõesVisiveis && combinacoesValidas.length > 0 && (
             <table
-              key={JSON.stringify(draftTabela)} // <--- ISSO VAI FORÇAR O REDESENHO
+              key={JSON.stringify(draftTabela)}
               style={{ ...shopeeStyles.table, width: '100%', marginTop: '20px' }}>
               <thead>
                 <tr style={{ background: '#f6f6f6' }}>
@@ -267,12 +233,10 @@ export default function VariacoesModal({
                             <div style={{ width: '60px', height: '60px', margin: '0 auto', border: temFoto ? '1px solid #3b82f6' : '1px dashed #cbd5e1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
                               {temFoto ? (
                                 <>
-                                  <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
                                   <button
                                     onClick={async (e) => {
                                       e.preventDefault();
-                                      // Usamos await aqui para garantir que a foto seja deletada do Storage
-                                      // antes de limparmos o campo na interface
                                       for (const comb of combsDesteGrupo) {
                                         await handleDraftInput(comb.key, "foto", "");
                                       }
@@ -294,23 +258,19 @@ export default function VariacoesModal({
                               ) : (
                                 <>
                                   <span style={{ fontSize: '18px', color: '#cbd5e1' }}>+</span>
-                                  <input type="file" accept="image/*" style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (!file) return;
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) => {
-                                      const img = new Image();
-                                      img.src = ev.target?.result as string;
-                                      img.onload = () => {
-                                        const canvas = document.createElement('canvas');
-                                        canvas.width = 300; canvas.height = 300;
-                                        canvas.getContext('2d')?.drawImage(img, 0, 0, 300, 300);
-                                        const compressed = canvas.toDataURL('image/jpeg', 0.7);
-                                        combsDesteGrupo.forEach(comb => handleDraftInput(comb.key, "foto", compressed));
-                                      };
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }} />
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} 
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      // Dispara o Cropper em vez de ler direto
+                                      setArquivoParaCortar(file);
+                                      setCombsParaAtualizar(combsDesteGrupo);
+                                      e.target.value = ""; // Limpa o input
+                                    }} 
+                                  />
                                 </>
                               )}
                             </div>
@@ -319,7 +279,6 @@ export default function VariacoesModal({
 
                         {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '100px' }}> {c.v2 || "-"}</td>)}
                         <td style={shopeeStyles.td}><input style={shopeeStyles.tableInput} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" /></td>
-                        {/* Input Preço */}
                         <td style={shopeeStyles.td}>
                           <TableInput
                             value={valorPreco}
@@ -327,8 +286,6 @@ export default function VariacoesModal({
                             placeholder="0,00"
                           />
                         </td>
-
-                        {/* Input Custo */}
                         <td style={shopeeStyles.td}>
                           <TableInput
                             value={valorCusto}
@@ -349,9 +306,9 @@ export default function VariacoesModal({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '15px', borderTop: '1px solid #e2e8f0', marginTop: '10px' }}>
           <button
             onClick={() => {
-              setPrecoGlobal(""); // Limpa o input de preço do painel
-              setCustoGlobal(""); // Limpa o input de custo do painel
-              setDraftTabela(tabelaPrecos); // Volta a tabela ao estado original
+              setPrecoGlobal("");
+              setCustoGlobal("");
+              setDraftTabela(tabelaPrecos);
               setShowVarModal(false);
             }}
             style={{ padding: '10px 20px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', cursor: 'pointer' }}
@@ -366,6 +323,25 @@ export default function VariacoesModal({
           </button>
         </div>
       </div>
+
+      {/* MODAL DE CORTE PARA AS FOTOS DAS VARIAÇÕES */}
+      {arquivoParaCortar && (
+        <ImageCropperModal
+          file={arquivoParaCortar}
+          onCropComplete={(croppedBlob) => {
+            setArquivoParaCortar(null);
+            const reader = new FileReader();
+            reader.readAsDataURL(croppedBlob);
+            reader.onloadend = () => {
+              const base64data = reader.result as string;
+              combsParaAtualizar.forEach(comb => {
+                handleDraftInput(comb.key, "foto", base64data);
+              });
+            };
+          }}
+          onCancel={() => setArquivoParaCortar(null)}
+        />
+      )}
     </div>
   );
 }

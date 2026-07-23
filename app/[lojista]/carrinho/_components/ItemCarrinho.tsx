@@ -116,7 +116,7 @@ export default function ItemCarrinho({
 
                 <div style={styles.controls}>
                   <button disabled={!isLojaAberta} onClick={() => setItemQty(key, Math.max(1, Number(item.qty || 1) - 1))} style={styles.qtyBtn}><Minus size={13} /></button>
-                  <span style={{ fontWeight: 'bold', minWidth: 16, textAlign: 'center', fontSize: '12px' }}>{item.qty || 1}</span>
+                  <span style={{ fontWeight: 'bold', minWidth: 16, textAlign: 'center', fontSize: '12px', color: corPrimaria }}>{item.qty || 1}</span>
                   <button disabled={!isLojaAberta} onClick={() => setItemQty(key, Number(item.qty || 1) + 1)} style={styles.qtyBtn}><Plus size={13} /></button>
                   <button onClick={() => removeFromCart(key)} style={styles.btnDel}><Trash2 size={16} /></button>
                 </div>
