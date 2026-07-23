@@ -249,14 +249,16 @@ export default function CarrinhoIdentidadeVisual() {
 
     const validacaoEmailDigital = temItemDigitalNoCarrinho ? (cliente.dsEmailCliente && cliente.dsEmailCliente.includes("@")) : true;
 
-    return cliente.nmNomeCliente.trim().length > 3 &&
+    const resultado = cliente.nmNomeCliente.trim().length > 3 &&
       validarCPFReal(cliente.dsCpfCliente) &&
       cliente.dsTelefoneCliente.replace(/\D/g, "").length >= 10 &&
       validacaoEntrega &&
       validacaoEmailDigital &&
       safeCart.length > 0;
-  }, [cliente, endereco, freteSel, safeCart, isLojaAberta, temFrete, temItemDigitalNoCarrinho]);
 
+    return !!resultado; // 👈 Garante estritamente um valor booleano (true ou false)
+  }, [cliente, endereco, freteSel, safeCart, isLojaAberta, temFrete, temItemDigitalNoCarrinho]);
+  
   useEffect(() => {
     async function carregarDadosLojista() {
       let currentLojistaId = lojistaId;
@@ -347,7 +349,7 @@ export default function CarrinhoIdentidadeVisual() {
       try {
         const rVia = await fetch(`https://viacep.com.br/ws/${cepClienteLimpo}/json/`);
         const dadosClienteVia = await rVia.json();
-        
+
         // Tratamento seguro para CEP inválido
         if (dadosClienteVia.erro) {
           setEndereco({ dsRuaCliente: "", dsNumeroCliente: "", dsBairroCliente: "", dsCidadeCliente: "", dsUfCliente: "", dsComplementoCliente: "" });
