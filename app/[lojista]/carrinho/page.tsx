@@ -368,6 +368,14 @@ export default function CarrinhoIdentidadeVisual() {
             }
         }
 
+        // ⚠️ ALERTA CHAMATIVO DE ADVERTÊNCIA ANTES DE ABRIR O WHATSAPP
+        const confirmarEnvioComprovante = window.confirm(
+            "⚠️ ATENÇÃO IMPORTANTE!\n\nPara que o seu pedido entre em produção, lembre-se de enviar o COMPROVANTE DO PIX diretamente no nosso WhatsApp após finalizar.\n\nDeseja prosseguir?"
+        );
+        if (!confirmarEnvioComprovante) {
+            return;
+        }
+
         try {
             const formaEnvio = !temFrete ? 'digital' : (freteSel?.id === 'retirar_loja' ? 'retirada' : 'transportadora');
             const logistica = {
@@ -491,51 +499,23 @@ export default function CarrinhoIdentidadeVisual() {
                         />
                     }
                     bloco2={
-                        <BlocoDadosCliente
-                            cliente={cliente}
-                            setCliente={setCliente}
-                            endereco={endereco}
-                            setEndereco={setEndereco}
-                            handleCepChange={handleCepChange}
-                            cpfValido={cpfValido}
-                            aplicarMascaraCPF={aplicarMascaraCPF}
-                            config={config}
-                            stylesInput={stylesInput}
-                            temItemDigital={temItemDigitalNoCarrinho}
-                        />
-                    }
-                    bloco3={
-                        <BlocoOpcoesFrete
-                            opcoesFrete={opcoesFrete}
-                            freteSel={freteSel}
-                            setFreteSel={setFreteSel}
-                            setFreteBackup={setFreteBackup}
-                            loadingFrete={loadingFrete}
-                            clienteCep={cliente.dsCepCliente}
-                            config={config}
-                        />
-                    }
-                    bloco4={
-                        <BlocoResumoPedido
-                            valorSubtotalProdutos={valorSubtotalProdutos}
-                            temFrete={temFrete}
-                            freteSel={freteSel}
-                            descontoAtivo={descontoAtivo}
-                            valorDesconto={valorDesconto}
-                            totalGeral={totalGeral}
-                            cupomDigitado={cupomDigitado}
-                            setCupomDigitado={setCupomDigitado}
-                            aplicarCupom={aplicarCupom}
-                            limparCupom={limparCupom}
-                            config={config}
-                            stylesInput={stylesInput}
-                        />
-                    }
-                    bloco5={
                         <>
-                            {/* BOTÃO MOBILE DE ESCOLHA DE FRETE */}
+                            <BlocoDadosCliente
+                                cliente={cliente}
+                                setCliente={setCliente}
+                                endereco={endereco}
+                                setEndereco={setEndereco}
+                                handleCepChange={handleCepChange}
+                                cpfValido={cpfValido}
+                                aplicarMascaraCPF={aplicarMascaraCPF}
+                                config={config}
+                                stylesInput={stylesInput}
+                                temItemDigital={temItemDigitalNoCarrinho}
+                            />
+
+                            {/* 📱 BOTÃO MOBILE DE ESCOLHA DE FRETE (Posicionado entre Dados do Cliente e Resumo) */}
                             {temFrete && (
-                                <div className="botao-frete-mobile-container" style={{ display: 'none', width: '100%', marginBottom: '15px' }}>
+                                <div className="botao-frete-mobile-container" style={{ display: 'none', width: '100%', marginTop: '15px' }}>
                                     <button
                                         onClick={() => {
                                             if (cliente.dsCepCliente.replace(/\D/g, "").length !== 8) {
@@ -567,20 +547,50 @@ export default function CarrinhoIdentidadeVisual() {
                                     </button>
                                 </div>
                             )}
-
-                            <BlocoPagamentoPix
-                                temCheckoutOnlineAtivo={temCheckoutOnlineAtivo}
-                                qrCodeUrl={qrCodeUrl}
-                                payloadPixBruto={payloadPixBruto}
-                                copiadoPix={copiadoPix}
-                                setCopiadoPix={setCopiadoPix}
-                                podeFinalizar={podeFinalizar}
-                                isLojaAberta={isLojaAberta}
-                                finalizarNoWhatsApp={finalizarNoWhatsApp}
-                                limparTudo={limparTudo}
-                                config={config}
-                            />
                         </>
+                    }
+                    bloco3={
+                        <BlocoOpcoesFrete
+                            opcoesFrete={opcoesFrete}
+                            freteSel={freteSel}
+                            setFreteSel={setFreteSel}
+                            setFreteBackup={setFreteBackup}
+                            loadingFrete={loadingFrete}
+                            clienteCep={cliente.dsCepCliente}
+                            config={config}
+                        />
+                    }
+                    bloco4={
+                        <BlocoResumoPedido
+                            valorSubtotalProdutos={valorSubtotalProdutos}
+                            temFrete={temFrete}
+                            freteSel={freteSel}
+                            descontoAtivo={descontoAtivo}
+                            valorDesconto={valorDesconto}
+                            totalGeral={totalGeral}
+                            cupomDigitado={cupomDigitado}
+                            setCupomDigitado={setCupomDigitado}
+                            aplicarCupom={aplicarCupom}
+                            limparCupom={limparCupom}
+                            config={config}
+                            stylesInput={stylesInput}
+                        />
+                    }
+                    bloco5={
+                        <BlocoPagamentoPix
+                            temCheckoutOnlineAtivo={temCheckoutOnlineAtivo}
+                            qrCodeUrl={qrCodeUrl}
+                            payloadPixBruto={payloadPixBruto}
+                            copiadoPix={copiadoPix}
+                            setCopiadoPix={setCopiadoPix}
+                            podeFinalizar={podeFinalizar}
+                            isLojaAberta={isLojaAberta}
+                            finalizarNoWhatsApp={finalizarNoWhatsApp}
+                            limparTudo={limparTudo}
+                            config={config}
+                            temFrete={temFrete}       // 👈 Passando para o componente
+                            freteSel={freteSel}       // 👈 Passando para o componente
+                        />
                     }
                     bloco6={
                         <div style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #f1f5f9', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: '8px' }}>

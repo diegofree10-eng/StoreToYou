@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Truck } from "lucide-react";
 
 interface BlocoPagamentoPixProps {
   temCheckoutOnlineAtivo: () => boolean;
@@ -13,6 +13,8 @@ interface BlocoPagamentoPixProps {
   finalizarNoWhatsApp: () => void;
   limparTudo: () => void;
   config: { corPrimaria: string; corTexto: string };
+  temFrete: boolean;
+  freteSel: any;
 }
 
 export default function BlocoPagamentoPix({
@@ -25,8 +27,14 @@ export default function BlocoPagamentoPix({
   isLojaAberta,
   finalizarNoWhatsApp,
   limparTudo,
-  config
+  config,
+  temFrete,
+  freteSel
 }: BlocoPagamentoPixProps) {
+  
+  // Validação: se tem frete, exige que o frete tenha sido selecionado
+  const freteEscolhidoOuInexistente = !temFrete || (temFrete && freteSel !== null);
+
   return (
     <>
       {/* Estilo responsivo exclusivo para telas mobile (abaixo de 768px) */}
@@ -39,10 +47,18 @@ export default function BlocoPagamentoPix({
         }
       `}} />
 
-      <div style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #f1f5f9', height: '100%', boxSizing: 'border-box', maxHeight: '325px', overflowY: 'auto' }} className="bloco-pix-container">
-        <h4 style={{ color: config.corTexto, margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>PAGAMENTO VIA PIX</h4>
+      <div style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #f1f5f9', height: '100%', boxSizing: 'border-box', maxHeight: '380px', overflowY: 'auto' }} className="bloco-pix-container">
+        <h4 style={{ color: config.corTexto, margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>PAGAMENTO VIA PIX</h4>
 
-        {temCheckoutOnlineAtivo() ? (
+        {!freteEscolhidoOuInexistente ? (
+          /* MENSAGEM EXIGINDO A ESCOLHA DO FRETE PRIMEIRO */
+          <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '10px', padding: '15px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <Truck size={22} color="#d97706" />
+            <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309', margin: 0, lineHeight: '1.4' }}>
+              Por favor, escolha uma opção de frete / retirada primeiro para liberar o QR Code e o código do Pix com o valor correto.
+            </p>
+          </div>
+        ) : temCheckoutOnlineAtivo() ? (
           <div style={{ textAlign: 'center', padding: '10px 0', color: '#64748b', fontSize: '12px' }}>Checkout Online ativado.</div>
         ) : qrCodeUrl ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
