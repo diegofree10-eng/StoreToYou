@@ -23,7 +23,6 @@ export const executarFluxoPedido = async ({
       const chaveUnica = `${item.cartItemId || item.id || 'prod'}_${index}`;
       const rawRespostas = personalizacoes[chaveUnica] || personalizacoes[item.cartItemKey] || {};
       
-      // Pega os requisitos cadastrados no produto
       const requisitos = item.requisitos || requisitosDoBanco?.[item.id] || [];
       const respostasFormatadas: Record<string, string> = {};
 
@@ -32,14 +31,12 @@ export const executarFluxoPedido = async ({
           const campoId = String(req.id || "");
           const labelCampo = req.nome || req.label || "Campo";
           
-          // Busca o valor digitado pelo ID ou pelo label do requisito
           const val = rawRespostas[campoId] || rawRespostas[labelCampo] || "";
           if (val) {
             respostasFormatadas[labelCampo] = val;
           }
         });
       } else {
-        // Fallback caso não encontre a lista de requisitos estruturada
         Object.keys(rawRespostas).forEach((key) => {
           if (rawRespostas[key]) {
             respostasFormatadas[key] = rawRespostas[key];
@@ -55,7 +52,7 @@ export const executarFluxoPedido = async ({
         preco: Number(item.preco || item.price || 0),
         variacao: item.variacao || "",
         precisaFrete: item.precisaFrete !== false,
-        respostasFormatadas: respostasFormatadas, // 👈 Requisitos salvos com rótulos e valores corretos
+        respostasFormatadas: respostasFormatadas,
         foto: item.foto || item.imagem || item.url || "",
         sku: item.sku || (item.variacaoSelecionada ? item.variacaoSelecionada.sku : "SEM-SKU")
       };
@@ -88,13 +85,11 @@ export const executarFluxoPedido = async ({
       dtCriacao: new Date().toISOString(),
       mesAno: new Date().toISOString().substring(0, 7),
 
-      // Cliente & Endereço Padronizados
       cliente: dadosCliente,
       dadosCliente: dadosCliente,
       endereco: dadosEnderecoCliente,
       dadosEndereco: dadosEnderecoCliente,
 
-      // Financeiro
       financeiro: { 
         vlSubtotal: Number(valorSubtotalProdutos || 0), 
         vlDesconto: Number(valorDesconto || 0), 
@@ -106,7 +101,6 @@ export const executarFluxoPedido = async ({
         dsTransportadoraId: logistica?.transportadoraId || null
       },
 
-      // Logística
       logistica: {
         isRetirada: logistica?.formaEnvio === 'retirada',
         dsFormaEntrega: logistica?.formaEnvio || "desconhecida"
@@ -114,7 +108,6 @@ export const executarFluxoPedido = async ({
 
       itens: itensFormatados,
 
-      // --- CAMPOS LEGADOS (MANTIDOS PARA COMPATIBILIDADE) ---
       numeroPedido: Number(numPedidoSequencial),
       status: "Pendente",
       pago: false,
@@ -128,8 +121,8 @@ export const executarFluxoPedido = async ({
     // Salvando na coleção de pedidos
     await addDoc(collection(db, "lojistas", lojistaId, "pedidos"), dadosDoPedidoParaSalvar);
 
-    // 5. Mensagem WhatsApp
-    const msg = `*NOVO PEDIDO #${numPedidoSequencial}*
+    // 5. Mensagem para o Lojista
+    const msgLojista = `*NOVO PEDIDO #${numPedidoSequencial}*
 👤 *CLIENTE:* ${dadosCliente.nmNomeCliente}
 📱 *WHATSAPP:* ${dadosCliente.dsTelefoneCliente}
 ${dadosCliente.dsEmailCliente ? `✉️ *E-MAIL:* ${dadosCliente.dsEmailCliente}\n` : ""}📦 *ITENS:*
@@ -138,8 +131,32 @@ ${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.
 💰 *TOTAL:* R$ ${Number(totalGeral || 0).toFixed(2).replace('.', ',')}
 Acesse seu painel para processar este pedido!`;
 
-    const url = `https://wa.me/${String(whatsappNumero || "").replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank');
+    const urlLojista = `https://wa.me/${String(whatsappNumero || "").replace(/\D/g, "")}?text=${encodeURIComponent(msgLojista)}`;
+    window.open(urlLojista, '_blank');
+
+    // 6. Mensagem para o Cliente (com o resumo completo e número do pedido)
+    let telefoneClienteLimpo = dadosCliente.dsTelefoneCliente.replace(/\D/g, "");
+    if (!telefoneClienteLimpo.startsWith("55") && telefoneClienteLimpo.length >= 10) {
+      telefoneClienteLimpo = "55" + telefoneClienteLimpo;
+    }
+
+    if (telefoneClienteLimpo.length >= 12) {
+      const nomeLojaExibicao = dadosLoja?.dadosLoja?.dsNomeLoja || dadosLoja?.nomeLoja || "Nossa Loja";
+      const msgCliente = `*Olá, ${dadosCliente.nmNomeCliente}!* Seu pedido *#${numPedidoSequencial}* foi realizado com sucesso em *${nomeLojaExibicao}*! 🎉
+
+📦 *RESUMO DO PEDIDO:*
+${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.title || "Produto"} - R$ ${(Number(i.preco || i.price || 0) * Number(i.qty || 1)).toFixed(2).replace('.', ',')}`).join('\n')}
+
+💰 *TOTAL DO PEDIDO:* R$ ${Number(totalGeral || 0).toFixed(2).replace('.', ',')}
+
+⚠️ *LEMBRETE:* Lembre-se de enviar o comprovante do pagamento via Pix por aqui para agilizar a liberação e produção do seu pedido. Muito obrigado pela preferência! 🙏`;
+
+      const urlCliente = `https://wa.me/${telefoneClienteLimpo}?text=${encodeURIComponent(msgCliente)}`;
+      // Pequeno timeout opcional para garantir abertura fluida das abas
+      setTimeout(() => {
+        window.open(urlCliente, '_blank');
+      }, 500);
+    }
 
     return true;
   } catch (e) {

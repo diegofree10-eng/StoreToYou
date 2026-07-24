@@ -209,6 +209,11 @@ export default function CarrinhoIdentidadeVisual() {
     };
 
     const limparTudo = () => {
+        const confirmarLimpeza = window.confirm(
+            "⚠️ Deseja realmente apagar todos os itens do carrinho e limpar seus dados preenchidos?"
+        );
+        if (!confirmarLimpeza) return;
+
         clearCart();
         localStorage.removeItem(`cliente_${lojistaSlug}`);
         localStorage.removeItem(`end_${lojistaSlug}`);
