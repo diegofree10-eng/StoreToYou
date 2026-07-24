@@ -126,11 +126,13 @@ export default function HomeLoja() {
           gap: 15px;
           box-sizing: border-box;
         }
+
         @media (max-width: 1200px) {
           .grid-produtos-home {
             grid-template-columns: repeat(4, 1fr) !important;
           }
         }
+
         @media (max-width: 1024px) {
           .beneficios-grid {
             grid-template-columns: repeat(2, 1fr) !important;
@@ -139,6 +141,8 @@ export default function HomeLoja() {
             grid-template-columns: repeat(2, 1fr) !important;
           }
         }
+
+        /* 📱 CORREÇÃO EXCLUSIVA PARA MOBILE: Trava a altura do container do banner e das imagens */
         @media (max-width: 768px) {
           .beneficios-grid {
             grid-template-columns: 1fr !important;
@@ -146,6 +150,21 @@ export default function HomeLoja() {
           .grid-produtos-home {
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 10px;
+          }
+
+          /* Força o wrapper do banner a ter altura fixa no celular, impedindo saltos de layout */
+          :global(.main-conteudo-topo) {
+            height: 200px !important;
+            min-height: 200px !important;
+            max-height: 200px !important;
+          }
+
+          :global(.main-interno-wrapper), 
+          :global(.main-interno-wrapper img),
+          :global(.main-interno-wrapper div) {
+            height: 100% !important;
+            max-height: 200px !important;
+            object-fit: cover !important;
           }
         }
       `}</style>

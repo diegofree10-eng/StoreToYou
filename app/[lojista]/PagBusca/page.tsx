@@ -12,7 +12,7 @@ export default function PagBusca() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const { dadosLoja, isLojaAberta } = useLoja();
   const slug = params.lojista as string;
   const termoBusca = searchParams.get('q') || '';
@@ -46,11 +46,24 @@ export default function PagBusca() {
           const todosProdutos = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
           if (termoBusca) {
-            const termoLC = termoBusca.toLowerCase();
-            const filtrados = todosProdutos.filter((p: any) => 
-              p.nome?.toLowerCase().includes(termoLC) || 
-              p.descricao?.toLowerCase().includes(termoLC)
-            );
+            const termoLimpo = termoBusca.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const palavrasChave = termoLimpo.split(" ").filter(Boolean);
+
+            const filtrados = todosProdutos.filter((p: any) => {
+              const nomeProd = (p.nome || p.dsNomeProduto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const palavrasNome = nomeProd.split(/\s+/);
+
+              // Se o termo for curto (ex: 1 ou 2 letras), exige que alguma palavra do título comece exatamente com o termo
+              if (termoLimpo.length <= 2) {
+                return palavrasNome.some((w: string) => w.startsWith(termoLimpo));
+              }
+
+              // Para termos maiores, exige que todas as palavras digitadas estejam presentes no título do produto
+              return palavrasChave.every(palavraBusca => {
+                return palavrasNome.some((w: string) => w.startsWith(palavraBusca) || w.includes(palavraBusca));
+              });
+            });
+
             setProdutosResultado(filtrados);
           } else {
             setProdutosResultado(todosProdutos);
@@ -70,11 +83,11 @@ export default function PagBusca() {
   const produtosBaixo = produtosResultado.slice(4);
 
   return (
-    <LayoutPadrao 
+    <LayoutPadrao
       categorias={categoriasState}
       bannerTopo={
         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: '100%', height: '100%', boxSizing: 'border-box', gap: '8px' }}>
-          
+
           {/* Caixa de Texto de Resultados */}
           <div
             style={{

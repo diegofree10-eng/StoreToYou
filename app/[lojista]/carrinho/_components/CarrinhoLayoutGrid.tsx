@@ -23,7 +23,8 @@ export default function CarrinhoLayoutGrid({
 }: CarrinhoLayoutGridProps) {
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @media (max-width: 768px) {
           .carrinho-grid-container {
             display: flex !important;
@@ -49,13 +50,17 @@ export default function CarrinhoLayoutGrid({
             min-height: auto !important;
             width: 100% !important;
           }
+          /* Oculta o bloco de frete tradicional na parte inferior exclusivamente no mobile */
+          .bloco-frete-desktop {
+            display: none !important;
+          }
         }
       `}} />
 
       <div style={styles.gridContainer} className="carrinho-grid-container">
         {/* TOPO: DUAS COLUNAS FIXAS NO PC, EMPILHADAS NO MOBILE */}
         <div style={styles.topRow} className="carrinho-grid-top">
-          
+
           {/* COLUNA ESQUERDA (Blocos 1 e 2) */}
           <div style={styles.colunaEsquerda} className="carrinho-coluna-esq">
             <div style={styles.bloco1Wrapper} className="bloco-wrapper-responsivo">{bloco1}</div>
@@ -71,9 +76,9 @@ export default function CarrinhoLayoutGrid({
 
         </div>
 
-        {/* ABAIXO: BLOCO 3 (LARGURA TOTAL PARA O FRETE) */}
+        {/* ABAIXO: BLOCO 3 (LARGURA TOTAL PARA O FRETE - Visível no PC, oculto no mobile) */}
         {temFrete && (
-          <div style={styles.bloco3Wrapper} className="bloco-wrapper-responsivo">
+          <div style={styles.bloco3Wrapper} className="bloco-wrapper-responsivo bloco-frete-desktop">
             {bloco3}
           </div>
         )}
@@ -83,12 +88,12 @@ export default function CarrinhoLayoutGrid({
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  gridContainer: { 
-    display: 'flex', 
+  gridContainer: {
+    display: 'flex',
     flexDirection: 'column',
-    gap: '20px', 
-    width: '100%', 
-    boxSizing: 'border-box' 
+    gap: '20px',
+    width: '100%',
+    boxSizing: 'border-box'
   },
   topRow: {
     display: 'flex',
@@ -98,21 +103,21 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     alignItems: 'flex-start'
   },
-  colunaEsquerda: { 
-    flex: '2 1 650px', 
-    width: '100%', 
+  colunaEsquerda: {
+    flex: '2 1 650px',
+    width: '100%',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px' 
+    gap: '20px'
   },
-  colunaDireita: { 
-    flex: '1 1 340px', 
-    width: '100%', 
+  colunaDireita: {
+    flex: '1 1 340px',
+    width: '100%',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px' 
+    gap: '20px'
   },
   bloco1Wrapper: { width: '100%', height: '350px', maxHeight: '350px', boxSizing: 'border-box' },
   bloco2Wrapper: { width: '100%', height: '310px', maxHeight: '310px', boxSizing: 'border-box' },
