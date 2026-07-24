@@ -4,7 +4,7 @@ import { doc, runTransaction, collection, addDoc, serverTimestamp } from "fireba
 export const executarFluxoPedido = async ({
   lojistaId, cliente, endereco, safeCart, personalizacoes, requisitosDoBanco,
   valorSubtotalProdutos, valorDesconto, totalGeral, whatsappNumero,
-  dadosLoja, logistica, cupomDigitado, freteGratisConfig
+  dadosLoja, logistica, cupomDigitado, freteGratisConfig, payloadPixBruto
 }: any) => {
   
   try {
@@ -134,7 +134,7 @@ Acesse seu painel para processar este pedido!`;
     const urlLojista = `https://wa.me/${String(whatsappNumero || "").replace(/\D/g, "")}?text=${encodeURIComponent(msgLojista)}`;
     window.open(urlLojista, '_blank');
 
-    // 6. Mensagem para o Cliente (com o resumo completo e número do pedido)
+    // 6. Mensagem para o Cliente (com o resumo completo, número do pedido e o Pix copia e cola)
     let telefoneClienteLimpo = dadosCliente.dsTelefoneCliente.replace(/\D/g, "");
     if (!telefoneClienteLimpo.startsWith("55") && telefoneClienteLimpo.length >= 10) {
       telefoneClienteLimpo = "55" + telefoneClienteLimpo;
@@ -142,17 +142,28 @@ Acesse seu painel para processar este pedido!`;
 
     if (telefoneClienteLimpo.length >= 12) {
       const nomeLojaExibicao = dadosLoja?.dadosLoja?.dsNomeLoja || dadosLoja?.nomeLoja || "Nossa Loja";
-      const msgCliente = `*Olá, ${dadosCliente.nmNomeCliente}!* Seu pedido *#${numPedidoSequencial}* foi realizado com sucesso em *${nomeLojaExibicao}*! 🎉
+      
+      let msgCliente = `*Olá, ${dadosCliente.nmNomeCliente}!* Seu pedido *#${numPedidoSequencial}* foi realizado com sucesso em *${nomeLojaExibicao}*! 🎉
 
 📦 *RESUMO DO PEDIDO:*
 ${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.title || "Produto"} - R$ ${(Number(i.preco || i.price || 0) * Number(i.qty || 1)).toFixed(2).replace('.', ',')}`).join('\n')}
 
-💰 *TOTAL DO PEDIDO:* R$ ${Number(totalGeral || 0).toFixed(2).replace('.', ',')}
+💰 *TOTAL DO PEDIDO:* R$ ${Number(totalGeral || 0).toFixed(2).replace('.', ',')}`;
+
+      // Adicionando o código Pix caso esteja disponível
+      if (payloadPixBruto) {
+        msgCliente += `
+
+💳 *PAGAMENTO VIA PIX:*
+Caso ainda não tenha realizado o pagamento pela loja, copie e cole o código abaixo no aplicativo do seu banco:
+\`${payloadPixBruto}\``;
+      }
+
+      msgCliente += `
 
 ⚠️ *LEMBRETE:* Lembre-se de enviar o comprovante do pagamento via Pix por aqui para agilizar a liberação e produção do seu pedido. Muito obrigado pela preferência! 🙏`;
 
       const urlCliente = `https://wa.me/${telefoneClienteLimpo}?text=${encodeURIComponent(msgCliente)}`;
-      // Pequeno timeout opcional para garantir abertura fluida das abas
       setTimeout(() => {
         window.open(urlCliente, '_blank');
       }, 500);

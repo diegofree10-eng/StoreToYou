@@ -420,7 +420,8 @@ export default function CarrinhoIdentidadeVisual() {
                 whatsappNumero: numeroLimpo,
                 dadosLoja: lojaAtual,
                 logistica,
-                cupomDigitado
+                cupomDigitado,
+                payloadPixBruto // 👈 Adicionado aqui para ir para a função
             });
 
         } catch (error) {
