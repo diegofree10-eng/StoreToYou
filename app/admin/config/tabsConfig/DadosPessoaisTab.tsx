@@ -4,10 +4,10 @@ import { aplicarMascara } from "@/utils/formatters";
 
 export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) {
   return (
-    <section>
+    <section className="dados-pessoais-container">
       <h3 style={styles.h3}>Identificação do Responsável</h3>
-      <div style={styles.inputRow}>
-        <div style={{ flex: 2 }}>
+      <div style={styles.inputRow} className="row-responsavel-1">
+        <div style={{ flex: 2 }} className="input-group-mobile">
           <label style={styles.label}>Nome Completo</label>
           <input
             required
@@ -19,7 +19,7 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
             })}
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1 }} className="input-group-mobile">
           <label style={styles.label}>CPF</label>
           <input
             required
@@ -33,8 +33,8 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
         </div>
       </div>
 
-      <div style={{ ...styles.inputRow, marginTop: '15px' }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ ...styles.inputRow, marginTop: '15px' }} className="row-responsavel-2">
+        <div style={{ flex: 1 }} className="input-group-mobile">
           <label style={styles.label}>E-mail Pessoal</label>
           <input
             required
@@ -47,7 +47,7 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
             })}
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1 }} className="input-group-mobile">
           <label style={styles.label}>Telefone</label>
           <input
             required
@@ -63,8 +63,8 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
 
       <h3 style={{ ...styles.h3, marginTop: '25px' }}>Endereço do Responsável</h3>
 
-      <div style={{ ...styles.inputRow, marginTop: '10px' }}>
-        <div style={{ flex: 3 }}>
+      <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-resp-row-1">
+        <div style={{ flex: 3 }} className="input-group-mobile">
           <label style={styles.label}>Rua *</label>
           <input
             required
@@ -73,7 +73,7 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsRuaResponsavel: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1 }} className="input-group-mobile">
           <label style={styles.label}>Nº *</label>
           <input
             required
@@ -82,7 +82,7 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, nrNumeroResponsavel: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 1.5 }}>
+        <div style={{ flex: 1.5 }} className="input-group-mobile">
           <label style={styles.label}>CEP *</label>
           <input
             required
@@ -94,8 +94,8 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
         </div>
       </div>
 
-      <div style={{ ...styles.inputRow, marginTop: '10px' }}>
-        <div style={{ flex: 2 }}>
+      <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-resp-row-2">
+        <div style={{ flex: 2 }} className="input-group-mobile">
           <label style={styles.label}>Bairro *</label>
           <input
             required
@@ -104,7 +104,7 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsBairroResponsavel: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 2 }}>
+        <div style={{ flex: 2 }} className="input-group-mobile">
           <label style={styles.label}>Cidade *</label>
           <input
             required
@@ -113,7 +113,7 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsCidadeResponsavel: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 0.5 }}>
+        <div style={{ flex: 0.5 }} className="input-group-mobile">
           <label style={styles.label}>UF *</label>
           <input
             required
@@ -124,6 +124,24 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
           />
         </div>
       </div>
+
+      {/* Regras CSS exclusivas para celulares (Mobile) mantendo o PC intacto */}
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .row-responsavel-1,
+          .row-responsavel-2,
+          .endereco-resp-row-1,
+          .endereco-resp-row-2 {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 15px !important;
+          }
+          .input-group-mobile {
+            flex: unset !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
     </section>
   );
 }
@@ -132,5 +150,5 @@ const styles: any = {
   h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
   label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "4px", display: 'block' },
   inputRow: { display: 'flex', gap: '15px' },
-  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none' }
+  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', boxSizing: 'border-box' }
 };

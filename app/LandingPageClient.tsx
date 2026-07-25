@@ -1,10 +1,50 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FiZap, FiSmartphone, FiMessageCircle, FiCheck } from "react-icons/fi";
+import { useState, useEffect } from "react";
+import { FiZap, FiSmartphone, FiMessageCircle, FiCheck, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function LandingPageClient({ planosData }: { planosData: any }) {
     const router = useRouter();
+
+    const [currentBanner, setCurrentBanner] = useState(0);
+    const [banners, setBanners] = useState<string[]>([]);
+    const [logoTipo, setLogoTipo] = useState<string>("/logo.png");
+
+    // Buscar dados do Firebase (configuracoes -> sistema -> landPage -> banners)
+    useEffect(() => {
+        const carregarDadosLandPage = async () => {
+            try {
+                const docRef = doc(db, "configuracoes", "sistema", "landPage", "banners");
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.listaBanners && Array.isArray(data.listaBanners)) {
+                        setBanners(data.listaBanners);
+                    }
+                    if (data.logoTipo) {
+                        setLogoTipo(data.logoTipo);
+                    }
+                }
+            } catch (error) {
+                console.error("Erro ao carregar dados da landing page:", error);
+            }
+        };
+
+        carregarDadosLandPage();
+    }, []);
+
+    // Rotação automática do banner
+    useEffect(() => {
+        if (banners.length <= 1) return;
+        const timer = setInterval(() => {
+            setCurrentBanner((prev) => (prev + 1) % banners.length);
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [banners.length]);
 
     if (!planosData) return null;
 
@@ -13,11 +53,61 @@ export default function LandingPageClient({ planosData }: { planosData: any }) {
             {/* NAVBAR */}
             <nav style={styles.topBar}>
                 <div style={styles.logoBox}>
-                    <img src="/logo.png" alt="Logo" style={{ height: '45px', width: 'auto', borderRadius: '8px' }} />
+                    <img src={logoTipo} alt="Logo" style={{ height: '45px', width: 'auto', borderRadius: '8px', objectFit: 'contain' }} />
                     <span style={styles.logoText}>Store ToYou</span>
                 </div>
                 <button style={styles.loginBtn} onClick={() => router.push("/login")}>Acessar Painel</button>
             </nav>
+
+            {/* BANNER ROTATIVO */}
+            <div style={styles.heroBannerSection}>
+                <div style={styles.bannerContainer}>
+                    {banners.length > 1 && (
+                        <button
+                            style={{ ...styles.bannerArrow, left: '15px' }}
+                            onClick={() => setCurrentBanner((prev) => (prev === 0 ? banners.length - 1 : prev - 1))}
+                        >
+                            <FiChevronLeft size={24} />
+                        </button>
+                    )}
+
+                    {banners.length > 0 && banners[currentBanner] ? (
+                        <img
+                            src={banners[currentBanner]}
+                            alt={`Banner ${currentBanner + 1}`}
+                            style={styles.bannerImage}
+                        />
+                    ) : (
+                        <div style={styles.bannerImagePlaceholder}>
+                            <span style={{ color: '#94a3b8', fontWeight: '600' }}>Banner {currentBanner + 1} (Insira a URL no Firebase)</span>
+                        </div>
+                    )}
+
+                    {banners.length > 1 && (
+                        <button
+                            style={{ ...styles.bannerArrow, right: '15px' }}
+                            onClick={() => setCurrentBanner((prev) => (prev + 1) % banners.length)}
+                        >
+                            <FiChevronRight size={24} />
+                        </button>
+                    )}
+
+                    {banners.length > 1 && (
+                        <div style={styles.dotsContainer}>
+                            {banners.map((_, idx) => (
+                                <span
+                                    key={idx}
+                                    style={{
+                                        ...styles.dot,
+                                        background: currentBanner === idx ? '#055bb1' : '#cbd5e1'
+                                    }}
+                                    onClick={() => setCurrentBanner(idx)}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
 
             {/* HERO */}
             <header style={styles.hero}>
@@ -57,14 +147,15 @@ export default function LandingPageClient({ planosData }: { planosData: any }) {
             <section style={styles.pricing}>
                 <h2 style={styles.sectionTitle}>Planos para o seu crescimento</h2>
 
-                {/* Container forçado horizontalmente */}
                 <div style={{
                     display: 'flex',
                     flexDirection: 'row',
                     justifyContent: 'center',
                     alignItems: 'stretch',
                     gap: '30px',
-                    flexWrap: 'wrap'
+                    flexWrap: 'wrap',
+                    maxWidth: '1100px',
+                    margin: '0 auto'
                 }}>
                     {Object.keys(planosData)
                         .filter(key => key.toLowerCase() !== 'diamante')
@@ -113,20 +204,23 @@ export default function LandingPageClient({ planosData }: { planosData: any }) {
             <footer style={styles.footer}><p>© 2026 Store ToYou - Gestão Inteligente.</p></footer>
 
             <style jsx global>{`
-        .plan-card { 
-          display: flex !important; flex-direction: column !important; 
-          transition: all 0.3s ease;
-        }
-        .plan-card:hover { 
-          transform: scale(1.05); border: 2px solid #055bb1 !important; box-shadow: 0 10px 20px rgba(0,0,0,0.1); 
-        }
-        .btn-assinar { 
-          margin-top: auto; padding: 16px; border: none; borderRadius: 12px;
-          font-weight: bold; cursor: pointer; background: #e2e8f0; color: #475569;
-          transition: all 0.3s ease;
-        }
-        .plan-card:hover .btn-assinar { background: #055bb1 !important; color: #fff !important; }
-      `}</style>
+                .plan-card { 
+                  display: flex !important; flex-direction: column !important; 
+                  transition: all 0.3s ease;
+                  flex: 1;
+                  min-width: 280px;
+                  max-width: 340px;
+                }
+                .plan-card:hover { 
+                  transform: scale(1.03); border: 2px solid #055bb1 !important; box-shadow: 0 10px 20px rgba(0,0,0,0.1); 
+                }
+                .btn-assinar { 
+                  margin-top: auto; padding: 16px; border: none; border-radius: 12px;
+                  font-weight: bold; cursor: pointer; background: #e2e8f0; color: #475569;
+                  transition: all 0.3s ease;
+                }
+                .plan-card:hover .btn-assinar { background: #055bb1 !important; color: #fff !important; }
+            `}</style>
         </div>
     );
 }
@@ -136,22 +230,83 @@ const styles: Record<string, React.CSSProperties> = {
     topBar: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 5%", borderBottom: "1px solid #f1f5f9" },
     logoBox: { display: "flex", alignItems: "center", gap: "12px" },
     logoText: { fontSize: "20px", fontWeight: "800" },
-    hero: { padding: "80px 5%", textAlign: "center", background: "#f8fafc" },
-    title: { fontSize: "48px", fontWeight: "900", marginBottom: "20px", lineHeight: "1.1" },
+    heroBannerSection: { padding: "40px 5% 20px 5%", background: "#f8fafc", display: "flex", justifyContent: "center" },
+    bannerContainer: {
+        position: 'relative',
+        borderRadius: '24px',
+        width: '100%',
+        maxWidth: '1100px',
+        height: '380px',
+        minHeight: '380px',
+        maxHeight: '380px',
+        background: '#f1f5f9',
+        border: '2px dashed #cbd5e1',
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        margin: '0 auto'
+    },
+    bannerImage: {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        display: 'block'
+    },
+    bannerImagePlaceholder: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%'
+    },
+    bannerArrow: {
+        position: 'absolute',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'rgba(255,255,255,0.9)',
+        border: '1px solid #cbd5e1',
+        color: '#1e293b',
+        borderRadius: '50%',
+        width: '45px',
+        height: '45px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        zIndex: 3,
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+    },
+    dotsContainer: {
+        position: 'absolute',
+        bottom: '15px',
+        display: 'flex',
+        gap: '8px',
+        zIndex: 3
+    },
+    dot: {
+        width: '10px',
+        height: '10px',
+        borderRadius: '50%',
+        cursor: 'pointer',
+        transition: 'background 0.3s'
+    },
+    hero: { padding: "40px 5%", textAlign: "center", background: "#fff" },
+    title: { fontSize: "42px", fontWeight: "900", marginBottom: "20px", lineHeight: "1.1" },
     highlight: { color: "#055bb1" },
     subtitle: { fontSize: "18px", color: "#64748b", maxWidth: "600px", margin: "0 auto 40px" },
-    actions: { display: "flex", gap: "15px", justifyContent: "center" },
+    actions: { display: "flex", gap: "15px", justifyContent: "center", flexWrap: "wrap" },
     mainBtn: { background: "#055bb1", color: "#fff", border: "none", padding: "16px 32px", borderRadius: "12px", fontSize: "16px", fontWeight: "bold", cursor: "pointer" },
     secBtn: { background: "#e2e8f0", color: "#475569", border: "none", padding: "16px 32px", borderRadius: "12px", fontSize: "16px", fontWeight: "bold", cursor: "pointer" },
     loginBtn: { background: "transparent", border: "1px solid #055bb1", color: "#055bb1", padding: "8px 20px", borderRadius: "8px", cursor: "pointer", fontWeight: "600" },
-    features: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "30px", padding: "80px 5%", maxWidth: "1200px", margin: "0 auto" },
+    features: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "30px", padding: "60px 5%", maxWidth: "1200px", margin: "0 auto" },
     featureCard: { padding: "40px", borderRadius: "20px", background: "#fff", border: "1px solid #f1f5f9", textAlign: "center" },
-    pricing: { padding: "80px 5%", textAlign: "center", background: "#f8fafc" },
+    pricing: { padding: "40px 5% 80px 5%", textAlign: "center", background: "#f8fafc" },
     sectionTitle: { fontSize: "32px", fontWeight: "800", marginBottom: "40px" },
-    pricingGrid: { display: "flex", gap: "30px", justifyContent: "center", flexWrap: "wrap" },
-    card: { padding: "40px", borderRadius: "20px", background: "#fff", width: "300px", position: "relative", textAlign: "center", border: "1px solid #e2e8f0" },
-    badge: { position: "absolute", top: "-12px", background: "#f59e0b", color: "#fff", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold" },
-    price: { fontSize: "28px", fontWeight: "800", margin: "20px 0" },
+    card: { padding: "40px 30px", borderRadius: "20px", background: "#fff", position: "relative", textAlign: "center", border: "1px solid #e2e8f0" },
+    badge: { position: "absolute", top: "-12px", left: "50%", transform: "translateX(-50%)", background: "#f59e0b", color: "#fff", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold" },
+    price: { fontSize: "28px", fontWeight: "800", margin: "20px 0 5px 0" },
     list: { listStyle: "none", padding: 0, textAlign: "left", marginBottom: "30px" },
     footer: { textAlign: "center", padding: "40px", color: "#94a3b8" }
 };

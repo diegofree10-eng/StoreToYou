@@ -11,7 +11,6 @@ interface TabLucroRealProps {
   despesasFixas: number;
   despesasVariaveis: number;
   formatarMoeda: (v: number) => string;
-  // 🔥 Alterado para aceitar o objeto agrupado por ano
   evolucaoMensal: Record<string, { mes: string, lucro: number, ano: string }[]>;
 }
 
@@ -32,31 +31,25 @@ export const TabLucroReal = ({
   const margemContribuicao = faturamento - totalCustosVariaveis;
   const margemPercentual = faturamento > 0 ? (margemContribuicao / faturamento) * 100 : 0;
 
-  // Lógica de Recordes e Processamento de Dados
   const dadosProcessados = useMemo(() => {
-    // 1. Transformamos o objeto { ano: [meses] } em um array plano
     const todosOsDados = Object.values(evolucaoMensal || {}).flat();
 
     if (!todosOsDados || todosOsDados.length === 0) {
       return { melhorMes: { mes: '-', ano: '-', lucro: 0 }, melhorAno: { ano: 'N/A', valor: 0 } };
     }
 
-    // 2. Melhor Mês
     const melhorMes = todosOsDados.reduce((prev, curr) =>
       (curr.lucro > (prev?.lucro || 0) ? curr : prev), todosOsDados[0]);
 
-    // 3. Melhor Ano (Ajustado para garantir a soma)
     const lucrosPorAno = todosOsDados.reduce((acc: any, curr) => {
-      const ano = curr.ano.toString(); // Garante que é string
+      const ano = curr.ano.toString();
       acc[ano] = (acc[ano] || 0) + curr.lucro;
       return acc;
     }, {});
 
-    // Filtra para garantir que não estamos comparando 'undefined'
     const anosArray = Object.entries(lucrosPorAno);
 
     const melhorAno = anosArray.reduce((prev: any, curr: any) => {
-      // curr[1] é o lucro, curr[0] é o ano
       return (curr[1] > prev.valor) ? { ano: curr[0], valor: curr[1] } : prev;
     }, { ano: 'N/A', valor: 0 });
 
@@ -64,10 +57,10 @@ export const TabLucroReal = ({
   }, [evolucaoMensal]);
 
   return (
-    <div style={localStyles.container}>
+    <div style={localStyles.container} className="tab-lucro-real-container">
 
       {/* 1. CARDS DE RECORDE (GAMIFICAÇÃO) */}
-      <div style={localStyles.kpiGrid}>
+      <div style={localStyles.kpiGrid} className="kpi-grid-mobile">
         <div style={localStyles.kpiCard}>
           <span style={localStyles.cardLabel}>🏆 Melhor Mês da História</span>
           <h4 style={{ margin: '5px 0 0 0' }}>{dadosProcessados.melhorMes?.mes || '-'} / {dadosProcessados.melhorMes?.ano || '-'}</h4>
@@ -81,7 +74,7 @@ export const TabLucroReal = ({
       </div>
 
       {/* 2. INDICADORES ATUAIS */}
-      <div style={localStyles.kpiGrid}>
+      <div style={localStyles.kpiGrid} className="kpi-grid-mobile">
         <div style={localStyles.kpiCard}>
           <span style={localStyles.cardLabel}>Margem de Contribuição</span>
           <h3 style={{ ...localStyles.kpiVal, color: margemPercentual > 30 ? '#10b981' : '#f59e0b' }}>
@@ -98,9 +91,9 @@ export const TabLucroReal = ({
 
       {/* 3. GRÁFICO DE EVOLUÇÃO */}
       <div style={localStyles.dreCard}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
           <h4 style={localStyles.dreTitle}>📈 Evolução Mensal do Lucro</h4>
-          <select value={anoSelecionado} onChange={(e) => setAnoSelecionado(e.target.value)} style={{ padding: '5px', borderRadius: '5px' }}>
+          <select value={anoSelecionado} onChange={(e) => setAnoSelecionado(e.target.value)} style={{ padding: '6px', borderRadius: '5px', fontSize: '13px' }}>
             {Object.keys(evolucaoMensal).map(ano => (
               <option key={ano} value={ano}>{ano}</option>
             ))}
@@ -108,7 +101,6 @@ export const TabLucroReal = ({
         </div>
         <div style={{ height: '250px', width: '100%' }}>
           <ResponsiveContainer width="100%" height="100%">
-            {/* 🔥 Agora o gráfico lê o ano específico do objeto */}
             <LineChart data={evolucaoMensal[anoSelecionado] || []}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="mes" fontSize={12} />
@@ -123,22 +115,25 @@ export const TabLucroReal = ({
       {/* 4. DRE GERENCIAL */}
       <div style={{ ...localStyles.dreCard, marginTop: '20px' }}>
         <h4 style={localStyles.dreTitle}>📊 Demonstrativo de Resultados</h4>
-        <div style={localStyles.row}><span>Receita Bruta Total</span> <span>{formatarMoeda(faturamento)}</span></div>
-        <div style={{ ...localStyles.row, color: '#ef4444' }}>
-          <span>(-) Custos Variáveis (Insumos + Fretes + Despesas Var.)</span>
-          <span>- {formatarMoeda(totalCustosVariaveis)}</span>
+        <div style={localStyles.row}>
+          <span style={localStyles.rowText}>Receita Bruta Total</span> 
+          <span style={localStyles.rowVal}>{formatarMoeda(faturamento)}</span>
         </div>
-        <div style={{ ...localStyles.row, background: '#f8fafc', fontWeight: 'bold', padding: '8px' }}>
-          <span>(=) Margem de Contribuição</span>
-          <span>{formatarMoeda(margemContribuicao)}</span>
+        <div style={{ ...localStyles.row, color: '#ef4444' }}>
+          <span style={localStyles.rowText}>(-) Custos Variáveis (Insumos + Fretes + Despesas Var.)</span>
+          <span style={localStyles.rowVal}>- {formatarMoeda(totalCustosVariaveis)}</span>
+        </div>
+        <div style={{ ...localStyles.row, background: '#f8fafc', fontWeight: 'bold', padding: '8px', borderRadius: '6px' }}>
+          <span style={localStyles.rowText}>(=) Margem de Contribuição</span>
+          <span style={localStyles.rowVal}>{formatarMoeda(margemContribuicao)}</span>
         </div>
         <div style={{ ...localStyles.row, color: '#ef4444', marginTop: '10px' }}>
-          <span>(-) Despesas Fixas (Aba Despesas)</span>
-          <span>- {formatarMoeda(despesasFixas)}</span>
+          <span style={localStyles.rowText}>(-) Despesas Fixas (Aba Despesas)</span>
+          <span style={localStyles.rowVal}>- {formatarMoeda(despesasFixas)}</span>
         </div>
         <div style={{ ...localStyles.row, borderTop: '2px solid #1e293b', marginTop: '10px', paddingTop: '10px', fontWeight: 'bold' }}>
-          <span>(=) LUCRO LÍQUIDO FINAL</span>
-          <span>{formatarMoeda(lucroReal)}</span>
+          <span style={localStyles.rowText}>(=) LUCRO LÍQUIDO FINAL</span>
+          <span style={localStyles.rowVal}>{formatarMoeda(lucroReal)}</span>
         </div>
       </div>
 
@@ -146,6 +141,14 @@ export const TabLucroReal = ({
         💡 <strong>Dica de Gestão:</strong> Sua Margem de Contribuição ideal deve estar acima de 30%.
         {margemPercentual < 30 && " Sua margem está baixa. Revise seu preço de venda ou o custo dos insumos."}
       </div>
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .kpi-grid-mobile {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
@@ -153,11 +156,13 @@ export const TabLucroReal = ({
 const localStyles: Record<string, React.CSSProperties> = {
   container: { padding: "10px 0", fontFamily: "sans-serif" },
   kpiGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "25px" },
-  kpiCard: { background: "#fff", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0", textAlign: "center" },
+  kpiCard: { background: "#fff", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0", textAlign: "center", boxSizing: 'border-box' },
   kpiVal: { margin: "10px 0 0 0", fontSize: "28px" },
-  dreCard: { background: "#fff", padding: "24px", borderRadius: "12px", border: "1px solid #e2e8f0" },
+  dreCard: { background: "#fff", padding: "24px", borderRadius: "12px", border: "1px solid #e2e8f0", boxSizing: 'border-box' },
   dreTitle: { margin: "0 0 15px 0", borderBottom: "1px solid #eee", paddingBottom: "10px" },
-  row: { display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: "14px" },
+  row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", fontSize: "13px", gap: "12px" },
+  rowText: { flex: 1, color: '#334155' },
+  rowVal: { whiteSpace: 'nowrap', fontWeight: '600', flexShrink: 0 },
   cardLabel: { fontSize: "11px", color: "#64748b", fontWeight: "800", textTransform: "uppercase" },
   auditoriaFooter: { background: "#eff6ff", padding: "15px", borderRadius: "8px", marginTop: "20px", fontSize: "13px", color: "#1e40af" }
 };

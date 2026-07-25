@@ -3,20 +3,38 @@ import React from "react";
 
 export const styles: { [key: string]: React.CSSProperties } = {
   page: { display: 'flex', height: '100vh', width: '100%', maxWidth: '100vw', background: '#f8fafc', overflow: 'hidden', boxSizing: 'border-box', position: 'relative' },
-  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { background: '#fff', padding: '20px', borderRadius: '12px', width: '80%', maxWidth: '600px', height: '70vh', display: 'flex', flexDirection: 'column' },
-  modalTextarea: { flex: 1, padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '14px', resize: 'none', lineHeight: '1.5' },
+  
+  // Container de 3 colunas para o PC
+  pcContainer: { display: 'flex', flexDirection: 'row', width: '100vw', height: '100vh', overflow: 'hidden', boxSizing: 'border-box' },
+  col1: { width: '260px', minWidth: '260px', maxWidth: '260px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh' },
+  col2: { width: '380px', minWidth: '380px', maxWidth: '380px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh' },
+  col3: { flex: 1, padding: '15px', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100vh', background: '#f8fafc' },
+
+  // Estilos Mobile (Gavetas e TopBar)
+  mobileContainer: { width: '100%', minHeight: '100vh', position: 'relative', boxSizing: 'border-box', background: '#f8fafc', display: 'flex', flexDirection: 'column' },
+  mobileTopBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 15px', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 99, boxSizing: 'border-box' },
+  btnMenu: { background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#334155', display: 'flex', alignItems: 'center' },
+  fabAdd: { position: 'fixed', bottom: '20px', right: '20px', width: '56px', height: '56px', borderRadius: '50%', background: '#10b981', color: '#fff', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', zIndex: 998, cursor: 'pointer' },
+  drawerLeft: { position: 'fixed', top: 0, left: 0, width: '85%', maxWidth: '320px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out' },
+  drawerRight: { position: 'fixed', top: 0, right: 0, width: '90%', maxWidth: '400px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '-5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1999 },
+
+  // MODAL CORRIGIDO: CENTRALIZADO PERFEITAMENTE E RESPONSIVO
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, boxSizing: 'border-box', padding: '15px' },
+  modalContent: { background: '#fff', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '550px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' },
+  modalTextarea: { width: '100%', flex: 1, minHeight: '150px', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '14px', resize: 'vertical', lineHeight: '1.5', boxSizing: 'border-box', outline: 'none' },
+
   sidebar: { width: '260px', minWidth: '260px', maxWidth: '260px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box' },
   main: { flex: 1, padding: '15px', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' },
   topHeader: { display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px', width: '100%', boxSizing: 'border-box' },
-  filterRow: { display: 'flex', gap: '5px', alignItems: 'center', width: '100%', boxSizing: 'border-box' },
-  searchBar: { flex: 3, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' },
-  selectTop: { flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '13px' },
-  selectStatus: { width: '100px', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff' },
-  btnGeneric: { padding: '10px 15px', borderRadius: '8px', border: '1px solid #e2e8f0', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' },
-  massPanel: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eff6ff', padding: '10px', borderRadius: '10px', border: '1px solid #3b82f6' },
+  filterRow: { display: 'flex', gap: '5px', alignItems: 'center', width: '100%', boxSizing: 'border-box', flexWrap: 'wrap' },
+  searchBar: { flex: 3, minWidth: '140px', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px', boxSizing: 'border-box' },
+  selectTop: { flex: 1, minWidth: '90px', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '13px', boxSizing: 'border-box' },
+  selectStatus: { width: '100px', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', boxSizing: 'border-box' },
+  btnGeneric: { padding: '10px 15px', borderRadius: '8px', border: '1px solid #e2e8f0', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', background: '#fff', boxSizing: 'border-box' },
+  massPanel: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eff6ff', padding: '10px', borderRadius: '10px', border: '1px solid #3b82f6', marginBottom: '10px', boxSizing: 'border-box', flexWrap: 'wrap', gap: '8px' },
   btnMass: { padding: '6px 12px', background: '#fff', border: '1px solid #3b82f6', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' },
-  productGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '10px', width: '100%' },
+  productGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' },
   card: { background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', position: 'relative', overflow: 'hidden', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', height: 'auto', minHeight: '280px', paddingBottom: '5px' },
   starBadge: { position: 'absolute', top: '5px', right: '5px', zIndex: 5, fontSize: '14px' },
   cardCheck: { position: 'absolute', top: '8px', left: '8px', zIndex: 10, width: '18px', height: '18px' },
@@ -72,13 +90,11 @@ export const shopeeStyles: { [key: string]: React.CSSProperties } = {
   tagInput: { border: 'none', padding: '6px 10px', outline: 'none', width: '100px', fontSize: '13px' },
   delTag: { border: 'none', background: 'none', padding: '0 8px', cursor: 'pointer', color: '#999', borderLeft: '1px solid #eee' },
   addBtn: { border: '1px dashed #ee4d2d', background: '#fff', color: '#ee4d2d', padding: '6px 15px', cursor: 'pointer', borderRadius: '2px' },
-  // Removido tableLayout: fixed para permitir ajuste dinâmico
   table: { width: '100%', borderCollapse: 'collapse', marginTop: '20px' }, 
   trHead: { background: '#f6f6f6' },
   th: { padding: '12px', textAlign: 'left', fontSize: '13px', border: '1px solid #e8e8e8' },
   tr: { border: '1px solid #e8e8e8' },
   td: { padding: '10px', border: '1px solid #e8e8e8', verticalAlign: 'middle' },
-  // Adicionado boxSizing para garantir que o input não expanda a célula
   tableInput: { width: '100%', padding: '8px', border: '1px solid #dcdcdc', borderRadius: '2px', outline: 'none', textAlign: 'center', boxSizing: 'border-box' },
   footer: { padding: '15px 20px', borderTop: '1px solid #e8e8e8', display: 'flex', justifyContent: 'flex-end' }
 };

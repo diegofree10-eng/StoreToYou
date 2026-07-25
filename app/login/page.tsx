@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import {
     signInWithEmailAndPassword,
@@ -17,10 +17,26 @@ export default function AuthPage() {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState("");
     const [senha, setSenha] = useState("");
-    const [showPassword, setShowPassword] = useState(false); // 👈 1. Estado para controlar a visibilidade da senha
+    const [showPassword, setShowPassword] = useState(false);
     const [nomeLoja, setNomeLoja] = useState("");
     const [loading, setLoading] = useState(false);
+    const [logoSistema, setLogoSistema] = useState("/logo.png");
     const router = useRouter();
+
+    useEffect(() => {
+        async function buscarLogoSistema() {
+            try {
+                const docRef = doc(db, "configuracoes", "sistema", "landPage", "banners");
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists() && docSnap.data().logoTipo) {
+                    setLogoSistema(docSnap.data().logoTipo);
+                }
+            } catch (error) {
+                console.error("Erro ao buscar logo do sistema:", error);
+            }
+        }
+        buscarLogoSistema();
+    }, []);
 
     const handleAuth = async (e: FormEvent) => {
         e.preventDefault();
@@ -129,9 +145,9 @@ export default function AuthPage() {
             <div style={styles.banner} className="auth-banner">
                 <div style={styles.logoBox}>
                     <img
-                        src="/logo.png"
-                        alt="Logo Store ToYou"
-                        style={{ height: '90px', width: 'auto', borderRadius: '8px' }}
+                        src={logoSistema}
+                        alt="Logo do Sistema"
+                        style={{ maxHeight: '60px', maxWidth: '150px', width: 'auto', objectFit: 'contain', borderRadius: '8px' }}
                     />
                 </div>
                 <h1 style={styles.bannerTitle}>Store ToYou</h1>
@@ -158,7 +174,6 @@ export default function AuthPage() {
                         <input type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} style={styles.input} required />
                     </div>
 
-                    {/* 👈 2. CAMPO DE SENHA MODIFICADO COM O BOTÃO DE VISIBILIDADE */}
                     <div style={styles.inputGroup}>
                         <label style={styles.label}>Senha</label>
                         <div style={styles.passwordContainer}>
@@ -181,7 +196,7 @@ export default function AuthPage() {
                     </div>
 
                     {isLogin && (
-                        <div style={{ textAlign: 'right', marginBottom: '20px' }}>
+                        <div style={{ textAlign: 'right', marginBottom: '15px' }}>
                             <button type="button" onClick={handleRecuperarSenha} style={styles.btnLink}>Esqueceu a senha?</button>
                         </div>
                     )}
@@ -190,7 +205,7 @@ export default function AuthPage() {
                         {loading ? "Processando..." : (isLogin ? "Entrar" : "Criar Loja")}
                     </button>
 
-                    <div style={{ textAlign: 'center', marginTop: '25px' }}>
+                    <div style={{ textAlign: 'center', marginTop: '15px' }}>
                         <button type="button" onClick={() => setIsLogin(!isLogin)} style={styles.btnLinkBold}>
                             {isLogin ? "Cadastre-se grátis" : "Já tenho conta"}
                         </button>
@@ -199,38 +214,63 @@ export default function AuthPage() {
             </div>
 
             <style jsx>{`
-        @media (max-width: 850px) {
-          .auth-wrapper { flex-direction: column !important; overflow-y: auto !important; }
-          .auth-banner { flex: 0 0 auto !important; width: 100% !important; padding: 40px 20px !important; }
-          .auth-area { padding-top: 20px !important; width: 100% !important; }
-          .auth-card { padding: 30px 20px !important; box-shadow: none !important; width: 100% !important; max-width: 100% !important; }
-          .banner-subtitle { display: none; }
-        }
-      `}</style>
+                @media (max-width: 850px) {
+                    .auth-wrapper { 
+                        flex-direction: column !important; 
+                        height: 100dvh !important;
+                        overflow: hidden !important; 
+                    }
+                    .auth-banner { 
+                        flex: 0 0 auto !important; 
+                        width: 100% !important; 
+                        padding: 15px 15px !important; 
+                    }
+                    .auth-banner h1 {
+                        font-size: 20px !important;
+                        margin-top: 5px !important;
+                    }
+                    .auth-area { 
+                        flex: 1 !important;
+                        padding: 10px !important; 
+                        align-items: center !important;
+                        background-color: #f0f2f5 !important;
+                        overflow: hidden !important;
+                    }
+                    .auth-card { 
+                        padding: 20px !important; 
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; 
+                        width: 100% !important; 
+                        max-width: 380px !important; 
+                        border-radius: 14px !important;
+                    }
+                    .banner-subtitle { 
+                        display: none !important; 
+                    }
+                }
+            `}</style>
         </div>
     );
 }
 
 const styles: any = {
-    container: { display: 'flex', height: '100vh', width: '100vw', background: '#f0f2f5', overflow: 'hidden' },
+    container: { display: 'flex', height: '100dvh', width: '100vw', background: '#f0f2f5', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
     banner: { flex: '0 0 40%', background: '#055bb1', color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px', textAlign: 'center', position: 'relative', overflow: 'hidden' },
-    logoCircle: { width: '60px', height: '60px', background: '#fdb813', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#055bb1', fontWeight: 'bold', fontSize: '28px', marginBottom: '20px', zIndex: 2 },
+    logoBox: { marginBottom: '10px', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' },
     bannerTitle: { margin: 0, fontSize: '28px', fontWeight: 'bold', zIndex: 2 },
     bannerSubtitle: { fontSize: '16px', color: '#e2e8f0', marginTop: '10px', maxWidth: '300px', zIndex: 2 },
     bannerDecoration: { position: 'absolute', bottom: '-100px', left: '-100px', width: '400px', height: '400px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%', zIndex: 1 },
-    loginArea: { flex: '1', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' },
-    card: { background: '#fff', padding: '45px', borderRadius: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', width: '100%', maxWidth: '420px', boxSizing: 'border-box' },
-    header: { textAlign: 'center', marginBottom: '35px' },
-    titleText: { margin: 0, fontSize: '24px', color: '#1a1a1a' },
-    subtitleText: { fontSize: '14px', color: '#64748b', marginTop: '5px' },
-    inputGroup: { marginBottom: '20px' },
-    label: { display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '8px', color: '#333' },
-    input: { width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #e1e1e1', boxSizing: 'border-box', fontSize: '16px', outlineColor: '#055bb1', color: '#000' },
-    // 👈 3. NOVOS ESTILOS PARA O CONTAINER E BOTÃO DO CAMPO DE SENHA
+    loginArea: { flex: '1', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', overflow: 'hidden' },
+    card: { background: '#fff', padding: '35px', borderRadius: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', width: '100%', maxWidth: '420px', boxSizing: 'border-box' },
+    header: { textAlign: 'center', marginBottom: '25px' },
+    titleText: { margin: 0, fontSize: '22px', color: '#1a1a1a' },
+    subtitleText: { fontSize: '13px', color: '#64748b', marginTop: '4px' },
+    inputGroup: { marginBottom: '15px' },
+    label: { display: 'block', fontSize: '12px', fontWeight: '500', marginBottom: '6px', color: '#333' },
+    input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e1e1e1', boxSizing: 'border-box', fontSize: '15px', outlineColor: '#055bb1', color: '#000' },
     passwordContainer: { display: 'flex', alignItems: 'center', position: 'relative', width: '100%' },
-    passwordInput: { width: '100%', padding: '14px', paddingRight: '60px', borderRadius: '10px', border: '1px solid #e1e1e1', boxSizing: 'border-box', fontSize: '16px', outlineColor: '#055bb1', color: '#000' },
+    passwordInput: { width: '100%', padding: '12px', paddingRight: '60px', borderRadius: '10px', border: '1px solid #e1e1e1', boxSizing: 'border-box', fontSize: '15px', outlineColor: '#055bb1', color: '#000' },
     eyeBtn: { position: 'absolute', right: '12px', background: 'none', border: 'none', color: '#055bb1', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', padding: '4px' },
-    btn: { width: '100%', padding: '16px', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' },
-    btnLink: { background: 'none', border: 'none', color: '#055bb1', fontSize: '13px', cursor: 'pointer' },
-    btnLinkBold: { background: 'none', border: 'none', color: '#055bb1', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold' }
+    btn: { width: '100%', padding: '14px', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' },
+    btnLink: { background: 'none', border: 'none', color: '#055bb1', fontSize: '12px', cursor: 'pointer' },
+    btnLinkBold: { background: 'none', border: 'none', color: '#055bb1', fontSize: '13px', cursor: 'pointer', fontWeight: 'bold' }
 };

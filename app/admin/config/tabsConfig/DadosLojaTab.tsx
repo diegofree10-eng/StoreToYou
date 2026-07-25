@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { FiTrash2 } from "react-icons/fi";
 import { aplicarMascara } from "@/utils/formatters";
+import ImageCropperModalLogo from "@/utils/ImageCropperModalLogo"; // Ajuste o caminho se necessário
+
 
 export default function DadosLojaTab({
   config,
@@ -16,8 +19,27 @@ export default function DadosLojaTab({
 }: any) {
   const slugAtual = config.dadosLoja?.dsSlug || "sua-loja";
 
+  // Estado local para gerenciar o arquivo temporário que irá para o Cropper
+  const [tempFileLogo, setTempFileLogo] = useState<File | null>(null);
+
+  // Recebe o Blob cortado pelo ImageCropperModalLogo e converte para File
+  const handleCropComplete = (croppedBlob: Blob) => {
+    const croppedFile = new File([croppedBlob], "logo_loja.png", { type: "image/png" });
+    setNovaLogo(croppedFile);
+    setTempFileLogo(null);
+  };
+
   return (
-    <section>
+    <section className="dados-loja-container">
+      {/* MODAL CROPPER DE LOGO */}
+      {tempFileLogo && (
+        <ImageCropperModalLogo
+          file={tempFileLogo}
+          onCropComplete={handleCropComplete}
+          onCancel={() => setTempFileLogo(null)}
+        />
+      )}
+
       <h3 style={styles.h3}>Marca e Redes Sociais</h3>
       
       {/* Linha com Logo e Link da Loja */}
@@ -32,14 +54,24 @@ export default function DadosLojaTab({
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <input type="file" onChange={e => setNovaLogo(e.target.files?.[0] || null)} style={{ fontSize: '11px' }} />
+          <input 
+            type="file" 
+            accept="image/*"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setTempFileLogo(file);
+              }
+            }} 
+            style={{ fontSize: '11px' }} 
+          />
         </div>
       </div>
 
       {/* Campo do Link da Loja */}
       <div style={{ marginBottom: '15px', background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
         <label style={styles.label}>Link da sua Loja (Endereço Web)</label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} className="link-loja-row">
           <input
             type="text"
             readOnly
@@ -108,7 +140,7 @@ export default function DadosLojaTab({
           <button type="button" onClick={adicionarRedeSocial} style={styles.btnAdicionarSocial}>+ Adicionar</button>
         </div>
         {config.dadosLoja.redesSociais?.map((rede: any, index: number) => (
-          <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+          <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }} className="rede-social-row">
             <select
               style={{ ...styles.input, flex: 1 }}
               value={rede.plataforma}
@@ -171,8 +203,8 @@ export default function DadosLojaTab({
         <span>A loja fica no mesmo endereço da minha residência</span>
       </label>
 
-      <div style={{ ...styles.inputRow, marginTop: '10px' }}>
-        <div style={{ flex: 3 }}>
+      <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-row-1">
+        <div style={{ flex: 3 }} className="input-group-mobile">
           <label style={styles.label}>Rua *</label>
           <input
             required
@@ -181,7 +213,7 @@ export default function DadosLojaTab({
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsRuaLoja: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1 }} className="input-group-mobile">
           <label style={styles.label}>Nº *</label>
           <input
             required
@@ -190,7 +222,7 @@ export default function DadosLojaTab({
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, nrNumeroLoja: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 1.5 }}>
+        <div style={{ flex: 1.5 }} className="input-group-mobile">
           <label style={styles.label}>CEP *</label>
           <input
             required
@@ -202,8 +234,8 @@ export default function DadosLojaTab({
         </div>
       </div>
 
-      <div style={{ ...styles.inputRow, marginTop: '10px' }}>
-        <div style={{ flex: 2 }}>
+      <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-row-2">
+        <div style={{ flex: 2 }} className="input-group-mobile">
           <label style={styles.label}>Bairro *</label>
           <input
             required
@@ -212,7 +244,7 @@ export default function DadosLojaTab({
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsBairroLoja: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 2 }}>
+        <div style={{ flex: 2 }} className="input-group-mobile">
           <label style={styles.label}>Cidade *</label>
           <input
             required
@@ -221,7 +253,7 @@ export default function DadosLojaTab({
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsCidadeLoja: e.target.value } })}
           />
         </div>
-        <div style={{ flex: 0.5 }}>
+        <div style={{ flex: 0.5 }} className="input-group-mobile">
           <label style={styles.label}>UF *</label>
           <input
             required
@@ -236,6 +268,31 @@ export default function DadosLojaTab({
       <button type="button" onClick={() => setShowHorarioModal(true)} style={{ ...styles.btnHorario, marginTop: '20px' }}>
         🕗 Configurar Horários
       </button>
+
+      {/* Regras CSS exclusivas para celulares (Mobile) sem alterar o PC */}
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .link-loja-row,
+          .rede-social-row,
+          .endereco-row-1,
+          .endereco-row-2 {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+          }
+          .input-group-mobile {
+            flex: unset !important;
+            width: 100% !important;
+          }
+          .link-loja-row button {
+            width: 100% !important;
+          }
+          .rede-social-row select,
+          .rede-social-row input {
+            width: 100% !important;
+          }
+        }
+      `}</style>
     </section>
   );
 }
@@ -244,7 +301,7 @@ const styles: any = {
   h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
   label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "4px", display: 'block' },
   inputRow: { display: 'flex', gap: '15px' },
-  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none' },
+  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', boxSizing: 'border-box' },
   previewLogo: { width: '60px', height: '60px', borderRadius: '10px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   imgFull: { width: '100%', height: '100%', objectFit: 'cover' },
   btnHorario: { width: '100%', padding: '12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' },

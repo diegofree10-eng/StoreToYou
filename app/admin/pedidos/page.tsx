@@ -896,8 +896,8 @@ export default function GestaoPedidos({
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-  contentArea: { padding: '20px', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh' },
-  header: { marginBottom: '20px' },
+  contentArea: { padding: '0px 20px 20px 20px', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', boxSizing: 'border-box' },
+  header: { marginBottom: '20px', marginTop: '0px' },
   checkboxLabelGlobal: { display: 'flex', alignItems: 'center', fontSize: '14px', color: '#475569', cursor: 'pointer' },
   btnMassPrint: { padding: '8px 16px', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' },
   filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#fff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },

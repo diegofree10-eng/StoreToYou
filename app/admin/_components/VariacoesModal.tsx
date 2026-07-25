@@ -5,7 +5,7 @@ import { shopeeStyles, styles } from "../produtos/styles";
 
 import { storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
-import ImageCropperModal from "@/app/admin/_components/ImageCropperModal"; // <--- Importação do Cropper
+import ImageCropperModal from "@/utils/ImageCropperModalProduto"; // <--- Importação do Cropper
 
 const formatarMoeda = (valor: string) => {
   const limpo = valor.replace(/\D/g, "");
@@ -31,14 +31,18 @@ interface VariacoesModalProps {
   sugerirSkus: (tabela: any, setTabela: any) => void;
 }
 
-const TableInput = ({ value, onBlur, placeholder }: any) => {
+const TableInput = ({ value, onBlur, placeholder, isMobile }: any) => {
   const [tempValue, setTempValue] = useState(value || "");
 
   useEffect(() => { setTempValue(value || ""); }, [value]);
 
   return (
     <input
-      style={shopeeStyles.tableInput}
+      style={{
+        ...shopeeStyles.tableInput,
+        width: isMobile ? '100%' : 'auto',
+        boxSizing: 'border-box'
+      }}
       value={tempValue}
       onChange={(e) => setTempValue(e.target.value)}
       onBlur={() => onBlur(tempValue)}
@@ -52,6 +56,7 @@ export default function VariacoesModal({
   nomeVar2, setNomeVar2, opcoesVar2, setOpcoesVar2, tabelaPrecos, onSave, gerarCombinacoes, sugerirSkus,
 }: VariacoesModalProps) {
 
+  const [isMobile, setIsMobile] = useState<boolean>(false);
   const [precoGlobal, setPrecoGlobal] = useState("");
   const [custoGlobal, setCustoGlobal] = useState("");
   const [draftTabela, setDraftTabela] = useState(tabelaPrecos);
@@ -60,6 +65,15 @@ export default function VariacoesModal({
   // Estados para controlar o CROPPER nas variações
   const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
   const [combsParaAtualizar, setCombsParaAtualizar] = useState<any[]>([]);
+
+  useEffect(() => {
+    const checkScreen = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkScreen();
+    window.addEventListener("resize", checkScreen);
+    return () => window.removeEventListener("resize", checkScreen);
+  }, []);
 
   useEffect(() => {
     if (showVarModal) {
@@ -92,9 +106,17 @@ export default function VariacoesModal({
 
   return (
     <div style={shopeeStyles.overlay}>
-      <div style={shopeeStyles.modal}>
+      <div style={{
+        ...shopeeStyles.modal,
+        width: isMobile ? '95%' : shopeeStyles.modal.width,
+        maxWidth: isMobile ? '100%' : '700px',
+        maxHeight: isMobile ? '90vh' : '95vh',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         {/* Cabeçalho */}
-        <div style={{ ...shopeeStyles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ ...shopeeStyles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <h3 style={shopeeStyles.title}>Grade de Variações</h3>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {temVariaçõesVisiveis && (
@@ -110,7 +132,7 @@ export default function VariacoesModal({
           </div>
         </div>
 
-        <div style={shopeeStyles.content}>
+        <div style={{ ...shopeeStyles.content, overflowY: 'auto', flex: 1, padding: isMobile ? '10px' : '15px' }}>
           {/* VARIAÇÃO 1 */}
           <div style={shopeeStyles.section}>
             <label style={shopeeStyles.label}>Variação 1 (ex: Cor)</label>
@@ -131,7 +153,7 @@ export default function VariacoesModal({
           {/* VARIAÇÃO 2 */}
           <div style={shopeeStyles.section}>
             {!showVar2 ? (
-              <button onClick={() => setShowVar2(true)} style={{ ...shopeeStyles.addBtn, padding: '10px 20px', border: '1px dashed #ee4d2d', color: '#ee4d2d' }}>
+              <button onClick={() => setShowVar2(true)} style={{ ...shopeeStyles.addBtn, padding: '10px 20px', border: '1px dashed #ee4d2d', color: '#ee4d2d', width: isMobile ? '100%' : 'auto' }}>
                 + Adicionar Variação 2
               </button>
             ) : (
@@ -158,24 +180,25 @@ export default function VariacoesModal({
           <div style={{
             background: '#fff',
             border: '1px solid #ee4d2d',
-            padding: '15px',
+            padding: '12px',
             borderRadius: '4px',
             marginBottom: '20px',
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: 'stretch',
             gap: '10px'
           }}>
             <input
               placeholder="0,00"
               value={precoGlobal}
               onChange={(e) => setPrecoGlobal(formatarMoeda(e.target.value))}
-              style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1 }}
+              style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
             />
             <input
               placeholder="0,00"
               value={custoGlobal}
               onChange={(e) => setCustoGlobal(formatarMoeda(e.target.value))}
-              style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1 }}
+              style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
             />
             <button
               onClick={() => {
@@ -192,45 +215,32 @@ export default function VariacoesModal({
                   return novaTabela;
                 });
               }}
-              style={{ background: '#ee4d2d', color: '#fff', border: 'none', padding: '8px 20px', cursor: 'pointer', fontWeight: 'bold' }}
+              style={{ background: '#ee4d2d', color: '#fff', border: 'none', padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold', borderRadius: '4px' }}
             >
               Aplicar a todos
             </button>
           </div>
 
-          {/* TABELA DINÂMICA */}
+          {/* TABELA DINÂMICA OU CARDS MOBILE */}
           {temVariaçõesVisiveis && combinacoesValidas.length > 0 && (
-            <table
-              key={JSON.stringify(draftTabela)}
-              style={{ ...shopeeStyles.table, width: '100%', marginTop: '20px' }}>
-              <thead>
-                <tr style={{ background: '#f6f6f6' }}>
-                  <th style={{ ...shopeeStyles.th, width: '150px', textAlign: 'center' }}>Var 1</th>
-                  {showVar2 && (
-                    <th style={{ ...shopeeStyles.th, width: '100px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      Var 2
-                    </th>
-                  )}
-                  <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>SKU</th>
-                  <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Preço</th>
-                  <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Custo</th>
-                </tr>
-              </thead>
-              <tbody>
+            isMobile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
                 {opcoesVar1.filter(v1 => v1.trim() !== "").map((v1) => {
                   const combsDesteGrupo = combinacoesValidas.filter(c => c.v1 === v1);
                   return combsDesteGrupo.map((c, idx) => {
-
                     const valorPreco = draftTabela[c.key]?.preco || "";
                     const valorCusto = draftTabela[c.key]?.custo || "";
                     const valorSku = draftTabela[c.key]?.sku || "";
                     const temFoto = !!draftTabela[c.key]?.foto;
+
                     return (
-                      <tr key={`${c.key}-${idx}`}>
-                        {idx === 0 && (
-                          <td rowSpan={combsDesteGrupo.length} style={{ ...shopeeStyles.td, textAlign: 'center', backgroundColor: '#f8fafc', width: '150px', verticalAlign: 'middle' }}>
-                            <div style={{ fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>{v1}</div>
-                            <div style={{ width: '60px', height: '60px', margin: '0 auto', border: temFoto ? '1px solid #3b82f6' : '1px dashed #cbd5e1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+                      <div key={`${c.key}-${idx}`} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+                          <span style={{ fontWeight: 'bold', color: '#334155', fontSize: '13px' }}>
+                            {v1} {c.v2 ? `/ ${c.v2}` : ""}
+                          </span>
+                          {idx === 0 && (
+                            <div style={{ width: '45px', height: '45px', border: temFoto ? '1px solid #3b82f6' : '1px dashed #cbd5e1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', background: '#fff' }}>
                               {temFoto ? (
                                 <>
                                   <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
@@ -241,23 +251,14 @@ export default function VariacoesModal({
                                         await handleDraftInput(comb.key, "foto", "");
                                       }
                                     }}
-                                    style={{
-                                      position: 'absolute',
-                                      top: 0,
-                                      right: 0,
-                                      background: 'red',
-                                      color: '#fff',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      fontSize: '10px'
-                                    }}
+                                    style={{ position: 'absolute', top: 0, right: 0, background: 'red', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '9px', padding: '1px 3px' }}
                                   >
                                     ✕
                                   </button>
                                 </>
                               ) : (
                                 <>
-                                  <span style={{ fontSize: '18px', color: '#cbd5e1' }}>+</span>
+                                  <span style={{ fontSize: '14px', color: '#cbd5e1' }}>+</span>
                                   <input 
                                     type="file" 
                                     accept="image/*" 
@@ -265,45 +266,156 @@ export default function VariacoesModal({
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
-                                      // Dispara o Cropper em vez de ler direto
                                       setArquivoParaCortar(file);
                                       setCombsParaAtualizar(combsDesteGrupo);
-                                      e.target.value = ""; // Limpa o input
+                                      e.target.value = "";
                                     }} 
                                   />
                                 </>
                               )}
                             </div>
-                          </td>
-                        )}
+                          )}
+                        </div>
 
-                        {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '100px' }}> {c.v2 || "-"}</td>)}
-                        <td style={shopeeStyles.td}><input style={shopeeStyles.tableInput} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" /></td>
-                        <td style={shopeeStyles.td}>
-                          <TableInput
-                            value={valorPreco}
-                            onBlur={(val: string) => handleDraftInput(c.key, "preco", formatarMoeda(val))}
-                            placeholder="0,00"
-                          />
-                        </td>
-                        <td style={shopeeStyles.td}>
-                          <TableInput
-                            value={valorCusto}
-                            onBlur={(val: string) => handleDraftInput(c.key, "custo", formatarMoeda(val))}
-                            placeholder="0,00"
-                          />
-                        </td>
-                      </tr>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div>
+                            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>SKU</label>
+                            <input style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" />
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Preço (R$)</label>
+                              <TableInput
+                                value={valorPreco}
+                                onBlur={(val: string) => handleDraftInput(c.key, "preco", formatarMoeda(val))}
+                                placeholder="0,00"
+                                isMobile={isMobile}
+                              />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Custo (R$)</label>
+                              <TableInput
+                                value={valorCusto}
+                                onBlur={(val: string) => handleDraftInput(c.key, "custo", formatarMoeda(val))}
+                                placeholder="0,00"
+                                isMobile={isMobile}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     );
                   });
                 })}
-              </tbody>
-            </table>
+              </div>
+            ) : (
+              <table
+                key={JSON.stringify(draftTabela)}
+                style={{ ...shopeeStyles.table, width: '100%', marginTop: '20px' }}>
+                <thead>
+                  <tr style={{ background: '#f6f6f6' }}>
+                    <th style={{ ...shopeeStyles.th, width: '150px', textAlign: 'center' }}>Var 1</th>
+                    {showVar2 && (
+                      <th style={{ ...shopeeStyles.th, width: '100px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        Var 2
+                      </th>
+                    )}
+                    <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>SKU</th>
+                    <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Preço</th>
+                    <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Custo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {opcoesVar1.filter(v1 => v1.trim() !== "").map((v1) => {
+                    const combsDesteGrupo = combinacoesValidas.filter(c => c.v1 === v1);
+                    return combsDesteGrupo.map((c, idx) => {
+
+                      const valorPreco = draftTabela[c.key]?.preco || "";
+                      const valorCusto = draftTabela[c.key]?.custo || "";
+                      const valorSku = draftTabela[c.key]?.sku || "";
+                      const temFoto = !!draftTabela[c.key]?.foto;
+                      return (
+                        <tr key={`${c.key}-${idx}`}>
+                          {idx === 0 && (
+                            <td rowSpan={combsDesteGrupo.length} style={{ ...shopeeStyles.td, textAlign: 'center', backgroundColor: '#f8fafc', width: '150px', verticalAlign: 'middle' }}>
+                              <div style={{ fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>{v1}</div>
+                              <div style={{ width: '60px', height: '60px', margin: '0 auto', border: temFoto ? '1px solid #3b82f6' : '1px dashed #cbd5e1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+                                {temFoto ? (
+                                  <>
+                                    <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
+                                    <button
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        for (const comb of combsDesteGrupo) {
+                                          await handleDraftInput(comb.key, "foto", "");
+                                        }
+                                      }}
+                                      style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        right: 0,
+                                        background: 'red',
+                                        color: '#fff',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '10px'
+                                      }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span style={{ fontSize: '18px', color: '#cbd5e1' }}>+</span>
+                                    <input 
+                                      type="file" 
+                                      accept="image/*" 
+                                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} 
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        // Dispara o Cropper em vez de ler direto
+                                        setArquivoParaCortar(file);
+                                        setCombsParaAtualizar(combsDesteGrupo);
+                                        e.target.value = ""; // Limpa o input
+                                      }} 
+                                    />
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          )}
+
+                          {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '100px' }}> {c.v2 || "-"}</td>)}
+                          <td style={shopeeStyles.td}><input style={shopeeStyles.tableInput} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" /></td>
+                          <td style={shopeeStyles.td}>
+                            <TableInput
+                              value={valorPreco}
+                              onBlur={(val: string) => handleDraftInput(c.key, "preco", formatarMoeda(val))}
+                              placeholder="0,00"
+                              isMobile={isMobile}
+                            />
+                          </td>
+                          <td style={shopeeStyles.td}>
+                            <TableInput
+                              value={valorCusto}
+                              onBlur={(val: string) => handleDraftInput(c.key, "custo", formatarMoeda(val))}
+                              placeholder="0,00"
+                              isMobile={isMobile}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })}
+                </tbody>
+              </table>
+            )
           )}
         </div>
 
         {/* FOOTER */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '15px', borderTop: '1px solid #e2e8f0', marginTop: '10px' }}>
+        <div style={{ display: 'flex', justifyContent: isMobile ? 'stretch' : 'flex-end', gap: '10px', padding: '15px', borderTop: '1px solid #e2e8f0', flexShrink: 0 }}>
           <button
             onClick={() => {
               setPrecoGlobal("");
@@ -311,13 +423,13 @@ export default function VariacoesModal({
               setDraftTabela(tabelaPrecos);
               setShowVarModal(false);
             }}
-            style={{ padding: '10px 20px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', cursor: 'pointer' }}
+            style={{ padding: '10px 20px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', cursor: 'pointer', flex: isMobile ? 1 : 'unset' }}
           >
             Cancelar
           </button>
           <button
             onClick={() => { onSave(draftTabela); setShowVarModal(false); }}
-            style={{ padding: '10px 40px', borderRadius: '4px', backgroundColor: '#ee4d2d', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ padding: '10px 40px', borderRadius: '4px', backgroundColor: '#ee4d2d', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold', flex: isMobile ? 1 : 'unset' }}
           >
             Salvar Grade
           </button>

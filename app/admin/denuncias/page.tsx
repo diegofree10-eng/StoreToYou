@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { db, auth } from "@/lib/firebase"; // Importando auth direto do seu config
-import { 
-  collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDoc 
+import {
+  collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDoc
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
 export default function PainelDenunciasMaster() {
   const router = useRouter();
-  
+
   const [denuncias, setDenuncias] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMaster, setIsMaster] = useState(false);
@@ -33,7 +33,7 @@ export default function PainelDenunciasMaster() {
           setLoading(false);
         } else {
           // Se não for master, manda para o painel comum dele
-          router.replace("/admin"); 
+          router.replace("/admin");
         }
       } catch (error) {
         console.error("Erro ao validar master:", error);
@@ -78,24 +78,24 @@ export default function PainelDenunciasMaster() {
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-                <h1 style={{ margin: 0 }}>🚩 Gestão de Denúncias</h1>
-                <p style={{ color: '#64748b' }}>Conteúdos reportados pelos clientes finais.</p>
-            </div>
-            <button onClick={() => router.push('/admin')} style={styles.btnBack}>Voltar ao Painel</button>
+          <div>
+            <h1 style={{ margin: 0 }}>🚩 Gestão de Denúncias</h1>
+            <p style={{ color: '#64748b' }}>Conteúdos reportados pelos clientes finais.</p>
+          </div>
+          <button onClick={() => router.push('/admin')} style={styles.btnBack}>Voltar ao Painel</button>
         </div>
       </header>
 
       <div style={styles.grid}>
         {denuncias.length === 0 && <p style={styles.empty}>Nenhuma denúncia registrada.</p>}
-        
+
         {denuncias.map((den) => (
           <div key={den.id} style={{
-            ...styles.card, 
+            ...styles.card,
             borderLeft: den.status === "pendente" ? "6px solid #ef4444" : "6px solid #10b981"
           }}>
             <div style={styles.cardHeader}>
-              <span style={{...styles.status, background: den.status === "pendente" ? "#fee2e2" : "#d1fae5"}}>
+              <span style={{ ...styles.status, background: den.status === "pendente" ? "#fee2e2" : "#d1fae5" }}>
                 {den.status?.toUpperCase()}
               </span>
               <span style={styles.date}>
@@ -105,7 +105,7 @@ export default function PainelDenunciasMaster() {
 
             <h3 style={styles.shopName}>Loja: {den.nomeLoja || den.slugLoja || 'Sem nome'}</h3>
             <p style={styles.uid}>UID Lojista: <code>{den.lojistaId}</code></p>
-            
+
             <div style={styles.reasonBox}>
               <strong>Relato do Cliente:</strong>
               <p style={{ margin: '10px 0 0 0' }}>{den.motivo}</p>
@@ -126,8 +126,8 @@ export default function PainelDenunciasMaster() {
 
 const styles: { [key: string]: React.CSSProperties } = {
   center: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f8fafc' },
-  container: { padding: '30px', maxWidth: '1000px', margin: '0 auto', fontFamily: 'sans-serif' },
-  header: { marginBottom: '30px', borderBottom: '1px solid #e2e8f0', paddingBottom: '20px' },
+  container: { padding: '0px 24px 24px 24px', maxWidth: '100%', margin: '0', fontFamily: 'sans-serif', boxSizing: 'border-box' },
+  header: { marginBottom: '30px', borderBottom: '1px solid #e2e8f0', paddingBottom: '20px', marginTop: '0px' },
   grid: { display: 'flex', flexDirection: 'column', gap: '20px' },
   card: { background: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },

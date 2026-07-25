@@ -1,4 +1,3 @@
-
 "use client";
 import React, { useEffect, useState } from "react";
 import { db, auth } from "@/lib/firebase";
@@ -7,18 +6,17 @@ import {
 } from "firebase/firestore";
 
 // --- IMPORTAÇÃO DAS TABS ---
-
 import TabPanorama from "./TabPanorama";
 import TabPlanos from "./TabPlanos";
 import TabAssinaturas from "./TabAssinaturas";
 import TabAvisos from "./TabAvisos";
 import TabDenuncias from "./TabDenuncias";
 import TabFinanceiro from "./TabFinanceiro";
-
+import TabAparenciaLandPage from "./TabAparenciaLandPage"; // <-- Importando a nova aba
 
 import { 
   FiAward, FiUsers, FiTrendingUp, FiSettings,
-  FiMessageSquare, FiAlertTriangle, FiDollarSign
+  FiMessageSquare, FiAlertTriangle, FiDollarSign, FiLayout
 } from "react-icons/fi";
 
 export default function PainelMasterFesta() {
@@ -29,8 +27,6 @@ export default function PainelMasterFesta() {
   const [denuncias, setDenuncias] = useState([]);
   const [notificacao, setNotificacao] = useState({ exibir: false, texto: "", tipo: "sucesso" });
 
-  // 📦 OBJETO DE INICIALIZAÇÃO LIMPO: Não trava nenhuma flag nova no código rígido.
-  // O onSnapshot se encarrega de preencher as propriedades customizadas vindo direto do Firestore.
   const [planos, setPlanos] = useState({
     Bronze: { nome: "Bronze", produtos: 20, categorias: 3, cor: "#c2410c", medalhaUrl: "", modeloDash: "basico" },
     Prata: { nome: "Prata", produtos: 100, categorias: 10, cor: "#475569", medalhaUrl: "", modeloDash: "completo" },
@@ -63,7 +59,6 @@ export default function PainelMasterFesta() {
   useEffect(() => {
     if (!isAuthorized || !auth.currentUser) return;
 
-    // Alimenta dinamicamente as flags e abas configuradas na nuvem
     const unsubPlanos = onSnapshot(doc(db, "configuracoes", "planos"), (snap) => {
       if (snap.exists()) setPlanos(snap.data() as any);
     });
@@ -121,6 +116,7 @@ export default function PainelMasterFesta() {
           {id: "FINANCEIRO", icon: <FiDollarSign />, label: "FINANCEIRO"},
           {id: "PLANOS", icon: <FiSettings />, label: "CONFIG PLANOS"},
           {id: "ASSINATURAS", icon: <FiAward />, label: "ASSINATURAS"},
+          {id: "APARENCIA", icon: <FiLayout />, label: "APARÊNCIA LANDPAGE"}, // <-- Nova Aba Adicionada
           {id: "AVISOS", icon: <FiMessageSquare />, label: "AVISOS"},
           {id: "DENUNCIAS", icon: <FiAlertTriangle />, label: "DENÚNCIAS"}
         ].map(t => (
@@ -150,6 +146,10 @@ export default function PainelMasterFesta() {
 
         {activeTab === "ASSINATURAS" && (
           <TabAssinaturas lojistas={lojistas} planos={planos} mostrarAviso={mostrarAviso} />
+        )}
+
+        {activeTab === "APARENCIA" && ( // <-- Renderizando a nova aba
+          <TabAparenciaLandPage />
         )}
 
         {activeTab === "AVISOS" && (

@@ -145,7 +145,8 @@ export default function BannerCarrossel({ banners, slug }: BannerCarrosselProps)
         .banner-imagem-responsiva {
           width: 100%;
           height: 100%;
-          object-fit: cover;
+          object-fit: contain; /* <--- Mudei para contain para respeitar a proporção exata */
+          background-color: #f8fafc; /* Fundo elegante de preenchimento caso necessário */
           transition: opacity 0.5s ease-in-out;
         }
 

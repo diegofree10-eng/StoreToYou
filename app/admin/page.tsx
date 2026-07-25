@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef, CSSProperties } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dynamic from 'next/dynamic';
 import { usePathname } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { doc, onSnapshot, collection, query, orderBy, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { FiMenu, FiPlus } from "react-icons/fi";
 
-// Importação da lógica unificada
 import { getPlanoEfetivo } from "@/utils/planoAtivo";
 
 import Sidebar from "./Sidebar";
@@ -18,7 +18,7 @@ import Pedidos from "./pedidos/page";
 import AdminConfig from "./config/page";
 import DashboardMaster from "./_tabDashBoardMaster/DashboardMaster";
 
-function AdminContent() {
+function AdminLayoutGridDefinitivo() {
   const [telaAtiva, setTelaAtiva] = useState('dash');
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +27,8 @@ function AdminContent() {
   const [planosConfig, setPlanosConfig] = useState<any>(null);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [lojistaIdReal, setLojistaIdReal] = useState<string | null>(null);
+  
+  const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
   const pathname = usePathname();
   const unsubLojaRef = useRef<(() => void) | null>(null);
@@ -62,8 +64,6 @@ function AdminContent() {
             if (unsubLojaRef.current) unsubLojaRef.current();
             if (unsubPedidosRef.current) unsubPedidosRef.current();
 
-            // Listener da Loja
-            // Listener da Loja
             unsubLojaRef.current = onSnapshot(doc(db, "lojistas", userData.lojaId), async (snapLoja) => {
               if (snapLoja.exists()) {
                 const lojaData = snapLoja.data();
@@ -71,13 +71,7 @@ function AdminContent() {
 
                 const statusLoja = lojaData?.dadosLoja?.dsStatusLoja || lojaData?.status;
                 if (statusLoja === "suspenso") {
-                  try {
-                    await signOut(auth);
-                  } catch (e) {
-                    // Ignora erros de sign out para não travar
-                  }
-
-                  // Força o navegador a carregar a página do zero, limpando o histórico do client router
+                  try { await signOut(auth); } catch (e) {}
                   window.location.replace("/atendimentoSuporte");
                   return;
                 }
@@ -116,33 +110,151 @@ function AdminContent() {
     window.location.replace("/login");
   };
 
-  if (isLoggingOut || loading) return <div style={styles.loader}>Carregando sistema...</div>;
+  if (isLoggingOut || loading) {
+    return (
+      <div style={{ background: '#0f172a', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: '16px' }}>
+        Carregando sistema...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f8fafc" }}>
-      <Sidebar telaAtiva={telaAtiva} setTelaAtiva={setTelaAtiva} onLogout={handleLogout} />
-      <main style={{ flex: 1, overflowY: "auto", height: "100vh", padding: "20px" }}>
+    <div className="admin-layout-wrapper">
+      
+      {/* Sidebar na Esquerda */}
+      <div className="sidebar-area">
+        <Sidebar 
+          telaAtiva={telaAtiva} 
+          setTelaAtiva={setTelaAtiva} 
+          onLogout={handleLogout}
+          isOpenMobile={menuMobileAberto}
+          onCloseMobile={() => setMenuMobileAberto(false)}
+        />
+      </div>
 
-        {telaAtiva === 'dash' && planoEfetivo && (
-          planoEfetivo.configs.tipoDashboard === 'gestao' ? (
-            <DashboardGestao pedidos={pedidos} lojistaId={lojistaIdReal || undefined} />
-          ) : (
-            <DashboardBronze pedidos={pedidos} dadosLojista={dadosLojista || undefined} />
-          )
-        )}
+      {/* Conteúdo Principal na Direita */}
+      <main className="main-content-area">
+        
+        {/* Barra superior mobile ajustada com menu sanduíche e botão novo */}
+        <div className="mobile-header-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button 
+              onClick={() => setMenuMobileAberto(true)} 
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '5px' }}
+              aria-label="Abrir menu"
+            >
+              <FiMenu size={24} color="#1e293b" />
+            </button>
+            <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e293b' }}>Painel Administrativo</span>
+          </div>
 
-        {telaAtiva === 'produtos' && <CadastroProdutos />}
-        {telaAtiva === 'pedidos' && lojistaIdReal && <Pedidos pedidos={pedidos} db={db} lojistaIdApp={lojistaIdReal} />}
-        {telaAtiva === 'config' && <AdminConfig />}
-        {telaAtiva === 'gestao-geral' && userRole === 'master' && <DashboardMaster />}
+          
+        </div>
+
+        {/* Telas e Dashboards */}
+        <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
+          {telaAtiva === 'dash' && planoEfetivo && (
+             planoEfetivo.configs.tipoDashboard === 'gestao' ? (
+              <DashboardGestao pedidos={pedidos} lojistaId={lojistaIdReal || undefined} />
+            ) : (
+              <DashboardBronze pedidos={pedidos} dadosLojista={dadosLojista || undefined} />
+            )
+          )}
+
+          {telaAtiva === 'produtos' && <CadastroProdutos />}
+          {telaAtiva === 'pedidos' && lojistaIdReal && <Pedidos pedidos={pedidos} db={db} lojistaIdApp={lojistaIdReal} />}
+          {telaAtiva === 'config' && <AdminConfig />}
+          {telaAtiva === 'gestao-geral' && userRole === 'master' && <DashboardMaster />}
+        </div>
 
       </main>
+
+      <style jsx global>{`
+        *, *::before, *::after {
+          box-sizing: border-box;
+        }
+        html, body, #__next {
+          margin: 0 !important;
+          padding: 0 !important;
+          background-color: #f8fafc !important;
+          overflow-x: hidden !important;
+          width: 100%;
+          min-height: 100vh;
+        }
+
+        .admin-layout-wrapper {
+          display: grid;
+          grid-template-columns: 260px 1fr;
+          min-height: 100vh;
+          width: 100vw;
+          background-color: #f8fafc;
+          margin: 0;
+          padding: 0;
+          overflow-x: hidden;
+        }
+
+        .sidebar-area {
+          width: 260px;
+          height: 100vh;
+          position: sticky;
+          top: 0;
+          left: 0;
+          z-index: 1000;
+        }
+
+        .main-content-area {
+          background-color: #f8fafc;
+          min-height: 100vh;
+          width: 100%;
+          max-width: 100%;
+          padding: 24px;
+          overflow-y: auto;
+          overflow-x: hidden;
+          box-sizing: border-box;
+        }
+
+        .mobile-header-bar {
+          display: none;
+        }
+
+        /* Responsividade para Dispositivos Móveis com espaçamento superior aumentado */
+        @media (max-width: 768px) {
+          .admin-layout-wrapper {
+            grid-template-columns: 1fr;
+          }
+          .sidebar-area {
+            position: fixed;
+            height: 100vh;
+            width: 0;
+            z-index: 1000;
+          }
+          .main-content-area {
+            width: 100vw;
+            max-width: 100vw;
+            padding: 12px;
+            padding-top: 80px; /* Aumentado o espaçamento do topo para afastar a listagem da barra */
+            padding-bottom: 10px;
+            overflow-y: auto;
+          }
+          .mobile-header-bar {
+            display: flex !important;
+            justify-content: space-between;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            align-items: center;
+            padding: 0 15px;
+            z-index: 900;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          }
+        }
+      `}</style>
     </div>
   );
 }
 
-const styles: { [key: string]: CSSProperties } = {
-  loader: { background: '#0f172a', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: '16px' }
-};
-
-export default dynamic(() => Promise.resolve(AdminContent), { ssr: false });
+export default dynamic(() => Promise.resolve(AdminLayoutGridDefinitivo), { ssr: false });

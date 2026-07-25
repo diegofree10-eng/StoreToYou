@@ -227,7 +227,7 @@ export default function AdminConfig() {
       if (novaLogo) {
         const storageRef = ref(storage, `logos_lojistas/${uid}`);
         await uploadBytes(storageRef, novaLogo);
-        
+
         (dadosParaSalvar.dadosLoja as any).dsLogoLoja = await getDownloadURL(storageRef);
       }
 
@@ -396,34 +396,34 @@ export default function AdminConfig() {
         border: `1px solid ${isOuroAtivo ? '#d97706' : info.cor + '40'}`,
         background: estaVencendo ? '#fef2f2' : '#fff'
       }}>
-        <div style={{ ...styles.medalhaBox, background: `${info.cor}15` }}>
-          {info.medalhaUrl ? <img src={info.medalhaUrl} style={styles.imgFull} alt="Medalha do Plano" /> : "🏅"}
+        <div style={{ ...styles.medalhaBox, background: `${info.cor}15`, border: `2px solid ${info.cor}30` }}>
+          {info.medalhaUrl ? <img src={info.medalhaUrl} style={styles.imgFull} alt="Medalha do Plano" /> : <span style={{ fontSize: '28px' }}>🏅</span>}
         </div>
 
-        <div style={{ flex: 1, marginLeft: '15px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <span style={{ fontSize: '11px', fontWeight: '900', color: info.cor, textTransform: 'uppercase' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '13px', fontWeight: '900', color: info.cor, textTransform: 'uppercase' }}>
                 Plano {planoBase}
               </span>
               {isOuroAtivo && (
-                <span style={{ marginLeft: '8px', fontSize: '9px', background: '#d97706', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
-                  PERÍODO DE TESTE OURO
+                <span style={{ fontSize: '9px', background: '#d97706', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+                  TESTE OURO
                 </span>
               )}
             </div>
-            <span style={{ fontSize: '10px', fontWeight: '800', background: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '10px', fontWeight: '800', background: '#f1f5f9', color: '#475569', padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
               {config.dadosLoja?.ciclo || 'mensal'}
             </span>
           </div>
 
-          <div style={{ ...styles.infoGrid, gridTemplateColumns: '1fr 1fr 1fr', marginTop: '10px' }}>
+          <div style={styles.infoGrid}>
             <div style={styles.infoItem}>
               <small style={styles.infoLabel}>Criação</small>
               <span style={styles.infoValue}>{dataCriacao?.toLocaleDateString('pt-BR') || '---'}</span>
             </div>
             <div style={styles.infoItem}>
-              <small style={styles.infoLabel}>{isOuroAtivo ? "Fim do Teste Plano Ouro" : "Vencimento"}</small>
+              <small style={styles.infoLabel}>{isOuroAtivo ? "Fim do Teste" : "Vencimento"}</small>
               <span style={{ ...styles.infoValue, color: estaVencendo ? '#ef4444' : '#1e293b', fontWeight: estaVencendo ? '900' : '700' }}>
                 {dataVencimento?.toLocaleDateString('pt-BR') || '---'}
               </span>
@@ -527,16 +527,21 @@ export default function AdminConfig() {
 }
 
 const styles: any = {
-  page: { padding: "40px 20px", background: "#f8fafc", minHeight: "100vh", display: "flex", justifyContent: "center" },
-  card: { background: "#fff", padding: "35px", borderRadius: "24px", width: "100%", maxWidth: "970px", boxShadow: "0 10px 15px rgba(0,0,0,0.05)" },
-  seloCard: { display: 'flex', alignItems: 'center', gap: '20px', padding: '20px', background: '#fff', borderRadius: '20px', marginBottom: '25px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
-  medalhaBox: { width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  imgFull: { width: '100%', height: '100%', objectFit: 'cover' },
-  infoGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginTop: '5px' },
-  infoItem: { display: 'flex', flexDirection: 'column', gap: '2px' },
-  infoLabel: { fontSize: '9px', fontWeight: '800', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' },
-  infoValue: { fontSize: '12px', fontWeight: '700', color: '#1e293b' },
-  tabBar: { display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', overflowX: 'auto' },
+  page: { padding: "0px 16px 40px 16px", background: "#f8fafc", minHeight: "100vh", display: "flex", justifyContent: "center", boxSizing: "border-box" },
+  card: { background: "#fff", padding: "20px", borderRadius: "0 0 24px 24px", width: "100%", maxWidth: "970px", boxShadow: "0 10px 15px rgba(0,0,0,0.05)", marginTop: "0px", boxSizing: "border-box" },
+
+  /* Ajustado para flexível e sem apertar no mobile */
+  seloCard: { display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', background: '#fff', borderRadius: '16px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', boxSizing: 'border-box', width: '100%' },
+  medalhaBox: { minWidth: '56px', width: '56px', height: '56px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
+  imgFull: { width: '100%', height: '100%', objectFit: 'contain' },
+
+  /* Grid flexível adaptável a telas menores */
+  infoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '8px', marginTop: '10px', width: '100%' },
+  infoItem: { display: 'flex', flexDirection: 'column', gap: '2px', background: '#f8fafc', padding: '6px 10px', borderRadius: '8px', boxSizing: 'border-box' },
+  infoLabel: { fontSize: '9px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' },
+  infoValue: { fontSize: '11px', fontWeight: '700', color: '#1e293b', wordBreak: 'break-word' },
+
+  tabBar: { display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', overflowX: 'auto', paddingBottom: '5px' },
   tabBtn: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid transparent', cursor: 'pointer', color: '#94a3b8', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
   tabBtnActive: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid #2563eb', cursor: 'pointer', color: '#2563eb', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
   btnSalvar: { width: "100%", padding: "16px", background: "#059669", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", marginTop: '30px' },
