@@ -22,7 +22,6 @@ export async function POST(request: Request) {
 
     const dadosLoja = lojistaSnap.data() || {};
     
-    // 🎯 CORRIGIDO: Puxa o token de dentro de 'sistema' ou da raiz
     const token = dadosLoja?.sistema?.dsTokenMelhorEnvio || dadosLoja?.tokenMelhorEnvio;
     const isSandbox = dadosLoja?.melhorEnvioSandbox ?? false;
     const baseUrl = isSandbox ? 'https://sandbox.melhorenvio.com.br' : 'https://melhorenvio.com.br';
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
     }
 
     const pendentesSnap = await db.collection("lojistas").doc(lojistaId).collection("pedidos")
-      .where("statusEtiqueta", "==", "pendente").get();
+      .where("statusEtiqueta", "in", ["pendente", "gerada"]).get();
 
     let sucessos = 0;
     let falhasCount = 0;
@@ -43,7 +42,7 @@ export async function POST(request: Request) {
 
       if (!idEtiqueta) continue;
 
-      // Checkout (Pagamento da Etiqueta no Carrinho do Melhor Envio)
+      // 1. Checkout (Pagamento da Etiqueta no Carrinho do Melhor Envio)
       const checkoutRes = await fetch(`${baseUrl}/api/v2/me/shipment/checkout`, {
         method: 'POST',
         headers: { 
@@ -56,10 +55,11 @@ export async function POST(request: Request) {
       });
 
       const checkoutData = await checkoutRes.json().catch(() => ({}));
-      const foiPago = checkoutRes.ok && !!checkoutData?.purchase;
+      // O Melhor Envio retorna a propriedade 'purchase' ou sucesso indicando pagamento efetuado
+      const foiPago = checkoutRes.ok && (!!checkoutData?.purchase || checkoutData?.status === 'paid' || checkoutRes.status === 200);
 
       if (foiPago) {
-        // Geração do link de impressão da etiqueta paga
+        // 2. Geração do link de impressão da etiqueta paga
         const printRes = await fetch(`${baseUrl}/api/v2/me/shipment/print`, {
           method: 'POST',
           headers: { 
@@ -75,17 +75,18 @@ export async function POST(request: Request) {
         
         await doc.ref.update({ 
           statusEtiqueta: 'paga',
-          urlEtiqueta: printData?.url || "",
+          urlEtiqueta: printData?.url || printData?.checkout?.url_print || data.urlEtiqueta || "",
           dataGeracaoEtiqueta: new Date().toISOString(),
           erroPagamento: null
         });
         sucessos++;
       } else {
         falhasCount++;
-        const msg = checkoutData?.message || checkoutData?.error || "Erro na transação";
+        const msg = checkoutData?.message || checkoutData?.error || JSON.stringify(checkoutData?.errors) || "Erro na transação";
         
         const isSaldo = typeof msg === 'string' && msg.toLowerCase().includes("saldo");
 
+        // Se o erro NÃO for de saldo insuficiente, marca como 'erro' para o lojista saber
         if (!isSaldo) {
           await doc.ref.update({ 
             statusEtiqueta: 'erro',
@@ -93,12 +94,14 @@ export async function POST(request: Request) {
           });
         }
       }
+      
+      // Delay de resiliência para evitar Rate Limit na API externa
       await new Promise(r => setTimeout(r, 800));
     }
 
     return NextResponse.json({ success: true, sucessos, falhas: falhasCount });
   } catch (error: unknown) {
-    console.error("Erro no sincronizar:", error);
+    console.error("Erro na sincronização de checkout:", error);
     return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });
   }
 }

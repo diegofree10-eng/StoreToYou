@@ -27,7 +27,7 @@ function AdminLayoutGridDefinitivo() {
   const [planosConfig, setPlanosConfig] = useState<any>(null);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [lojistaIdReal, setLojistaIdReal] = useState<string | null>(null);
-  
+
   const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
   const pathname = usePathname();
@@ -71,18 +71,26 @@ function AdminLayoutGridDefinitivo() {
 
                 const statusLoja = lojaData?.dadosLoja?.dsStatusLoja || lojaData?.status;
                 if (statusLoja === "suspenso") {
-                  try { await signOut(auth); } catch (e) {}
+                  try { await signOut(auth); } catch (e) { }
                   window.location.replace("/atendimentoSuporte");
                   return;
                 }
               }
             });
 
-            const qPedidos = query(collection(db, "lojistas", userData.lojaId, "pedidos"), orderBy("numeroPedido", "desc"));
-            unsubPedidosRef.current = onSnapshot(qPedidos, (snapPedidos) => {
-              setPedidos(snapPedidos.docs.map(d => ({ id: d.id, ...d.data() })));
+            // 🛡️ Blindagem: Só inicializa o snapshot de pedidos se o ID da loja for válido
+            if (userData.lojaId) {
+              const qPedidos = query(collection(db, "lojistas", userData.lojaId, "pedidos"), orderBy("numeroPedido", "desc"));
+              unsubPedidosRef.current = onSnapshot(qPedidos, (snapPedidos) => {
+                setPedidos(snapPedidos.docs.map(d => ({ id: d.id, ...d.data() })));
+                setLoading(false);
+              }, (error) => {
+                console.warn("Aviso de permissão em pedidos (será re-tentado):", error);
+                setLoading(false);
+              });
+            } else {
               setLoading(false);
-            }, () => setLoading(false));
+            }
           } else {
             setLoading(false);
           }
@@ -120,12 +128,12 @@ function AdminLayoutGridDefinitivo() {
 
   return (
     <div className="admin-layout-wrapper">
-      
+
       {/* Sidebar na Esquerda */}
       <div className="sidebar-area">
-        <Sidebar 
-          telaAtiva={telaAtiva} 
-          setTelaAtiva={setTelaAtiva} 
+        <Sidebar
+          telaAtiva={telaAtiva}
+          setTelaAtiva={setTelaAtiva}
           onLogout={handleLogout}
           isOpenMobile={menuMobileAberto}
           onCloseMobile={() => setMenuMobileAberto(false)}
@@ -134,12 +142,12 @@ function AdminLayoutGridDefinitivo() {
 
       {/* Conteúdo Principal na Direita */}
       <main className="main-content-area">
-        
+
         {/* Barra superior mobile ajustada com menu sanduíche e botão novo */}
         <div className="mobile-header-bar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button 
-              onClick={() => setMenuMobileAberto(true)} 
+            <button
+              onClick={() => setMenuMobileAberto(true)}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '5px' }}
               aria-label="Abrir menu"
             >
@@ -148,13 +156,13 @@ function AdminLayoutGridDefinitivo() {
             <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e293b' }}>Painel Administrativo</span>
           </div>
 
-          
+
         </div>
 
         {/* Telas e Dashboards */}
         <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
           {telaAtiva === 'dash' && planoEfetivo && (
-             planoEfetivo.configs.tipoDashboard === 'gestao' ? (
+            planoEfetivo.configs.tipoDashboard === 'gestao' ? (
               <DashboardGestao pedidos={pedidos} lojistaId={lojistaIdReal || undefined} />
             ) : (
               <DashboardBronze pedidos={pedidos} dadosLojista={dadosLojista || undefined} />

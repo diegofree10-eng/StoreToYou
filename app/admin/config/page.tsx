@@ -77,7 +77,8 @@ export default function AdminConfig() {
       (snap) => {
         const mensagens = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setConfig((prev: ConfigState) => ({ ...prev, historicoMensagens: mensagens }));
-      }
+      },
+      (error) => { console.warn("Erro temporário em mensagens:", error); }
     );
 
     const unsubAssinaturas = onSnapshot(
@@ -85,16 +86,25 @@ export default function AdminConfig() {
       (snap) => {
         const lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setConfig((prev: any) => ({ ...prev, historicoPagamentos: lista }));
-      }
+      },
+      (error) => { console.warn("Erro temporário em assinaturas:", error); }
     );
 
-    const unsubCategorias = onSnapshot(query(collection(db, "lojistas", uid, "categorias"), orderBy("nome", "asc")), (snap) => {
-      setListaCategorias(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubCategorias = onSnapshot(
+      query(collection(db, "lojistas", uid, "categorias"), orderBy("nome", "asc")),
+      (snap) => {
+        setListaCategorias(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      },
+      (error) => { console.warn("Erro temporário em categorias:", error); }
+    );
 
-    const unsubProdutos = onSnapshot(query(collection(db, "lojistas", uid, "produtos")), (snap) => {
-      setContagemProdutos(snap.size);
-    });
+    const unsubProdutos = onSnapshot(
+      query(collection(db, "lojistas", uid, "produtos")),
+      (snap) => {
+        setContagemProdutos(snap.size);
+      },
+      (error) => { console.warn("Erro temporário em produtos:", error); }
+    );
 
     return () => {
       unsubMensagens();
@@ -109,25 +119,38 @@ export default function AdminConfig() {
       if (docSnap.exists()) setPlanosConfig(docSnap.data());
     });
 
-    const unsubAuth = onAuthStateChanged(auth, (user) => {
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        setUid(user.uid);
-        const carregarDadosConfiguracao = async () => {
-          try {
-            const snap = await getDoc(doc(db, "lojistas", user.uid));
-            if (snap.exists()) {
-              const dados = snap.data();
-              setDadosAntigos(dados);
-              setConfig((prev: ConfigState) => ({ ...prev, ...dados }));
-              if (dados.mensagemMaster && !dados.mensagemMaster.lida) setAvisoPopup(dados.mensagemMaster);
+        try {
+          // 1. Busca primeiro o vínculo na coleção usuarios para pegar o lojaId real
+          const userDocRef = doc(db, "usuarios", user.uid);
+          const userSnap = await getDoc(userDocRef);
+
+          let lojaIdReal = user.uid;
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            if (userData.lojaId) {
+              lojaIdReal = userData.lojaId;
             }
-          } catch (error) {
-            console.error(error);
-          } finally {
-            setLoading(false);
           }
-        };
-        carregarDadosConfiguracao();
+
+          setUid(lojaIdReal);
+
+          // 2. Busca o documento da loja usando o ID real correto
+          const snap = await getDoc(doc(db, "lojistas", lojaIdReal));
+          if (snap.exists()) {
+            const dados = snap.data();
+            setDadosAntigos(dados);
+            setConfig((prev: ConfigState) => ({ ...prev, ...dados }));
+            if (dados.mensagemMaster && !dados.mensagemMaster.lida) {
+              setAvisoPopup(dados.mensagemMaster);
+            }
+          }
+        } catch (error) {
+          console.error("Erro ao carregar configurações da loja:", error);
+        } finally {
+          setLoading(false);
+        }
       } else {
         setLoading(false);
       }

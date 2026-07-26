@@ -1,5 +1,7 @@
 "use client";
 
+import { aplicarMascara } from "@/utils/formatters";
+
 interface BlocoDadosClienteProps {
   cliente: { nmNomeCliente: string; dsCpfCliente: string; dsCepCliente: string; dsTelefoneCliente: string; dsEmailCliente?: string };
   setCliente: (cliente: any) => void;
@@ -7,7 +9,6 @@ interface BlocoDadosClienteProps {
   setEndereco: (endereco: any) => void;
   handleCepChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   cpfValido: boolean;
-  aplicarMascaraCPF: (valor: string) => string;
   config: { corTexto: string };
   stylesInput: any;
   temItemDigital: boolean;
@@ -20,7 +21,6 @@ export default function BlocoDadosCliente({
   setEndereco,
   handleCepChange,
   cpfValido,
-  aplicarMascaraCPF,
   config,
   stylesInput,
   temItemDigital
@@ -61,7 +61,7 @@ export default function BlocoDadosCliente({
             style={{ ...stylesInput.inputStyle, flex: 1, marginBottom: 0 }}
             value={cliente.dsTelefoneCliente || ""}
             onChange={e => {
-              const valor = e.target.value.replace(/\D/g, "").replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+              const valor = aplicarMascara(e.target.value, 'tel');
               setCliente((prev: any) => ({ ...prev, dsTelefoneCliente: valor }));
             }}
           />
@@ -69,7 +69,10 @@ export default function BlocoDadosCliente({
             placeholder="CPF *"
             style={{ ...stylesInput.inputStyle, flex: 1, marginBottom: 0 }}
             value={cliente.dsCpfCliente || ""}
-            onChange={e => setCliente((prev: any) => ({ ...prev, dsCpfCliente: aplicarMascaraCPF(e.target.value) }))}
+            onChange={e => {
+              const valor = aplicarMascara(e.target.value, 'cpf');
+              setCliente((prev: any) => ({ ...prev, dsCpfCliente: valor }));
+            }}
           />
         </div>
         {!cpfValido && <p style={{ color: '#ff4d4d', fontSize: '10px', margin: '0 0 6px 0', fontWeight: 'bold' }}>⚠️ CPF inválido</p>}

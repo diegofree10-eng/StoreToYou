@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     const dadosLoja = lojistaSnap.data() || {};
     
-    // 🎯 CORRIGIDO: Puxa o token de dentro de 'sistema' ou da raiz
+    // Puxa o token de dentro de 'sistema' ou da raiz
     const token = dadosLoja?.sistema?.dsTokenMelhorEnvio || dadosLoja?.tokenMelhorEnvio;
     
     if (!token) {
@@ -43,25 +43,30 @@ export async function POST(request: Request) {
       
       if (itensFisicos.length === 0) continue;
 
-      // Cálculo de dimensões e peso
+      // Cálculo seguro de dimensões e peso com fallbacks robustos
       const totalFisico = itensFisicos.reduce((acc: any, item: any) => {
         const qty = Number(item.qty || item.quantidade || 1);
         return {
-          peso: acc.peso + (Number(item.peso || 0.3) * qty),
-          largura: Math.max(acc.largura, Number(item.largura || 15)),
-          altura: Math.max(acc.altura, Number(item.altura || 10)),
-          comprimento: Math.max(acc.comprimento, Number(item.comprimento || 15)),
+          peso: acc.peso + (Number(item.peso || item.weight || 0.3) * qty),
+          largura: Math.max(acc.largura, Number(item.largura || item.width || 15)),
+          altura: Math.max(acc.altura, Number(item.altura || item.height || 10)),
+          comprimento: Math.max(acc.comprimento, Number(item.comprimento || item.length || 15)),
           valor: acc.valor + (Number(item.preco || item.price || 0) * qty),
         };
       }, { peso: 0, largura: 0, altura: 0, comprimento: 0, valor: 0 });
 
-      const serviceId = Number(p.financeiro?.dsTransportadoraId || 0);
+      const serviceId = Number(p.financeiro?.dsTransportadoraId || p.freteSelecionado?.id || 0);
+      if (!serviceId || isNaN(serviceId)) {
+        errors.push({ pedido: p.id, message: "ID da transportadora/servício inválido ou não informado no pedido." });
+        continue;
+      }
+
       const pedidoRef = db.collection("lojistas").doc(lojistaId).collection("pedidos").doc(String(p.id));
 
       const payloadCart = {
         service: serviceId,
         from: {
-          name: String(dadosLoja?.dadosLoja?.dsNomeLoja || dadosLoja.nomeLoja || "Loja"),
+          name: String(dadosLoja?.dadosLoja?.dsNomeLoja || dadosLoja.nomeLoja || "Loja").substring(0, 60),
           phone: String(dadosLoja?.dadosLoja?.nrWhatssapLoja || dadosLoja.whatsapp || "0000000000").replace(/\D/g, ""),
           email: String(dadosLoja.email || "contato@loja.com"),
           document: String(dadosLoja?.dadosLoja?.nrCnpjCpfLoja || dadosLoja.cnpj || "").replace(/\D/g, ""),
@@ -69,11 +74,11 @@ export async function POST(request: Request) {
           number: String(dadosLoja?.dadosLoja?.nrNumeroLoja || dadosLoja.numeroOrigem || "S/N"),
           district: String(dadosLoja?.dadosLoja?.dsBairroLoja || dadosLoja.bairroOrigem || ""),
           city: String(dadosLoja?.dadosLoja?.dsCidadeLoja || dadosLoja.cidadeOrigem || ""),
-          state_abbr: String(dadosLoja?.dadosLoja?.dsUfLoja || dadosLoja.ufOrigem || "SP"),
+          state_abbr: String(dadosLoja?.dadosLoja?.dsUfLoja || dadosLoja.ufOrigem || "SP").toUpperCase().substring(0, 2),
           postal_code: String(dadosLoja?.dsCepLoja || dadosLoja?.dadosLoja?.dsCepLoja || dadosLoja.cepOrigem || "").replace(/\D/g, ""),
         },
         to: {
-          name: String(p.cliente?.nmNome || p.cliente?.nome || "Cliente"),
+          name: String(p.cliente?.nmNome || p.cliente?.nome || "Cliente").substring(0, 60),
           phone: String(p.cliente?.dsTelefone || p.cliente?.telefone || "0000000000").replace(/\D/g, ""),
           email: String(p.cliente?.dsEmail || p.cliente?.email || "cliente@email.com"),
           document: String(p.cliente?.dsCpf || p.cliente?.cpf || "").replace(/\D/g, ""),
@@ -82,11 +87,12 @@ export async function POST(request: Request) {
           complement: String(p.endereco?.dsComplemento || ""),
           district: String(p.endereco?.dsBairro || p.endereco?.bairro || ""),
           city: String(p.endereco?.dsCidade || p.endereco?.cidade || ""),
-          state_abbr: String(p.endereco?.dsUf || p.endereco?.uf || "SP"),
-          postal_code: String(p.endereco?.dsCep || p.endereco?.cep || "").replace(/\D/g, "").replace(/\D/g, ""),
+          state_abbr: String(p.endereco?.dsUf || p.endereco?.uf || "SP").toUpperCase().substring(0, 2),
+          // 🔧 Corrigida a duplicação do replace
+          postal_code: String(p.endereco?.dsCep || p.endereco?.cep || "").replace(/\D/g, ""),
         },
         products: itens.map((item: any) => ({
-          name: String(item.dsNome || item.nome || "Produto"),
+          name: String(item.dsNome || item.nome || "Produto").substring(0, 40),
           quantity: Number(item.nrQuantidade || item.quantidade || 1),
           unitary_value: Number(item.preco || item.price || 0),
         })),
@@ -115,7 +121,8 @@ export async function POST(request: Request) {
         const cartData = await cartRes.json().catch(() => ({}));
 
         if (!cartRes.ok) {
-          throw new Error(cartData.message || JSON.stringify(cartData) || "Erro ao adicionar ao carrinho");
+          const errorMessage = cartData.message || JSON.stringify(cartData.errors) || JSON.stringify(cartData) || "Erro ao adicionar ao carrinho do Melhor Envio";
+          throw new Error(errorMessage);
         }
 
         const checkoutRes = await fetch(`${baseUrl}/api/v2/me/shipment/checkout`, {
@@ -129,26 +136,34 @@ export async function POST(request: Request) {
         if (checkoutRes.ok && Array.isArray(checkoutData)) {
           await pedidoRef.update({
             etiquetaGerada: true,
-            idEtiquetaMelhorEnvio: cartData.protocol,
+            idEtiquetaMelhorEnvio: cartData.id,
+            protocoloMelhorEnvio: cartData.protocol || null,
             statusEtiqueta: "paga",
             dataGeracaoEtiqueta: new Date().toISOString(),
             dsNumRastreio: checkoutData[0]?.tracking || null,
           });
           results.push({ pedido: p.id, status: "sucesso" });
         } else {
-          throw new Error(String(checkoutData.error || checkoutData.message || "Erro no checkout"));
+          // Captura detalhada de erros de saldo insuficiente ou validação no checkout
+          const checkoutErrorMsg = checkoutData.error || checkoutData.message || JSON.stringify(checkoutData.errors) || "Erro no checkout do Melhor Envio (verifique o saldo)";
+          throw new Error(checkoutErrorMsg);
         }
       } catch (err: any) {
-        await pedidoRef.update({ etiquetaGerada: false, statusPagamento: "erro", erroPagamento: err.message });
+        await pedidoRef.update({ 
+          etiquetaGerada: false, 
+          statusPagamento: "erro", 
+          erroPagamento: err.message 
+        });
         errors.push({ pedido: p.id, message: err.message });
       }
       
+      // Pequeno delay para evitar rate limit na API externa
       await new Promise(r => setTimeout(r, 800));
     }
 
     return NextResponse.json({ success: true, results, errors });
   } catch (error: any) {
-    console.error("Erro na rota de frete:", error);
+    console.error("Erro na rota de checkout em lote do Melhor Envio:", error);
     return NextResponse.json({ error: error.message || "Erro interno no servidor" }, { status: 500 });
   }
 }

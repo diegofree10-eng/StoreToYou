@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Check, Copy, Truck } from "lucide-react";
 
 interface BlocoPagamentoPixProps {
@@ -10,7 +11,7 @@ interface BlocoPagamentoPixProps {
   setCopiadoPix: (val: boolean) => void;
   podeFinalizar: boolean;
   isLojaAberta: boolean;
-  finalizarNoWhatsApp: () => void;
+  finalizarNoWhatsApp: () => Promise<void> | void;
   limparTudo: () => void;
   config: { corPrimaria: string; corTexto: string };
   temFrete: boolean;
@@ -32,12 +33,24 @@ export default function BlocoPagamentoPix({
   freteSel
 }: BlocoPagamentoPixProps) {
   
-  // Validação: se tem frete, exige que o frete tenha sido selecionado
+  // 🔒 Estado local para evitar cliques duplos no botão de finalização
+  const [enviando, setEnviando] = useState(false);
+
   const freteEscolhidoOuInexistente = !temFrete || (temFrete && freteSel !== null);
+
+  const handleFinalizarClick = async () => {
+    if (enviando) return;
+    setEnviando(true);
+    try {
+      await finalizarNoWhatsApp();
+    } finally {
+      // Garante que o botão destrava caso ocorra algum erro ou cancelamento
+      setEnviando(false);
+    }
+  };
 
   return (
     <>
-      {/* Estilo responsivo exclusivo para telas mobile (abaixo de 768px) */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media (max-width: 768px) {
           .bloco-pix-container {
@@ -51,7 +64,6 @@ export default function BlocoPagamentoPix({
         <h4 style={{ color: config.corTexto, margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>PAGAMENTO VIA PIX</h4>
 
         {!freteEscolhidoOuInexistente ? (
-          /* MENSAGEM EXIGINDO A ESCOLHA DO FRETE PRIMEIRO */
           <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '10px', padding: '15px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <Truck size={22} color="#d97706" />
             <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309', margin: 0, lineHeight: '1.4' }}>
@@ -85,25 +97,26 @@ export default function BlocoPagamentoPix({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
           <button
-            disabled={!podeFinalizar || !isLojaAberta}
-            onClick={finalizarNoWhatsApp}
+            disabled={!podeFinalizar || !isLojaAberta || enviando}
+            onClick={handleFinalizarClick}
             style={{
               width: '100%',
               padding: '10px',
               borderRadius: '8px',
-              backgroundColor: podeFinalizar && isLojaAberta ? '#22c55e' : '#cbd5e1',
+              backgroundColor: podeFinalizar && isLojaAberta && !enviando ? '#22c55e' : '#cbd5e1',
               color: '#fff',
               border: 'none',
               fontWeight: 'bold',
               fontSize: '12px',
-              cursor: podeFinalizar && isLojaAberta ? 'pointer' : 'not-allowed'
+              cursor: podeFinalizar && isLojaAberta && !enviando ? 'pointer' : 'not-allowed'
             }}
           >
-            FINALIZAR PEDIDO NO WHATSAPP
+            {enviando ? "PROCESSANDO..." : "FINALIZAR PEDIDO NO WHATSAPP"}
           </button>
           <button
             onClick={limparTudo}
-            style={{ width: '100%', padding: '6px', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fee2e2', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer' }}
+            disabled={enviando}
+            style={{ width: '100%', padding: '6px', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fee2e2', fontWeight: 'bold', fontSize: '11px', cursor: enviando ? 'not-allowed' : 'pointer' }}
           >
             Limpar Carrinho e Dados
           </button>

@@ -22,6 +22,8 @@ import BlocoOpcoesFrete from "./_components/BlocoOpcoesFrete";
 import BlocoResumoPedido from "./_components/BlocoResumoPedido";
 import BlocoPagamentoPix from "./_components/BlocoPagamentoPix";
 
+import { aplicarMascara } from "@/utils/formatters";
+
 export default function CarrinhoIdentidadeVisual() {
     const { cart, setItemQty, removeFromCart, clearCart } = useCart() as {
         cart: any[];
@@ -42,6 +44,7 @@ export default function CarrinhoIdentidadeVisual() {
         item.permiteRetirada === false, []);
 
     // Utilizando o Hook Customizado de Lógica
+    // Utilizando o Hook Customizado de Lógica (Sem as funções de máscara antigas)
     const {
         dadosLoja, setDadosLoja, lojistaId, setLojistaId,
         cupomDigitado, setCupomDigitado, descontoAtivo, setDescontoAtivo,
@@ -53,7 +56,7 @@ export default function CarrinhoIdentidadeVisual() {
         loadingFrete, setLoadingFrete, qrCodeUrl, setQrCodeUrl,
         payloadPixBruto, setPayloadPixBruto, freteBackup, setFreteBackup,
         temFrete, temItemDigitalNoCarrinho, isLojaAberta,
-        validarCPFReal, cpfValido, aplicarMascaraCPF, aplicarMascaraCEP
+        validarCPFReal, cpfValido
     } = useCarrinhoLogica(lojistaSlug, safeCart, isItemDigital);
 
     const lojaObj = dadosLoja?.dadosLoja || dadosLoja || dadosLojaContext?.dadosLoja || dadosLojaContext || {};
@@ -64,7 +67,7 @@ export default function CarrinhoIdentidadeVisual() {
 
     const config = useMemo(() => ({
         corPrimaria: ap?.dscorPrincipal || ap?.corPrincipal || "#6366f1",
-        corSecundaria: ap?.dscorSecundaria || ap?.corSecundaria || "#fdf5eb",
+        corSecundaria: ap?.dscorSecundaria || ap?.corSecundaria || "#fdebec",
         corFundoSite: ap?.dscorFundo || ap?.corFundo || "#f8fafc",
         corTexto: ap?.dscorTextoCard || ap?.corTexto || "#1e293b",
         whatsapp: lojaObj?.nrWhatssapLoja || lojaObj?.whatsapp || ""
@@ -431,7 +434,7 @@ export default function CarrinhoIdentidadeVisual() {
     };
 
     const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const valorComMascara = aplicarMascaraCEP(e.target.value);
+        const valorComMascara = aplicarMascara(e.target.value, 'cep'); // 👈 Corrigido aqui
         const novoCliente = { ...cliente, dsCepCliente: valorComMascara };
         setCliente(novoCliente);
         if (typeof window !== "undefined") localStorage.setItem(`cliente_${lojistaSlug}`, JSON.stringify(novoCliente));
@@ -475,7 +478,7 @@ export default function CarrinhoIdentidadeVisual() {
         <div style={{ backgroundColor: config.corFundoSite, color: config.corTexto, minHeight: '100vh', fontFamily: 'sans-serif', boxSizing: 'border-box', paddingBottom: '0px' }}>
 
             {/* COMPONENTE DE TOPO E STATUS DA LOJA */}
-            <CarrinhoHeaderStatus isLojaAberta={isLojaAberta} nomeLoja={nomeLoja} logoUrl={logoUrl} slug={lojistaSlug} />
+            <CarrinhoHeaderStatus isLojaAberta={isLojaAberta} nomeLoja={nomeLoja} logoUrl={logoUrl} slug={lojistaSlug} config={config} />
 
             <main style={{ padding: '20px 15px 10px', maxWidth: '1200px', margin: '0 auto', boxSizing: 'border-box' }}>
                 {freteGratisConfig.ativo && safeCart.length > 0 && temFrete && (
@@ -513,7 +516,6 @@ export default function CarrinhoIdentidadeVisual() {
                                 setEndereco={setEndereco}
                                 handleCepChange={handleCepChange}
                                 cpfValido={cpfValido}
-                                aplicarMascaraCPF={aplicarMascaraCPF}
                                 config={config}
                                 stylesInput={stylesInput}
                                 temItemDigital={temItemDigitalNoCarrinho}

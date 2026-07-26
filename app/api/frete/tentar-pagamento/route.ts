@@ -30,7 +30,6 @@ export async function POST(request: Request) {
 
     const dadosLoja = lojistaSnap.data() || {};
     
-    // 🎯 CORRIGIDO: Puxa o token de dentro de 'sistema' ou da raiz
     const token = dadosLoja?.sistema?.dsTokenMelhorEnvio || dadosLoja?.tokenMelhorEnvio;
     const isSandbox = dadosLoja?.melhorEnvioSandbox === true;
     const baseUrl = isSandbox ? 'https://sandbox.melhorenvio.com.br' : 'https://melhorenvio.com.br';
@@ -57,7 +56,7 @@ export async function POST(request: Request) {
     const eSucesso = checkoutRes.ok && checkoutData.purchase && checkoutData.purchase.status !== 'pending';
 
     if (!eSucesso) {
-      const msgErro = checkoutData.message || (checkoutData.purchase?.status === 'pending' ? "Saldo insuficiente." : "Erro na transação.");
+      const msgErro = checkoutData.message || checkoutData.error || (checkoutData.purchase?.status === 'pending' ? "Saldo insuficiente." : "Erro na transação.");
       
       await pedidoRef.update({
         statusEtiqueta: 'pendente',
@@ -67,7 +66,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: msgErro }, { status: 400 });
     }
 
-    // 2. Imprime a etiqueta
+    // 2. Imprime a etiqueta (Geração do link)
     const printRes = await fetch(`${baseUrl}/api/v2/me/shipment/print`, {
       method: 'POST',
       headers: { 
@@ -80,15 +79,16 @@ export async function POST(request: Request) {
     });
     
     const printData = await printRes.json().catch(() => ({}));
+    const urlGerada = printData?.url || printData?.checkout?.url_print || "";
 
     await pedidoRef.update({
       statusEtiqueta: 'paga',
-      urlEtiqueta: printData?.url || "",
+      urlEtiqueta: urlGerada,
       dataGeracaoEtiqueta: new Date().toISOString(),
       erroPagamento: null
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, urlEtiqueta: urlGerada });
 
   } catch (error: any) {
     console.error("Erro no processamento do pagamento da etiqueta:", error);

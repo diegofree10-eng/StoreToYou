@@ -4,9 +4,9 @@ import { dbAdmin as db } from "@/lib/firebaseAdmin";
 // Força a rota a ser tratada como dinâmica no runtime
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
     let { lojistaId, token, isSandbox } = body;
 
     if (!lojistaId) {
@@ -37,14 +37,14 @@ export async function POST(req: Request) {
     // Busca pedidos que já tiveram a etiqueta gerada mas ainda estão pendentes
     const snapshot = await pedidosRef
       .where("etiquetaGerada", "==", true)
-      .where("statusEtiqueta", "==", "pendente")
+      .where("statusEtiqueta", "in", ["pendente", "gerada"])
       .get();
     
     let atualizados = 0;
 
     for (const pDoc of snapshot.docs) {
       const pedido = pDoc.data();
-      const shipmentId = pedido.idEtiquetaMelhorEnvio; 
+      const shipmentId = pedido.idEtiquetaMelhorEnvio || pedido.protocoloMelhorEnvio; 
 
       if (!shipmentId) {
         console.warn(`[SYNC] Pedido ${pDoc.id} não possui idEtiquetaMelhorEnvio.`);
@@ -52,7 +52,8 @@ export async function POST(req: Request) {
       }
 
       try {
-        const res = await fetch(`${baseUrl}/api/v2/me/shipment/orders/${shipmentId}`, {
+        // Endpoint ajustado para consultar o status da ordem/etiqueta no Melhor Envio
+        const res = await fetch(`${baseUrl}/api/v2/me/shipment/orders?ids=${shipmentId}`, {
           method: 'GET',
           headers: { 
             'Authorization': `Bearer ${String(token).trim()}`, 
@@ -61,18 +62,20 @@ export async function POST(req: Request) {
           }
         });
         
-        const orderData = await res.json().catch(() => ({}));
+        const orderData = await res.json().catch(() => ({ data: [] }));
 
         if (!res.ok) {
           console.error(`[SYNC] Erro ME para etiqueta ${shipmentId}:`, orderData);
           continue;
         }
 
-        // Se o status retornado pelo Melhor Envio for 'paid'
-        if (orderData.status === 'paid') {
+        // O Melhor Envio costuma retornar um array ou objeto paginado de ordens
+        const ordemDetalhe = Array.isArray(orderData) ? orderData[0] : (orderData.data?.[0] || orderData);
+
+        if (ordemDetalhe && (ordemDetalhe.status === 'paid' || ordemDetalhe.status === 'released' || ordemDetalhe.status === 'processing')) {
           await pDoc.ref.update({
             statusEtiqueta: 'paga',
-            urlEtiqueta: orderData.url || orderData.checkout?.url_print || "",
+            urlEtiqueta: ordemDetalhe.url || ordemDetalhe.checkout?.url_print || pedido.urlEtiqueta || "",
             dataGeracaoEtiqueta: new Date().toISOString()
           });
           atualizados++;
@@ -80,6 +83,9 @@ export async function POST(req: Request) {
       } catch (fetchError) {
         console.error(`[SYNC] Falha de conexão ao consultar pedido ${pDoc.id}:`, fetchError);
       }
+
+      // Delay para evitar bloqueio por requisições em massa (Rate Limit)
+      await new Promise(r => setTimeout(r, 500));
     }
 
     return NextResponse.json({ success: true, atualizados });

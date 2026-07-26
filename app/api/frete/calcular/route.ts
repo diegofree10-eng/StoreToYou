@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore";
+import { dbAdmin } from '@/lib/firebaseAdmin';
 
 export async function POST(request: Request) {
   try {
@@ -11,36 +10,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Dados obrigatórios ausentes." }, { status: 400 });
     }
 
-    // 🎯 Busca o lojista por ID direto ou pelas variações de slug no Firebase
-    let lojistaSnap = await getDoc(doc(db, "lojistas", lojistaId));
-    
-    if (!lojistaSnap.exists()) {
-      let qSlug = query(collection(db, "lojistas"), where("dsSlug", "==", lojistaId), limit(1));
-      let snapSlug = await getDocs(qSlug);
-      
+    // Sanitiza o CEP de destino
+    const cepDestinoLimpo = String(cepDestino).replace(/\D/g, "");
+    if (cepDestinoLimpo.length !== 8) {
+      return NextResponse.json({ error: "CEP de destino inválido." }, { status: 400 });
+    }
+
+    // 🎯 Busca o lojista usando o dbAdmin (Server-Side seguro)
+    let dados: any = null;
+
+    try {
+      const lojistaDoc = await dbAdmin.collection("lojistas").doc(lojistaId).get();
+      if (lojistaDoc.exists) {
+        dados = lojistaDoc.data();
+      }
+    } catch (e) {
+      // Caso o lojistaId passado seja na verdade um slug, tentamos buscar pelo campo de slug
+    }
+
+    if (!dados) {
+      let snapSlug = await dbAdmin.collection("lojistas").where("dsSlug", "==", lojistaId).limit(1).get();
       if (!snapSlug.empty) {
-        lojistaSnap = snapSlug.docs[0];
+        dados = snapSlug.docs[0].data();
       } else {
-        qSlug = query(collection(db, "lojistas"), where("dadosLoja.dsSlug", "==", lojistaId), limit(1));
-        snapSlug = await getDocs(qSlug);
+        snapSlug = await dbAdmin.collection("lojistas").where("dadosLoja.dsSlug", "==", lojistaId).limit(1).get();
         if (!snapSlug.empty) {
-          lojistaSnap = snapSlug.docs[0];
+          dados = snapSlug.docs[0].data();
         }
       }
     }
 
-    if (!lojistaSnap.exists()) {
+    if (!dados) {
       return NextResponse.json({ error: "Lojista não encontrado." }, { status: 404 });
     }
-
-    const dados = lojistaSnap.data();
 
     const token = dados?.sistema?.dsTokenMelhorEnvio || dados?.tokenMelhorEnvio; 
     const cepOrigem = String(dados?.dsCepLoja || dados?.dadosLoja?.dsCepLoja || dados?.cep || "").replace(/\D/g, "");
     const transportadorasAtivas = dados?.sistema?.dstransportadoras || dados?.transportadoras || {};
 
-    if (!token || !cepOrigem) {
-      return NextResponse.json({ error: "Configuração de Frete incompleta no Firebase (Token ou CEP de origem ausente)." }, { status: 400 });
+    if (!token || cepOrigem.length !== 8) {
+      return NextResponse.json({ error: "Configuração de Frete incompleta no Firebase (Token ou CEP de origem inválido)." }, { status: 400 });
     }
 
     const apenasItensComFrete = Array.isArray(itensFiltrados)
@@ -52,9 +61,10 @@ export async function POST(request: Request) {
     }
 
     let pesoTotalCalculado = 0;
-    let maiorLargura = 20;
-    let maiorAltura = 10;
-    let maiorComprimento = 20;
+    // Dimensões mínimas seguras recomendadas pelas transportadoras / Melhor Envio
+    let maiorLargura = 11;
+    let maiorAltura = 2;
+    let maiorComprimento = 16;
     
     if (apenasItensComFrete.length > 0) {
       apenasItensComFrete.forEach((item: any) => {
@@ -62,9 +72,9 @@ export async function POST(request: Request) {
         const quantidade = Number(item.qty || item.quantity || 1);
         pesoTotalCalculado += pesoItem * quantidade;
 
-        const a = Number(item.altura || item.height || item.dsAltura || 10);
-        const c = Number(item.comprimento || item.length || item.dsComprimento || 20);
-        const l = Number(item.largura || item.width || item.dsLargura || 20);
+        const a = Number(item.altura || item.height || item.dsAltura || 2);
+        const c = Number(item.comprimento || item.length || item.dsComprimento || 16);
+        const l = Number(item.largura || item.width || item.dsLargura || 11);
 
         if (a > maiorAltura) maiorAltura = a;
         if (c > maiorComprimento) maiorComprimento = c;
@@ -77,9 +87,9 @@ export async function POST(request: Request) {
     if (pesoTotalCalculado <= 0) pesoTotalCalculado = 0.1;
 
     const pacoteSeguro = {
-      largura: maiorLargura,
-      altura: maiorAltura,
-      comprimento: maiorComprimento,
+      largura: Math.max(11, maiorLargura),
+      altura: Math.max(2, maiorAltura),
+      comprimento: Math.max(16, maiorComprimento),
       peso: pesoTotalCalculado
     };
 
@@ -87,14 +97,6 @@ export async function POST(request: Request) {
     const UrlMelhorEnvio = IsMelhorEnvioSandbox
       ? 'https://sandbox.melhorenvio.com.br/api/v2/me/shipment/calculate'
       : 'https://melhorenvio.com.br/api/v2/me/shipment/calculate';
-
-    console.log("📦 DADOS ENVIADOS PARA O MELHOR ENVIO:", {
-      url: UrlMelhorEnvio,
-      cepOrigem,
-      cepDestino: cepDestino.replace(/\D/g, ""),
-      pacote: pacoteSeguro,
-      temToken: !!token
-    });
 
     const response = await fetch(UrlMelhorEnvio, {
       method: 'POST',
@@ -106,7 +108,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         from: { postal_code: cepOrigem },
-        to: { postal_code: cepDestino.replace(/\D/g, "") },
+        to: { postal_code: cepDestinoLimpo },
         volumes: [
           {
             width: pacoteSeguro.largura,
@@ -118,16 +120,6 @@ export async function POST(request: Request) {
       })
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log("🚨 RESPOSTA DE ERRO DO MELHOR ENVIO:", response.status, errorText);
-    }
-
-    if (response.status === 401) {
-      console.error("🚨 Melhor Envio retornou 401. Verifique se o token inserido é válido.");
-      return NextResponse.json({ error: "Token do Melhor Envio inválido ou expirado." }, { status: 401 });
-    }
-
     const responseText = await response.text();
     let data: any = {};
 
@@ -137,17 +129,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Resposta inválida da API de frete." }, { status: 502 });
     }
 
+    if (response.status === 401) {
+      console.error("🚨 Melhor Envio retornou 401. Token inválido ou expirado.");
+      return NextResponse.json({ error: "Token do Melhor Envio inválido ou expirado." }, { status: 401 });
+    }
+
     if (!response.ok || data.message) {
-      return NextResponse.json({ error: data.message || "Falha na cotação." }, { status: response.status });
+      return NextResponse.json({ error: data.message || "Falha na cotação de frete." }, { status: response.status });
     }
 
     if (Array.isArray(data)) {
-      data.forEach((servico: any) => {
-        if (servico.error) {
-          console.log(`⚠️ Transportadora ${servico.name} (${servico.company?.name}) retornou erro:`, servico.error);
-        }
-      });
-
       const fretesFiltrados = data
         .filter((servico: any) => {
           if (servico.error) return false;
@@ -192,7 +183,7 @@ export async function POST(request: Request) {
     return NextResponse.json([]);
 
   } catch (error: any) {
-    console.error("🚨 Erro na API de frete:", error);
+    console.error("🚨 Erro interno na API de frete:", error);
     return NextResponse.json({ error: "Erro interno ao processar frete." }, { status: 500 });
   }
 }

@@ -9,8 +9,8 @@ interface SidebarProps {
   telaAtiva: string;
   setTelaAtiva: (tela: string) => void;
   onLogout: () => void;
-  isOpenMobile?: boolean;           // 👈 Controle de abertura no mobile
-  onCloseMobile?: () => void;       // 👈 Função para fechar o menu mobile
+  isOpenMobile?: boolean;          
+  onCloseMobile?: () => void;      
 }
 
 export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobile, onCloseMobile }: SidebarProps) {
@@ -24,49 +24,53 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-          let docRef;
+      if (!user) return;
 
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setRole(userData.role);
-            docRef = doc(db, "lojistas", userData.lojaId);
-          } else {
-            docRef = doc(db, "lojistas", user.uid);
-          }
+      try {
+        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+        
+        if (!userDoc.exists()) return;
 
-          if (unsubRef.current) unsubRef.current();
+        const userData = userDoc.data();
+        setRole(userData.role);
+        
+        const lojaIdReal = userData.lojaId;
+        if (!lojaIdReal) return;
 
-          unsubRef.current = onSnapshot(docRef, async (docSnap) => {
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              const dados = data.dadosLoja || data;
+        const docRef = doc(db, "lojistas", lojaIdReal);
 
-              const statusAtual = dados.dsStatusLoja || 'ativo';
-              const nomeLoja = dados.dsNomeLoja || "Minha Loja";
-              const logoUrl = dados.dsLogoLoja || null;
-              const tsVencimento = dados.tsVencimentoLoja?.toDate();
-              const now = new Date();
+        if (unsubRef.current) unsubRef.current();
 
-              if (tsVencimento && now > tsVencimento && statusAtual === 'ativo') {
-                await updateDoc(docRef, { "dadosLoja.dsStatusLoja": 'suspenso' });
-                window.location.replace("/atendimentoSuporte");
-                return;
-              }
+        unsubRef.current = onSnapshot(docRef, async (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const dados = data.dadosLoja || data;
 
-              if (statusAtual === 'suspenso') {
-                window.location.replace("/atendimentoSuporte");
-                return;
-              }
+            const statusAtual = dados.dsStatusLoja || 'ativo';
+            const nomeLoja = dados.dsNomeLoja || "Minha Loja";
+            const logoUrl = dados.dsLogoLoja || null;
+            const tsVencimento = dados.tsVencimentoLoja?.toDate();
+            const now = new Date();
 
-              setDadosLoja({ nomeLoja, logoUrl });
+            if (tsVencimento && now > tsVencimento && statusAtual === 'ativo') {
+              await updateDoc(docRef, { "dadosLoja.dsStatusLoja": 'suspenso' });
+              window.location.replace("/atendimentoSuporte");
+              return;
             }
-          });
-        } catch (error) {
-          console.error("Erro na sidebar:", error);
-        }
+
+            if (statusAtual === 'suspenso') {
+              window.location.replace("/atendimentoSuporte");
+              return;
+            }
+
+            setDadosLoja({ nomeLoja, logoUrl });
+          }
+        }, (error) => {
+          console.warn("Aviso de permissão temporária na Sidebar:", error);
+        });
+
+      } catch (error) {
+        console.error("Erro na sidebar:", error);
       }
     });
 
@@ -85,7 +89,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
   const handleMudarTela = (id: string) => {
     setTelaAtiva(id);
-    if (onCloseMobile) onCloseMobile(); // Fecha o menu no mobile ao clicar em um item
+    if (onCloseMobile) onCloseMobile();
   };
 
   return (
@@ -97,7 +101,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
       <aside style={{
         ...styles.sidebar,
-        transform: isOpenMobile ? 'translateX(0)' : 'translateX(-100%)', // 👈 Lógica de deslizar no mobile
+        transform: isOpenMobile ? 'translateX(0)' : undefined, 
       }} className="sidebar-container">
 
         {/* Botão de Fechar no Mobile */}
@@ -147,6 +151,11 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
       </aside>
 
       <style jsx>{`
+        @media (max-width: 768px) {
+          .sidebar-container {
+            transform: ${isOpenMobile ? 'translateX(0)' : 'translateX(-100%)'} !important;
+          }
+        }
         @media (min-width: 769px) {
           .sidebar-container {
             transform: translateX(0) !important;
@@ -189,7 +198,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     display: 'none',
   },
-  // 👇 Reduzimos o padding superior de 40px para 20px para colar no topo
   brandArea: { padding: '20px 20px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', borderBottom: '1px solid #334155', marginBottom: '10px', position: 'relative' },
   logoContainer: { width: '85px', height: '85px', borderRadius: '12px', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '3px solid #fdb813', marginBottom: '10px' },
   logoImg: { width: '100%', height: '100%', objectFit: 'cover' },

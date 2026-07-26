@@ -12,7 +12,6 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      // 1. Se não houver usuário nenhum, bloqueia e manda pro login
       if (!user) {
         setAuthorized(false);
         setLoading(false);
@@ -21,15 +20,34 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
       }
 
       try {
-        // 2. Tenta buscar o lojista no banco
-        const docRef = doc(db, "lojistas", user.uid);
-        const docSnap = await getDoc(docRef);
+        // 1. Busca primeiro o perfil do usuário para descobrir o ID correto da loja
+        const userRef = doc(db, "usuarios", user.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+          await auth.signOut();
+          setAuthorized(false);
+          router.replace("/login");
+          return;
+        }
+
+        const userData = userSnap.data();
+        const lojaId = userData.lojaId;
+
+        if (!lojaId) {
+          await auth.signOut();
+          setAuthorized(false);
+          router.replace("/login");
+          return;
+        }
+
+        // 2. Valida se a loja realmente existe no banco usando o ID correto salvo no usuário
+        const lojaRef = doc(db, "lojistas", lojaId);
+        const lojaSnap = await getDoc(lojaRef);
         
-        if (docSnap.exists()) {
-          // SÓ AQUI o acesso é liberado
+        if (lojaSnap.exists()) {
           setAuthorized(true);
         } else {
-          // Se o usuário está logado no Firebase mas NÃO existe na sua coleção de lojistas
           await auth.signOut();
           setAuthorized(false);
           router.replace("/login");
@@ -46,7 +64,6 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     return () => unsubscribe();
   }, [router]);
 
-  // Enquanto estiver checando, NÃO MOSTRA NADA DA PÁGINA
   if (loading) {
     return (
       <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#fff' }}>
@@ -55,8 +72,6 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
 
-  // SE NÃO FOR AUTORIZADO, RETORNA NULL (TELA BRANCA ANTES DO REDIRECT)
-  // Isso impede que qualquer código da AdminPage (Sidebar, etc) seja carregado.
   if (!authorized) {
     return null; 
   }
