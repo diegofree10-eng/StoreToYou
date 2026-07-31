@@ -19,7 +19,6 @@ export default function ImageCropperModalProduto({
   
   const imgRef = useRef<HTMLImageElement>(null);
 
-  // Iniciar o arrasto da imagem
   const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
     setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -27,7 +26,6 @@ export default function ImageCropperModalProduto({
     setDragStart({ x: clientX - position.x, y: clientY - position.y });
   };
 
-  // Movimentação da imagem ao arrastar
   const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDragging) return;
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -39,7 +37,6 @@ export default function ImageCropperModalProduto({
     setIsDragging(false);
   };
 
-  // Processar e exportar o corte final mantendo estritamente 800x800 pixels
   async function handleSave() {
     if (!imgRef.current) return;
 
@@ -50,44 +47,64 @@ export default function ImageCropperModalProduto({
     if (!ctx) return;
 
     const img = imgRef.current;
-    
-    // Fundo branco de segurança para o card do produto
+
+    // 1. Fundo branco do quadrado final de 800x800
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, 800, 800);
 
-    ctx.save();
-    // Centraliza e aplica as transformações de zoom e translação exatas do preview quadrado
-    ctx.translate(400, 400);
-    ctx.scale(zoom, zoom);
-    ctx.translate(position.x / 2, position.y / 2);
-    
-    const aspect = img.naturalWidth / img.naturalHeight;
-    let drawWidth = 300;
-    let drawHeight = 300;
-    if (aspect > 1) {
-      drawWidth = 300 * aspect;
+    const containerSize = 300; // Tamanho em pixels da caixa tracejada do cropper na tela
+    const scaleFactor = 800 / containerSize; // Conversão exata para o canvas de 800x800
+
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+
+    // Calcula como a imagem foi contida (object-fit: contain) dentro da caixa de 300x300
+    const imgAspect = naturalWidth / naturalHeight;
+    let baseDrawW = containerSize;
+    let baseDrawH = containerSize;
+
+    if (imgAspect > 1) {
+      baseDrawH = containerSize / imgAspect;
     } else {
-      drawHeight = 300 / aspect;
+      baseDrawW = containerSize * imgAspect;
     }
 
-    ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.save();
+    
+    // Move para o centro do canvas de 800x800
+    ctx.translate(400, 400);
+
+    // Aplica o zoom e a posição (arraste) multiplicados pelo fator de escala
+    ctx.scale(zoom, zoom);
+    ctx.translate(position.x * scaleFactor, position.y * scaleFactor);
+
+    // Desenha a imagem centralizada com o tamanho proporcional correto em escala real
+    const finalW = baseDrawW * scaleFactor;
+    const finalH = baseDrawH * scaleFactor;
+
+    ctx.drawImage(
+      img,
+      -finalW / 2,
+      -finalH / 2,
+      finalW,
+      finalH
+    );
+
     ctx.restore();
 
     canvas.toBlob((blob) => {
       if (blob) onCropComplete(blob);
-    }, "image/jpeg", 0.9);
+    }, "image/jpeg", 0.95);
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
       <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '16px', maxWidth: '450px', width: '90%', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
         <h3 style={{ marginBottom: '8px', fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>Ajustar Foto para o Card</h3>
-        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', lineHeight: '1.4' }}>
-          Arraste para enquadrar a parte principal e use a barra para ajustar o tamanho no quadrado. <br />
-          <strong style={{ color: '#ee4d2d' }}>💡 Dica:</strong> Saída otimizada em <strong style={{ color: '#1e293b' }}>800x800 pixels</strong>.
+        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>
+          Arraste e ajuste o zoom para enquadrar perfeitamente no quadrado.
         </p>
 
-        {/* ÁREA DA MOLDURA QUADRADA */}
         <div 
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -126,7 +143,6 @@ export default function ImageCropperModalProduto({
           />
         </div>
 
-        {/* BARRA DE ZOOM */}
         <div style={{ margin: '20px 0 10px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>Zoom:</span>
           <input 
@@ -140,7 +156,6 @@ export default function ImageCropperModalProduto({
           />
         </div>
 
-        {/* BOTÕES DE AÇÃO */}
         <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>Cancelar</button>
           <button onClick={handleSave} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#6366f1', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Cortar e Salvar</button>
@@ -149,4 +164,3 @@ export default function ImageCropperModalProduto({
     </div>
   );
 }
-// cortador automático (Cropper) na tela onde cadastra ou edita foto dos PRODUTOS

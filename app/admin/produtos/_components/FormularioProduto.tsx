@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from "react";
@@ -23,6 +22,8 @@ interface FormularioProdutoProps {
   setPrecoBasico: (v: string) => void;
   custoUnitario: string;
   setCustoUnitario: (v: string) => void;
+  estoque: string; // <--- ADICIONADO
+  setEstoque: (v: string) => void; // <--- ADICIONADO
   temVariaveisComPreco: boolean;
   setShowVarModal: (v: boolean) => void;
   setShowReqModal: (v: boolean) => void;
@@ -48,6 +49,7 @@ export default function FormularioProduto({
   descricao, setShowDescModal,
   precoBasico, setPrecoBasico,
   custoUnitario, setCustoUnitario,
+  estoque, setEstoque, // <--- ADICIONADO
   temVariaveisComPreco,
   setShowVarModal,
   setShowReqModal,
@@ -62,13 +64,13 @@ export default function FormularioProduto({
   return (
     <div>
       <h3 style={styles.sideTitle}>📦 Informações Básicas do Produto</h3>
-      
+
       {/* Nome do Produto */}
-      <input 
-        style={styles.input} 
-        value={nome} 
-        onChange={e => setNome(e.target.value)} 
-        placeholder="Nome do Produto *" 
+      <input
+        style={styles.input}
+        value={nome}
+        onChange={e => setNome(e.target.value)}
+        placeholder="Nome do Produto *"
       />
 
       {/* SKU e Gerador */}
@@ -76,15 +78,15 @@ export default function FormularioProduto({
         SKU (Código)
       </label>
       <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-        <input 
-          style={{ ...styles.input, marginBottom: 0 }} 
-          value={sku} 
-          onChange={e => setSku(e.target.value.toUpperCase())} 
-          placeholder="Ex: CAM-AZU-G" 
+        <input
+          style={{ ...styles.input, marginBottom: 0 }}
+          value={sku}
+          onChange={e => setSku(e.target.value.toUpperCase())}
+          placeholder="Ex: CAM-AZU-G"
         />
-        <button 
-          type="button" 
-          onClick={() => setIsModalSKUOpen(true)} 
+        <button
+          type="button"
+          onClick={() => setIsModalSKUOpen(true)}
           style={{ padding: '0 10px', background: '#334155', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
         >
           Gen
@@ -93,9 +95,9 @@ export default function FormularioProduto({
 
       {/* Categoria e Subcategoria */}
       <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-        <select 
-          style={{ ...styles.input, marginBottom: 0, flex: 1 }} 
-          value={categoria} 
+        <select
+          style={{ ...styles.input, marginBottom: 0, flex: 1 }}
+          value={categoria}
           onChange={e => { setCategoria(e.target.value); setSubcategoria(""); }}
         >
           <option value="">Categoria... *</option>
@@ -116,48 +118,58 @@ export default function FormularioProduto({
       )}
 
       {/* Botões de Modais de Apoio */}
-      <button 
+      <button
         type="button"
-        onClick={() => setShowVarModal(true)} 
+        onClick={() => setShowVarModal(true)}
         style={{ ...styles.btnUpload, border: '1px solid #ee4d2d', color: '#ee4d2d', fontWeight: 'bold', marginBottom: '10px' }}
       >
         {temVariaveisComPreco ? "⚙️ Editar Grade" : "➕ Adicionar Grade"}
       </button>
 
-      <button 
+      <button
         type="button"
-        onClick={() => setShowReqModal(true)} 
+        onClick={() => setShowReqModal(true)}
         style={{ ...styles.btnUpload, border: '1px solid #d946ef', color: '#d946ef', fontWeight: 'bold', marginBottom: '10px' }}
       >
         🎯 Personalização ({Object.values(requisitos || {}).filter(Boolean).length})
       </button>
 
       {/* Descrição */}
-      <textarea 
-        style={styles.textarea} 
-        value={descricao} 
-        onClick={() => setShowDescModal(true)} 
-        readOnly 
-        placeholder="Descrição... *" 
+      <textarea
+        style={styles.textarea}
+        value={descricao}
+        onClick={() => setShowDescModal(true)}
+        readOnly
+        placeholder="Descrição... *"
       />
 
-      {/* Valores de Preço e Custo */}
+      {/* Valores de Preço, Custo e Estoque */}
       <div style={{ ...styles.boxGray, opacity: temVariaveisComPreco ? 0.6 : 1, marginBottom: '10px' }}>
-        <label style={styles.miniLabel}>Valores R$</label>
+        <label style={styles.miniLabel}>Valores e Estoque</label>
         <div style={{ display: 'flex', gap: '5px' }}>
-          <input 
-            disabled={temVariaveisComPreco} 
-            style={{ ...styles.input, marginBottom: 0 }} 
-            value={temVariaveisComPreco ? "Grade" : precoBasico} 
-            onChange={e => formatInput(e.target.value, setPrecoBasico)} 
-            placeholder="Venda" 
+          <input
+            disabled={temVariaveisComPreco}
+            style={{ ...styles.input, marginBottom: 0 }}
+            value={temVariaveisComPreco ? "Grade" : (precoBasico || "")}
+            onChange={e => formatInput(e.target.value, setPrecoBasico)}
+            placeholder="Venda"
           />
-          <input 
-            disabled={temVariaveisComPreco} 
-            style={{ ...styles.input, marginBottom: 0 }} 
-            value={temVariaveisComPreco ? "Grade" : custoUnitario} 
-            onChange={e => formatInput(e.target.value, setCustoUnitario)} 
-            placeholder="Custo" 
+          <input
+            disabled={temVariaveisComPreco}
+            style={{ ...styles.input, marginBottom: 0 }}
+            value={temVariaveisComPreco ? "Grade" : (custoUnitario || "")}
+            onChange={e => formatInput(e.target.value, setCustoUnitario)}
+            placeholder="Custo"
+          />
+          <input
+            disabled={temVariaveisComPreco}
+            style={{ ...styles.input, marginBottom: 0 }}
+            value={temVariaveisComPreco ? "Grade" : (estoque || "")}
+            onChange={e => {
+              const cleanValue = e.target.value.replace(/\D/g, "");
+              setEstoque(cleanValue);
+            }}
+            placeholder="Estoque"
           />
         </div>
       </div>
@@ -165,19 +177,29 @@ export default function FormularioProduto({
       {/* Pré-visualização de Imagens */}
       <div style={styles.previewGrid}>
         {imagens.map((img, i) => (
-          <div key={i} style={{ position: 'relative' }}>
+          <div key={`img-${i}`} style={{ position: 'relative' }}>
             <img src={img} style={styles.imgThumb} alt="Thumbnail" />
-            <button 
+            <button
               type="button"
-              onClick={() => setImagens(imagens.filter((_, idx) => idx !== i))} 
+              onClick={() => setImagens(imagens.filter((_, idx) => idx !== i))}
               style={styles.btnDelImg}
             >
               ×
             </button>
           </div>
         ))}
+
         {files.map((f, i) => (
-          <img key={i} src={URL.createObjectURL(f)} style={{ ...styles.imgThumb, border: '2px solid #3b82f6' }} alt="New Upload" />
+          <div key={`file-${i}`} style={{ position: 'relative' }}>
+            <img src={URL.createObjectURL(f)} style={{ ...styles.imgThumb, border: '2px solid #3b82f6' }} alt="New Upload" />
+            <button
+              type="button"
+              onClick={() => setFiles(files.filter((_, idx) => idx !== i))}
+              style={styles.btnDelImg}
+            >
+              ×
+            </button>
+          </div>
         ))}
       </div>
 

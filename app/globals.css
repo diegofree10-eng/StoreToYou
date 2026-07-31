@@ -6,7 +6,7 @@
 }
 
 body {
-  font-family: 'Inter', Arial, sans-serif; /* Adicionei Inter para um ar mais moderno */
+  font-family: 'Inter', Arial, sans-serif;
   background: #f5f5f5;
   color: #1e293b;
   overflow-x: hidden;
@@ -19,20 +19,17 @@ img {
   display: block;
 }
 
-/* ANIMAÇÃO DO LOADER (Obrigatório para o AdminLayout)
-   Isso faz com que o círculo de "Protegendo acesso" gire.
-*/
+/* ANIMAÇÃO DO LOADER */
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
 
-/* Classe utilitária caso você precise em outros lugares */
 .animate-spin {
   animation: spin 1s linear infinite;
 }
 
-/* Opcional: Melhorar a aparência do scrollbar no Admin */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -50,9 +47,8 @@ img {
   background: #94a3b8;
 }
 
-/* --- ESTILOS DE IMPRESSÃO (Substitua todo o seu bloco @media print anterior por este) --- */
+/* --- ESTILOS DE IMPRESSÃO --- */
 @media print {
-  /* Oculta tudo na tela, exceto o que queremos imprimir */
   body, html {
     margin: 0 !important;
     padding: 0 !important;
@@ -69,7 +65,6 @@ img {
     visibility: visible;
   }
 
-  /* FORÇAMOS o posicionamento no topo esquerdo */
   .area-impressao {
     position: absolute !important;
     top: 0 !important;
@@ -82,13 +77,62 @@ img {
     padding: 0 !important;
   }
 
-  /* Evita quebra de página no meio de uma etiqueta */
   .area-impressao > div {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
   @page {
-    margin: 0.5cm; /* Margem pequena para garantir que não corte nas bordas */
+    margin: 0.5cm;
+  }
+} /* <--- AQUI FECHA CORRETAMENTE O BLOCO DE IMPRESSÃO */
+
+/* --- AJUSTE MOBILE PARA O GRID DE PRODUTOS (Exatamente 4 colunas) --- */
+/* --- AJUSTE MOBILE COMPLETO PARA O GRID E OS CARDS DE PRODUTOS --- */
+@media (max-width: 768px) {
+  /* Força exatamente 4 colunas */
+  .product-grid-responsivo {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 3px !important;
+    padding: 2px !important;
+  }
+
+  /* Reduz o card inteiro para caber perfeitamente */
+  .product-grid-responsivo > div {
+    height: auto !important;
+    min-height: 190px !important;
+    max-height: 220px !important;
+    padding: 3px !important;
+    border-radius: 6px !important;
+  }
+
+  /* Reduz o container da imagem para acompanhar o card menor */
+  .product-grid-responsivo div[style*="width: 120px"],
+  .product-grid-responsivo div[style*="height: 120px"] {
+    width: 100% !important;
+    height: 65px !important;
+    min-height: 65px !important;
+    border-radius: 4px !important;
+  }
+
+  /* Ajusta o título para não ocupar muito espaço */
+  .product-grid-responsivo h4 {
+    font-size: 9px !important;
+    height: 20px !important;
+    line-height: 10px !important;
+    margin-bottom: 1px !important;
+  }
+
+  /* Ajusta o preço e tags */
+  .product-grid-responsivo span {
+    font-size: 10px !important;
+  }
+
+  /* Torna os botões de ação compactos para o celular */
+  .product-grid-responsivo button {
+    padding: 2px !important;
+    font-size: 8px !important;
+    border-radius: 2px !important;
   }
 }

@@ -6,11 +6,12 @@ import { Pedido } from "@/types/pedido";
  */
 export const criarEstruturaPedido = (dados: any): Pedido => {
   return {
+    id: dados.id || "",
     dscliente: {
       dsNome: String(dados.dsNome || ""),
       dsTelefone: String(dados.dsTelefone || ""),
       dsEmail: String(dados.dsEmail || ""),
-      dsCpf: String(dados.dsCpf || "")
+      dsCpf: String(dados.dsCpf || ""),
     },
     dsEndereco: {
       dsRua: String(dados.dsRua || ""),
@@ -18,7 +19,7 @@ export const criarEstruturaPedido = (dados: any): Pedido => {
       dsCep: String(dados.dsCep || ""),
       dsBairro: String(dados.dsBairro || ""),
       dsCidade: String(dados.dsCidade || ""),
-      dsUf: String(dados.dsUf || "")
+      dsUf: String(dados.dsUf || ""),
     },
     financeiro: {
       dsCupom: String(dados.dsCupom || ""),
@@ -26,7 +27,7 @@ export const criarEstruturaPedido = (dados: any): Pedido => {
       vlDesconto: Number(dados.vlDesconto || 0),
       vlFrete: Number(dados.vlFrete || 0),
       vlSubtotal: Number(dados.vlSubtotal || 0),
-      vlTotal: Number(dados.vlTotal || 0)
+      vlTotal: Number(dados.vlTotal || 0),
     },
     itens: (Array.isArray(dados.itens) ? dados.itens : []).map((i: any) => ({
       dsFoto: String(i.dsFoto || ""),
@@ -37,7 +38,7 @@ export const criarEstruturaPedido = (dados: any): Pedido => {
       nrQty: Number(i.nrQty || 1),
       dsSku: String(i.dsSku || ""),
       dsVariacao: String(i.dsVariacao || ""),
-      respostasFormatadas: i.respostasFormatadas || {}
+      respostasFormatadas: i.respostasFormatadas || {},
     })),
     logistica: {
       dsFormaEntrega: String(dados.dsFormaEntrega || ""),
@@ -45,7 +46,7 @@ export const criarEstruturaPedido = (dados: any): Pedido => {
       nrPedido: String(dados.nrPedido || ""),
       isRetirarNaLoja: !!dados.isRetirarNaLoja,
       isPedidoPago: !!dados.isPedidoPago,
-      tsCriacaoPedido: dados.tsCriacaoPedido || new Date().toISOString()
-    }
+      tsCriacaoPedido: dados.tsCriacaoPedido || new Date().toISOString(),
+    },
   };
 };

@@ -53,6 +53,7 @@ export default function CadastroProdutos() {
     const [subcategoria, setSubcategoria] = useState("");
     const [precoBasico, setPrecoBasico] = useState("");
     const [custoUnitario, setCustoUnitario] = useState("");
+    const [estoque, setEstoque] = useState("");
     const [ativo, setAtivo] = useState(true);
 
     const [envioTransportadora, setEnvioTransportadora] = useState(true);
@@ -275,7 +276,7 @@ export default function CadastroProdutos() {
 
             const dados: any = {
                 lojistaId: uid, nome, sku, descricao, categoria, subcategoria,
-                precoBasico: precoFinal, custoUnitario, ativo,
+                precoBasico: precoFinal, custoUnitario, estoque, ativo,
                 envioTransportadora, permiteRetirada, precisaFrete: envioTransportadora,
                 peso: envioTransportadora ? peso : null,
                 comprimento: envioTransportadora ? comprimento : null,
@@ -291,6 +292,7 @@ export default function CadastroProdutos() {
                     sku: novaTabelaPrecos[c.key]?.sku || "",
                     preco: novaTabelaPrecos[c.key]?.preco || precoBasico,
                     custo: novaTabelaPrecos[c.key]?.custo || custoUnitario,
+                    estoque: novaTabelaPrecos[c.key]?.estoque || "", // <--- ADICIONADO AQUI
                     foto: novaTabelaPrecos[c.key]?.foto || ""
                 })) : [],
                 updatedAt: Date.now()
@@ -311,6 +313,7 @@ export default function CadastroProdutos() {
 
     const limparForm = () => {
         setNome(""); setSku(""); setDescricao(""); setCategoria(""); setSubcategoria(""); setPrecoBasico(""); setCustoUnitario("");
+        setEstoque("");
         setPeso(""); setComprimento(""); setLargura(""); setAltura(""); setImagens([]); setEditId(null); setFiles([]); setEnvioTransportadora(true); setPermiteRetirada(false);
         setOpcoesVar1([]); setOpcoesVar2([]); setNomeVar1(""); setNomeVar2(""); setTabelaPrecos({});
         setRequisitos({ pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
@@ -321,8 +324,10 @@ export default function CadastroProdutos() {
         setEditId(p.id);
         setNome(p.nome); setSku(p.sku || ""); setCategoria(p.categoria || ""); setSubcategoria(p.subcategoria || "");
         setPrecoBasico(p.precoBasico || "");
+        setCustoUnitario(p.custoUnitario || "");
+        setEstoque(p.estoque || ""); // <--- Carrega o estoque do produto simples
         setEnvioTransportadora(p.envioTransportadora ?? true); setPermiteRetirada(p.permiteRetirada ?? false);
-        setCustoUnitario(p.custoUnitario || ""); setImagens(p.imagens || []); setDescricao(p.descricao || "");
+        setImagens(p.imagens || []); setDescricao(p.descricao || "");
         setPeso(p.peso || ""); setComprimento(p.comprimento || "");
         setLargura(p.largura || ""); setAltura(p.altura || "");
         setRequisitos(p.requisitos || { pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
@@ -331,14 +336,19 @@ export default function CadastroProdutos() {
             const tab: any = {};
             p.variacoes.forEach((v: any) => {
                 const key = v.v2 ? `${v.v1}-${v.v2}` : v.v1;
-                tab[key] = { preco: v.preco, custo: v.custo, foto: v.foto || "", sku: v.sku || "" };
+                tab[key] = {
+                    preco: v.preco,
+                    custo: v.custo,
+                    estoque: v.estoque || "", // <--- Carrega o estoque de cada variação
+                    foto: v.foto || "",
+                    sku: v.sku || ""
+                };
             });
             setTabelaPrecos(tab);
             setOpcoesVar1([...new Set(p.variacoes.map((v: any) => v.v1))] as string[]);
             setOpcoesVar2([...new Set(p.variacoes.map((v: any) => v.v2).filter((v: any) => v))] as string[]);
         }
     };
-
     const produtosFiltrados = produtos.filter(p => {
         return p.nome?.toLowerCase().includes(busca.toLowerCase()) &&
             (filtroCategoria === "Todos" || p.categoria === filtroCategoria) &&
@@ -412,8 +422,8 @@ export default function CadastroProdutos() {
                     </div>
                 </div>
 
-                {/* Largura ajustada para 320px */}
-                <div style={{ width: '320px', minWidth: '320px', maxWidth: '320px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh', flexShrink: 0 }}>
+                {/* COLUNA DO FORMULÁRIO COM LARGURA FIXA DE 300px */}
+                <div style={{ width: '300px', minWidth: '300px', maxWidth: '300px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh', flexShrink: 0 }}>
                     <h3 style={styles.sideTitle}>{editId ? "📝 Editar Produto" : "📦 Novo Produto"}</h3>
                     <FormularioProduto
                         nome={nome} setNome={setNome}
@@ -426,6 +436,7 @@ export default function CadastroProdutos() {
                         descricao={descricao} setShowDescModal={setShowDescModal}
                         precoBasico={precoBasico} setPrecoBasico={setPrecoBasico}
                         custoUnitario={custoUnitario} setCustoUnitario={setCustoUnitario}
+                        estoque={estoque} setEstoque={setEstoque} // <--- Adicione esta linha
                         temVariaveisComPreco={temVariaveisComPreco}
                         setShowVarModal={setShowVarModal}
                         setShowReqModal={setShowReqModal}
@@ -454,15 +465,18 @@ export default function CadastroProdutos() {
                     </button>
                 </div>
 
+                {/* COLUNA DE LISTAGEM COM 5 CARDS FIXOS POR LINHA */}
                 <div style={{ flex: 1, minWidth: 0, padding: '15px', overflowY: 'auto', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100vh' }}>
-                    <ListaProdutos
-                        produtos={produtos} produtosFiltrados={produtosPaginados} busca={busca} setBusca={setBusca}
-                        filtroCategoria={filtroCategoria} setFiltroCategoria={setFiltroCategoria} filtroStatus={filtroStatus} setFiltroStatus={setFiltroStatus}
-                        modoMassa={modoMassa} setModoMassa={setModoMassa} selecionados={selecionados} setSelecionados={setSelecionados}
-                        listaCategorias={listaCategorias} uid={uid} setListaParaImprimir={setListaParaImprimir} onEditar={carregarDadosProdutoParaEdicao}
-                    />
+                    <div style={{ width: '100%' }}>
+                        <ListaProdutos
+                            produtos={produtos} produtosFiltrados={produtosPaginados} busca={busca} setBusca={setBusca}
+                            filtroCategoria={filtroCategoria} setFiltroCategoria={setFiltroCategoria} filtroStatus={filtroStatus} setFiltroStatus={setFiltroStatus}
+                            modoMassa={modoMassa} setModoMassa={setModoMassa} selecionados={selecionados} setSelecionados={setSelecionados}
+                            listaCategorias={listaCategorias} uid={uid} setListaParaImprimir={setListaParaImprimir} onEditar={carregarDadosProdutoParaEdicao}
+                        />
+                    </div>
 
-                    {/* PAGINAÇÃO PC IDÊNTICA AO MOBILE (SPACE-BETWEEN) */}
+                    {/* PAGINAÇÃO PC */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: '1px solid #e2e8f0', background: '#fff', borderRadius: '8px', marginTop: '15px', flexShrink: 0 }}>
                         <div style={{ width: '60px' }}></div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
@@ -488,7 +502,6 @@ export default function CadastroProdutos() {
             {/* VERSÃO MOBILE RESPONSIVA */}
             <div className="mobile-view" style={{ display: isMobile ? 'flex' : 'none', flexDirection: 'column', width: '100%', minHeight: '100vh', background: '#f8fafc', position: 'relative' }}>
 
-                {/* BARRA DE TOPO COM SANDUÍCHE E BOTÕES */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 15px', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 99, width: '100%', boxSizing: 'border-box' }}>
                     <button
                         type="button"
@@ -512,7 +525,6 @@ export default function CadastroProdutos() {
                     </div>
                 </div>
 
-                {/* LISTAGEM DE PRODUTOS */}
                 <div style={{ width: '100%', padding: '10px 10px 20px 10px', boxSizing: 'border-box', flex: 1 }}>
                     <ListaProdutos
                         produtos={produtos}
@@ -531,7 +543,6 @@ export default function CadastroProdutos() {
                         }}
                     />
 
-                    {/* PAGINAÇÃO MOBILE CENTRALIZADA */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: '1px solid #e2e8f0', marginTop: '20px', background: '#fff', borderRadius: '8px' }}>
                         <div style={{ width: '60px' }}></div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
@@ -553,7 +564,6 @@ export default function CadastroProdutos() {
                     </div>
                 </div>
 
-                {/* OVERLAY ESCURO */}
                 <div
                     onClick={() => { setIsOpenLeft(false); setIsOpenRight(false); }}
                     style={{
@@ -567,7 +577,6 @@ export default function CadastroProdutos() {
                     }}
                 />
 
-                {/* GAVETA ESQUERDA: MENU SANDUÍCHE (PLANO) */}
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '85%', maxWidth: '320px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out', transform: isOpenLeft ? 'translateX(0)' : 'translateX(-100%)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                         <h3 style={styles.sideTitle}>📊 Painel & Plano</h3>
@@ -586,8 +595,7 @@ export default function CadastroProdutos() {
                     </div>
                 </div>
 
-                {/* GAVETA DIREITA: FORMULÁRIO DE PRODUTO */}
-                <div style={{ position: 'fixed', top: 0, right: 0, width: '90%', maxWidth: '400px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '-5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out', transform: isOpenRight ? 'translateX(0)' : 'translateX(100%)' }}>
+                <div style={{ position: 'fixed', top: 0, right: 0, width: '90%', maxWidth: '300px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '-5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out', transform: isOpenRight ? 'translateX(0)' : 'translateX(100%)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                         <h3 style={styles.sideTitle}>{editId ? "📝 Editar Produto" : "📦 Novo Produto"}</h3>
                         <button type="button" onClick={() => setIsOpenRight(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}><FiX /></button>
@@ -604,6 +612,7 @@ export default function CadastroProdutos() {
                         descricao={descricao} setShowDescModal={setShowDescModal}
                         precoBasico={precoBasico} setPrecoBasico={setPrecoBasico}
                         custoUnitario={custoUnitario} setCustoUnitario={setCustoUnitario}
+                        estoque={estoque} setEstoque={setEstoque} // <--- Adicione esta linha
                         temVariaveisComPreco={temVariaveisComPreco}
                         setShowVarModal={setShowVarModal}
                         setShowReqModal={setShowReqModal}
@@ -633,7 +642,6 @@ export default function CadastroProdutos() {
                         ✖ Cancelar
                     </button>
                 </div>
-
             </div>
 
             {arquivoParaCortar && (

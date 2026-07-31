@@ -1,4 +1,4 @@
-
+// app/admin/produtos/_components/ListaProdutos.tsx
 "use client";
 
 import React from "react";
@@ -172,69 +172,122 @@ export default function ListaProdutos({
             </div>
 
             {/* Grid de Produtos */}
-            <div style={styles.productGrid}>
-                {produtosFiltrados.length === 0 ? (
-                    <p style={{ textAlign: 'center', color: '#64748b', gridColumn: '1 / -1', padding: '30px' }}>Nenhum produto encontrado.</p>
-                ) : (
-                    produtosFiltrados.map(p => {
-                        const lucro = calcularLucro(p.precoBasico, p.custoUnitario);
-                        return (
-                            <div key={p.id} style={{ ...styles.card, opacity: p.ativo ? 1 : 0.6 }}>
-                                {p.destaque && <span style={styles.starBadge}>⭐</span>}
-                                {modoMassa && (
-                                    <input
-                                        type="checkbox"
-                                        style={styles.cardCheck}
-                                        checked={selecionados.includes(p.id)}
-                                        onChange={e => e.target.checked ? setSelecionados([...selecionados, p.id]) : setSelecionados(selecionados.filter(id => id !== p.id))}
-                                    />
-                                )}
-                                <img src={p.capa} style={styles.cardImg} alt={p.nome} />
-                                <div style={styles.cardBody}>
-                                    <h4 style={styles.cardTitle}>{p.nome}</h4>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}>
-                                        <span style={styles.cardPrice}>R$ {p.precoBasico}</span>
-                                        {lucro && <span style={styles.markupTag}>+{lucro}%</span>}
+            <div>
+                {/* Regra responsiva embutida para forçar exatamente 4 colunas no mobile sem conflitos */}
+                <style dangerouslySetInnerHTML={{
+                    __html: `
+        @media (max-width: 768px) {
+            .product-grid-responsivo {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 4px !important;
+            }
+            .product-grid-responsivo > div {
+                height: 180px !important;
+                max-height: 180px !important;
+                padding: 3px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+            }
+            .product-grid-responsivo div[style*="width: 120px"] {
+                width: 100% !important;
+                height: 50px !important;
+                min-height: 50px !important;
+            }
+            .product-grid-responsivo h4 {
+                font-size: 8px !important;
+                height: 16px !important;
+                line-height: 8px !important;
+                overflow: hidden !important;
+            }
+            .product-grid-responsivo span {
+                font-size: 8px !important;
+            }
+            .product-grid-responsivo .markupTag {
+                font-size: 6px !important;
+                padding: 0 2px !important;
+            }
+            .product-grid-responsivo button {
+                padding: 1px !important;
+                font-size: 7px !important;
+                border-radius: 2px !important;
+                height: 13px !important;
+            }
+        }
+    `}} />
+
+                <div style={styles.productGrid} className="product-grid-responsivo">
+                    {produtosFiltrados.length === 0 ? (
+                        <p style={{ textAlign: 'center', color: '#64748b', gridColumn: '1 / -1', padding: '30px' }}>Nenhum produto encontrado.</p>
+                    ) : (
+                        produtosFiltrados.map(p => {
+                            const lucro = calcularLucro(p.precoBasico, p.custoUnitario);
+                            return (
+                                <div key={p.id} style={{ ...styles.card, opacity: p.ativo ? 1 : 0.6 }}>
+                                    {p.destaque && <span style={styles.starBadge}>⭐</span>}
+                                    {modoMassa && (
+                                        <input
+                                            type="checkbox"
+                                            style={styles.cardCheck}
+                                            checked={selecionados.includes(p.id)}
+                                            onChange={e => e.target.checked ? setSelecionados([...selecionados, p.id]) : setSelecionados(selecionados.filter(id => id !== p.id))}
+                                        />
+                                    )}
+
+                                    {/* QUADRO / MOLDURA DA FOTO (CORRIGIDO PARA CONTER PERFEITAMENTE) */}
+                                    <div style={styles.cardImgContainer}>
+                                        <img
+                                            src={p.capa || p.imagens?.[0] || ""}
+                                            style={styles.cardImg}
+                                            alt={p.nome}
+                                        />
                                     </div>
-                                    <div style={styles.cardActions}>
-                                        <button
-                                            type="button"
-                                            onClick={() => uid && updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { destaque: !p.destaque })}
-                                            style={styles.btnSlim}
-                                        >
-                                            {p.destaque ? "⭐ Destacado" : "☆ Destacar"}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => onEditar(p)}
-                                            style={styles.btnSlim}
-                                        >
-                                            ✏️ Editar
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => uid && updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: !p.ativo })}
-                                            style={styles.btnSlim}
-                                        >
-                                            {p.ativo ? "🚫 Ocultar" : "👁️ Mostrar"}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setListaParaImprimir([p])}
-                                            style={{ ...styles.btnSlim, background: '#f59e0b', color: '#fff', fontSize: '12px' }}
-                                        >
-                                            🖨️ Etiqueta
-                                        </button>
+
+                                    <div style={styles.cardBody}>
+                                        <h4 style={styles.cardTitle}>{p.nome}</h4>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: '4px' }}>
+                                            <span style={styles.cardPrice}>R$ {p.precoBasico || "0,00"}</span>
+                                            {lucro && <span style={styles.markupTag}>+{lucro}%</span>}
+                                        </div>
+
+                                        <div style={styles.cardActions}>
+                                            <button
+                                                type="button"
+                                                onClick={() => uid && updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { destaque: !p.destaque })}
+                                                style={styles.btnSlim}
+                                            >
+                                                {p.destaque ? "⭐ Destacado" : "☆ Destacar"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onEditar(p)}
+                                                style={styles.btnSlim}
+                                            >
+                                                ✏️ Editar
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => uid && updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: !p.ativo })}
+                                                style={styles.btnSlim}
+                                            >
+                                                {p.ativo ? "🚫 Ocultar" : "👁️ Mostrar"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setListaParaImprimir([p])}
+                                                style={{ ...styles.btnSlim, background: '#f59e0b', color: '#fff', fontWeight: 'bold' }}
+                                            >
+                                                🖨️ Etiqueta
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })
-                )}
+                            );
+                        })
+                    )}
+                </div>
             </div>
         </div>
     );
 }
-//Grid de listagem, filtros e ações em massa
-// contendo a barra de busca, filtros de categoria e status,
-// painel de ações em massa e a grade de exibição dos produtos:

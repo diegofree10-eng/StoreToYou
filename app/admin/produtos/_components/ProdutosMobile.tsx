@@ -26,7 +26,7 @@ interface ProdutosMobileProps {
   listaCategorias: any[];
   uid: string | null;
   setListaParaImprimir: (v: any[]) => void;
-  
+
   // Estados do formulário
   nome: string; setNome: (v: string) => void;
   sku: string; setSku: (v: string) => void;
@@ -37,6 +37,11 @@ interface ProdutosMobileProps {
   descricao: string; setShowDescModal: (v: boolean) => void;
   precoBasico: string; setPrecoBasico: (v: string) => void;
   custoUnitario: string; setCustoUnitario: (v: string) => void;
+
+  // ─── ADICIONE ESTAS DUAS LINHAS AQUI ───
+  estoque: string; setEstoque: (v: string) => void;
+  // ────────────────────────────────────────
+
   temVariaveisComPreco: boolean;
   setShowVarModal: (v: boolean) => void;
   setShowReqModal: (v: boolean) => void;
@@ -47,28 +52,28 @@ interface ProdutosMobileProps {
   uploading: boolean;
   setTipoCropAtual: (v: "principal" | "variacao") => void;
   setArquivoParaCortar: (file: File | null) => void;
-  
+
   envioTransportadora: boolean; setEnvioTransportadora: (v: boolean) => void;
   permiteRetirada: boolean; setPermiteRetirada: (v: boolean) => void;
   peso: string; setPeso: (v: string) => void;
   comprimento: string; setComprimento: (v: string) => void;
   largura: string; setLargura: (v: string) => void;
   altura: string; setAltura: (v: string) => void;
-  
+
   salvar: () => void;
   limparForm: () => void;
   loading: boolean;
   editId: string | null;
   planoLojista: string;
   limites: { produtos: number; categorias: number };
-  
+
   // Paginação
   paginaAtual: number;
   setPaginaAtual: React.Dispatch<React.SetStateAction<number>>;
   totalPaginas: number;
   itensPorPagina: number;
   setItensPorPagina: (v: number) => void;
-  
+
   onEditarProduto: (p: any) => void;
 }
 
@@ -78,7 +83,7 @@ export default function ProdutosMobile(props: ProdutosMobileProps) {
 
   return (
     <div style={{ width: '100%', minHeight: '100vh', position: 'relative', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: '#f8fafc' }}>
-      
+
       {/* BARRA SUPERIOR MOBILE COM BOTÃO HAMBÚRGUER (Main 1) */}
       <div style={styles.mobileTopBar}>
         <button type="button" onClick={() => setIsOpenLeft(true)} style={styles.btnMenu}>
@@ -158,7 +163,7 @@ export default function ProdutosMobile(props: ProdutosMobileProps) {
 
       {/* OVERLAY ESCURO COMPARTILHADO */}
       {(isOpenLeft || isOpenRight) && (
-        <div 
+        <div
           onClick={() => { setIsOpenLeft(false); setIsOpenRight(false); }}
           style={styles.overlay}
         />
@@ -226,6 +231,7 @@ export default function ProdutosMobile(props: ProdutosMobileProps) {
           descricao={props.descricao} setShowDescModal={props.setShowDescModal}
           precoBasico={props.precoBasico} setPrecoBasico={props.setPrecoBasico}
           custoUnitario={props.custoUnitario} setCustoUnitario={props.setCustoUnitario}
+          estoque={props.estoque} setEstoque={props.setEstoque}
           temVariaveisComPreco={props.temVariaveisComPreco}
           setShowVarModal={props.setShowVarModal}
           setShowReqModal={props.setShowReqModal}

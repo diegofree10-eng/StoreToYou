@@ -7,7 +7,7 @@ export const styles: { [key: string]: React.CSSProperties } = {
   // Container de 3 colunas para o PC
   pcContainer: { display: 'flex', flexDirection: 'row', width: '100vw', height: '100vh', overflow: 'hidden', boxSizing: 'border-box' },
   col1: { width: '260px', minWidth: '260px', maxWidth: '260px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh' },
-  col2: { width: '380px', minWidth: '380px', maxWidth: '380px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh' },
+  col2: { width: '300px', minWidth: '300px', maxWidth: '300px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh' },
   col3: { flex: 1, padding: '15px', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100vh', background: '#f8fafc' },
 
   // Estilos Mobile (Gavetas e TopBar)
@@ -16,7 +16,7 @@ export const styles: { [key: string]: React.CSSProperties } = {
   btnMenu: { background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#334155', display: 'flex', alignItems: 'center' },
   fabAdd: { position: 'fixed', bottom: '20px', right: '20px', width: '56px', height: '56px', borderRadius: '50%', background: '#10b981', color: '#fff', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', zIndex: 998, cursor: 'pointer' },
   drawerLeft: { position: 'fixed', top: 0, left: 0, width: '85%', maxWidth: '320px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out' },
-  drawerRight: { position: 'fixed', top: 0, right: 0, width: '90%', maxWidth: '400px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '-5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out' },
+  drawerRight: { position: 'fixed', top: 0, right: 0, width: '90%', maxWidth: '300px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '-5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1999 },
 
   // MODAL CORRIGIDO: CENTRALIZADO PERFEITAMENTE E RESPONSIVO
@@ -34,18 +34,67 @@ export const styles: { [key: string]: React.CSSProperties } = {
   btnGeneric: { padding: '10px 15px', borderRadius: '8px', border: '1px solid #e2e8f0', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', background: '#fff', boxSizing: 'border-box' },
   massPanel: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eff6ff', padding: '10px', borderRadius: '10px', border: '1px solid #3b82f6', marginBottom: '10px', boxSizing: 'border-box', flexWrap: 'wrap', gap: '8px' },
   btnMass: { padding: '6px 12px', background: '#fff', border: '1px solid #3b82f6', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' },
-  productGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' },
-  card: { background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', position: 'relative', overflow: 'hidden', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', height: 'auto', minHeight: '280px', paddingBottom: '5px' },
+  
   starBadge: { position: 'absolute', top: '5px', right: '5px', zIndex: 5, fontSize: '14px' },
   cardCheck: { position: 'absolute', top: '8px', left: '8px', zIndex: 10, width: '18px', height: '18px' },
-  cardImg: { width: '100%', height: '100px', minHeight: '100px', maxHeight: '100px', objectFit: 'contain', background: '#ffffff', padding: '4px', display: 'block', borderBottom: '1px solid #f1f5f9', boxSizing: 'border-box' },
-  cardBody: { padding: '8px', display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'flex-start', gap: '2px' },
-  cardTitle: { fontSize: '10px', fontWeight: 'bold', height: '24px', color: '#334155', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '12px', marginBottom: '4px' },
-  cardPrice: { fontSize: '13px', fontWeight: 'bold', color: '#10b981', marginTop: 'auto' },
+  
+  // Grade ajustada para 5 colunas por linha com base no novo desenho do card
+  productGrid: { 
+    display: 'grid', 
+    gridTemplateColumns: 'repeat(5, 1fr)', 
+    gap: '12px', 
+    width: '100%', 
+    boxSizing: 'border-box' 
+  },
+
+  // Card com altura fixa estrita e moldura arredondada idêntica ao modelo enviado
+  card: { 
+    background: '#fff', 
+    borderRadius: '12px', 
+    border: '1px solid #e2e8f0', 
+    position: 'relative', 
+    overflow: 'hidden', 
+    boxSizing: 'border-box', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    alignItems: 'center',
+    padding: '8px',
+    height: '320px' 
+  },
+
+  // Quadro dedicado em caixa delimitada para conter a foto perfeitamente
+  cardImgContainer: {
+    width: '120px',
+    height: '120px',
+    minHeight: '120px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    background: '#ffffff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    boxSizing: 'border-box',
+    marginBottom: '1px'
+  },
+
+  cardImg: { 
+    width: '100%', 
+    height: '100%', 
+    objectFit: 'contain', 
+    objectPosition: 'center', 
+    display: 'block' 
+  },
+  
+  cardBody: { padding: '4px 0', width: '100%', display: 'flex', flexDirection: 'column', gap: '2px' },
+  cardTitle: { fontSize: '11px', fontWeight: 'bold', height: '26px', color: '#334155', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '13px', marginBottom: '2px', textAlign: 'left' },
+  cardPrice: { fontSize: '13px', fontWeight: 'bold', color: '#10b981', textAlign: 'left' },
   markupTag: { fontSize: '9px', background: '#ecfdf5', color: '#059669', padding: '1px 4px', borderRadius: '4px', fontWeight: '800', alignSelf: 'flex-start' },
-  cardActions: { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: 'auto', padding: '0 8px 8px 8px' },
-  btnSlim: { padding: '4px', fontSize: '9px', fontWeight: 'bold', border: 'none', borderRadius: '3px', background: '#f1f5f9', cursor: 'pointer', textAlign: 'center' },
-  btnDelete: { padding: '4px', fontSize: '9px', fontWeight: 'bold', border: 'none', borderRadius: '3px', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', textAlign: 'center' },
+  
+  cardActions: { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: 'auto', width: '100%', paddingBottom: '2px' },
+  btnSlim: { padding: '5px', fontSize: '10px', fontWeight: 'bold', border: 'none', borderRadius: '4px', background: '#f1f5f9', cursor: 'pointer', textAlign: 'center', color: '#334155' },
+  btnDelete: { padding: '5px', fontSize: '10px', fontWeight: 'bold', border: 'none', borderRadius: '4px', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', textAlign: 'center' },
+  
   sideTitle: { fontSize: '15px', fontWeight: 'bold', marginBottom: '15px' },
   input: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '10px', fontSize: '13px', boxSizing: 'border-box' },
   textarea: { width: '100%', height: '80px', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '10px', fontSize: '13px', boxSizing: 'border-box', resize: 'none', overflow: 'hidden' },

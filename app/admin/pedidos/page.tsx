@@ -1,945 +1,629 @@
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
-import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import useSWR from 'swr';
+import React, { useState, useEffect, useMemo } from 'react';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useFrete } from "@/hooks/useFrete";
 import ModalProcessamento from './ModalProcessamento';
 
-// ============================================================================
-// TYPING / INTERFACES
-// ============================================================================
-interface ItemCarrinho {
-  id?: string;
-  qty?: number;
-  quantidade?: number;
-  nome?: string;
-  title?: string;
-  variacao?: string;
-  preco?: number;
-  precisaFrete?: boolean;
-  sku?: string; // Adicione esta linha
-  respostasFormatadas?: Record<string, any>;
-  personalizacao?: Record<string, any>;
-}
-interface EnderecoPedido { rua?: string; numero?: string; bairro?: string; cidade?: string; city?: string; uf?: string; cep?: string; }
-interface FinanceiroPedido {
-  metodo?: string;
-  dsTransportadoraId?: string; // Usado para o ID da transportadora
-  dsMetodoPagamento?: string;  // Adicionado para satisfazer a linha 461
-  freteGratis?: boolean;
-  isFreteGratis?: boolean;
+// Importação da tipagem centralizada unificada
+import { Pedido, ItemPedido, Financeiro, Logistica, Endereco, Cliente } from '@/types/pedido';
+
+// Importação de todas as abas correspondentes
+import TabTodosPedidos from './_tabsGestaoPedidos/TabTodosPedidos';
+import TabCotarFrete from './_tabsGestaoPedidos/TabCotarFrete';
+import TabEmitirEtiquetas from './_tabsGestaoPedidos/TabEmitirEtiquetas';
+import TabSeparacaoImpressao from './_tabsGestaoPedidos/TabSeparacaoImpressao';
+import TabProntoPedidos from './_tabsGestaoPedidos/TabProntoPedidos';
+import TabPedidosEnviados from './_tabsGestaoPedidos/TabPedidosEnviados';
+import TabPedidosConcluidos from './_tabsGestaoPedidos/TabPedidosConcluidos';
+import TabRetiradaLoja from './_tabsGestaoPedidos/TabRetiradaLoja';
+import TabDigital from './_tabsGestaoPedidos/TabDigital';
+
+export interface DadosLoja {
+    CEP?: string;
+    cep?: string;
+    cidade?: string;
 }
 
-interface Pedido {
-  id: string;
-  numeroPedido?: string | number;
-  numero?: string | number;
-  cliente: string | { nome?: string;[key: string]: any };
-  endereco?: EnderecoPedido;
-  itens: ItemCarrinho[];
-  financeiro?: FinanceiroPedido;
-  pago: boolean;
-  status: string;
-  etiquetaGerada?: boolean;
-  statusEtiqueta?: 'pendente' | 'paga' | 'erro' | null;
-  idEtiquetaMelhorEnvio?: string;
-  dsNumRastreio?: string;
-  urlEtiqueta?: string;
-  dataGeracaoEtiqueta?: string | null;
-  data?: string;
-  retirada?: boolean;
-  retirarNaLoja?: boolean;
-  formaEntrega?: string;
-  statusPagamento?: string;
-  erroPagamento?: string;
+export interface GestaoPedidosProps {
+    pedidos: Pedido[];
+    loading?: boolean;
+    lojistaIdApp: string;
+    db: any;
+    dadosLoja?: DadosLoja;
 }
-interface DadosLoja { CEP?: string; cep?: string; cidade?: string; }
-interface GestaoPedidosProps { pedidos: Pedido[]; loading?: boolean; lojistaIdApp: string; db: any; dadosLoja?: DadosLoja; obterCamposDoCliente?: (pedido: Pedido) => any; }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
-const getStatusColor = (status: string): string => {
-  switch (status) {
-    case 'Pendente': return '#f39c12';
-    case 'Em Produção': return '#3498db';
-    case 'Concluído': return '#2ecc71';
-    default: return '#95a5a6';
-  }
-};
-
-const ehElegivelParaFrete = (pedido: Pedido): boolean => {
-  if (!pedido || !pedido.itens) return false;
-  const todosSemFrete = pedido.itens.every(item => item.precisaFrete === false);
-  return !todosSemFrete;
-};
-
-const formatarData = (dataStr: string | undefined): string => {
-  if (!dataStr) return '-';
-  try {
-    const data = new Date(dataStr);
-    return data.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  } catch (e) { return dataStr; }
-};
-
-const extrairFotoDoItem = (item: any): string => {
-  const chavesPossiveis = ['foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
-  for (const chave of chavesPossiveis) {
-    if (item[chave] && typeof item[chave] === 'string' && item[chave].startsWith('http')) return item[chave];
-  }
-  if (item.variacaoSelecionada?.foto) return item.variacaoSelecionada.foto;
-  return "";
-};
-
-const itemCarrinhoEhDigital = (pedido: Pedido) => pedido.itens?.every(i => i.precisaFrete === false);
-const ehFretePagoNoCarrinho = (pedido: Pedido) => {
-  return pedido.financeiro?.metodo && !pedido.financeiro.metodo.startsWith("Logística:");
-};
-
-const fetchProduto = async (path: string, db: any) => {
-  const [_, lojistaId, __, idProd] = path.split('/');
-  const docRef = doc(db, "lojistas", lojistaId, "produtos", idProd);
-  const snap = await getDoc(docRef);
-  return snap.exists() ? snap.data() : null;
-};
-
-const LinhaItemProduto = React.memo(({ item, lojistaId, isRetirada, db }: any) => {
-  const idProd = item.idProduto || item.id;
-  const { data: produtoData } = useSWR(
-    idProd && lojistaId ? `lojistas/${lojistaId}/produtos/${idProd}` : null,
-    (key) => fetchProduto(key, db),
-    { revalidateOnFocus: false }
-  );
-
-  const respostas = item.respostasFormatadas || item.personalizacao || {};
-  const isDigital = item.precisaFrete === false;
-  const selo = isDigital ? { texto: "Digital", cor: "#3b82f6" } : (isRetirada ? { texto: "Retirada", cor: "#f59e0b" } : { texto: "Envio", cor: "#10b981" });
-
-  const fotoUrl = useMemo(() => {
-    const fotoDireta = extrairFotoDoItem(item);
-    if (fotoDireta) return fotoDireta;
-    if (produtoData) {
-      if (item.variacao && Array.isArray(produtoData.variacoes)) {
-        const match = produtoData.variacoes.find((v: any) => v.nome === item.variacao);
-        if (match?.foto) return match.foto;
-      }
-      return produtoData.capa || "";
-    }
-    return "";
-  }, [item, produtoData]);
-
-  return (
-    <div style={localStyles.itemCardWhiteBox}>
-      <div style={localStyles.imageContainer}>
-        {fotoUrl ? (
-          <img src={fotoUrl} alt={item.nome} style={localStyles.productImage as any} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-        ) : (
-          <div style={localStyles.productImagePlaceholder}>📦</div>
-        )}
-        <div style={localStyles.imageCrossBadge}>x</div>
-      </div>
-      <div style={localStyles.itemDetailsCol}>
-        <div style={localStyles.itemTitleRow}>
-          <span style={{ ...localStyles.badgeEnvioStyle, backgroundColor: selo.cor, color: '#fff' }}>{selo.texto}</span>
-          <span>{item.nome || item.title}</span>
-        </div>
-        <div style={localStyles.personalizacaoText}>
-          {Object.entries(respostas).map(([key, val]) => <div key={key}>{key}: <strong>{String(val)}</strong></div>)}
-          {Object.keys(respostas).length === 0 && item.variacao && <div>Variação: <strong>{item.variacao}</strong></div>}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// ============================================================================
-// COMPONENTE PRINCIPAL
-// ============================================================================
 export default function GestaoPedidos({
-  pedidos = [], loading = false, lojistaIdApp, db, dadosLoja
+    pedidos = [], loading = false, lojistaIdApp, db, dadosLoja
 }: GestaoPedidosProps) {
 
-  const [modalProgresso, setModalProgresso] = useState<{
-    aberto: boolean;
-    titulo: string;
-    itens: { id: string; numero: string; status: 'processando' | 'sucesso' | 'erro'; mensagem?: string }[];
-  }>({ aberto: false, titulo: "", itens: [] });
+    const [abaAtiva, setAbaAtiva] = useState<string>('pedidos');
 
-  const [localPedidos, setLocalPedidos] = useState<Pedido[]>(pedidos);
-  useEffect(() => { setLocalPedidos(pedidos); }, [pedidos]);
+    const [selecionados, setSelecionados] = useState<string[]>([]);
+    const [busca, setBusca] = useState("");
+    const [filtroLogistica, setFiltroLogistica] = useState("todos");
+    const [ordenacao, setOrdenacao] = useState("recentes");
+    const [processandoMassaStatus, setProcessandoMassaStatus] = useState(false);
 
-  const temPedidosPendentes = useMemo(() => {
-    return localPedidos.some(p => p.etiquetaGerada === true && p.statusEtiqueta === 'pendente');
-  }, [localPedidos]);
+    const [modalProgresso, setModalProgresso] = useState<{
+        aberto: boolean;
+        titulo: string;
+        itens: { id: string; numero: string; status: 'processando' | 'sucesso' | 'erro'; mensagem?: string }[];
+    }>({ aberto: false, titulo: "", itens: [] });
 
-  const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("Todos");
-  const [filtroLogistica, setFiltroLogistica] = useState("todos");
-  const [ordenacao, setOrdenacao] = useState("recentes");
-  const [selecionados, setSelecionados] = useState<string[]>([]);
-  const [processandoMassa, setProcessandoMassa] = useState(false);
-  const [pedidoSelecionadoParaFrete, setPedidoSelecionadoParaFrete] = useState<Pedido | null>(null);
-  const [opcoesFreteCotadas, setOpcoesFreteCotadas] = useState<any[]>([]);
-  const [pedidoParaDeletar, setPedidoParaDeletar] = useState<Pedido | null>(null);
-  const [confirmacaoTexto, setConfirmacaoTexto] = useState("");
-  const [erroFrete, setErroFrete] = useState<string | null>(null);
-  const [paginaAtual, setPaginaAtual] = useState(1);
-  const itensPorPagina = 30;
+    const [localPedidos, setLocalPedidos] = useState<Pedido[]>(pedidos);
+    useEffect(() => { setLocalPedidos(pedidos); }, [pedidos]);
 
-  const { cotarFrete, loadingFrete: loadingFreteAdmin } = useFrete(lojistaIdApp, dadosLoja);
+    const [pedidoParaDeletar, setPedidoParaDeletar] = useState<Pedido | null>(null);
+    const [confirmacaoTexto, setConfirmacaoTexto] = useState("");
 
-  const pedidosFiltrados = useMemo(() => {
-    return localPedidos.filter(p => {
-      if (!p) return false;
-      const termo = busca.toLowerCase().trim();
-      const numPedidoStr = p.numeroPedido !== undefined && p.numeroPedido !== null ? String(p.numeroPedido) : (p.numero !== undefined && p.numero !== null ? String(p.numero) : "");
-      const itemsStr = (p.itens || []).map(i => i.nome || i.title || "").join(" ").toLowerCase();
-      let clienteNome = typeof p.cliente === 'object' ? String(p.cliente.nome || "").toLowerCase() : String(p.cliente || "").toLowerCase();
+    const [textoDigitadoMassa, setTextoDigitadoMassa] = useState("");
+    const [modalExclusaoMassaAberto, setModalExclusaoMassaAberto] = useState(false);
 
-      const matchBusca = termo === "" || numPedidoStr.includes(termo) || clienteNome.includes(termo) || itemsStr.includes(termo);
-      const matchStatus = filtroStatus === "Todos"
-        ? true
-        : (p.status === filtroStatus && p.pago === true);
+    const { cotarFrete } = useFrete(lojistaIdApp, dadosLoja);
 
-      // Identificadores de Lógica
-      const methodStr = String(p.financeiro?.metodo || '').trim().toLowerCase();
-      const formaEntregaStr = String(p.formaEntrega || '').trim().toLowerCase();
-      const ehRetirada = p.retirada === true || p.retirarNaLoja === true || formaEntregaStr === 'retirada' || formaEntregaStr === 'retirar na loja';
-      const ehSemFrete = Array.isArray(p.itens) && p.itens.length > 0 ? p.itens.every(item => item.precisaFrete === true) : false;
-      const ehFreteGratisPedido = methodStr.includes("grátis") || methodStr.includes("gratis") || p.financeiro?.freteGratis === true;
+    // FILTRAGEM UNIFICADA ESTABELECIDA ESTRITAMENTE PARA A ABA ATIVA
+    const pedidosFiltradosGlobais = useMemo(() => {
+        return localPedidos.filter(p => {
+            if (!p) return false;
 
-      // Filtros de Logística (agora mais flexíveis)
-      if (filtroLogistica === "pendentes") {
-        // Pega tudo que é etiqueta pendente, independente do resto
-        return matchBusca && matchStatus && p.etiquetaGerada && p.statusEtiqueta === 'pendente';
-      }
-      if (filtroLogistica === "freteGratis") {
-        // Mostra Frete Grátis sempre
+            const statusGeral = String(p.status || '').trim().toLowerCase();
+            const statusProdAtual = (p.statusProducao || '').toLowerCase();
 
-        return matchBusca && matchStatus && p.financeiro?.freteGratis === true;
-      }
-      if (filtroLogistica === "semFrete") {
-        // Mostra apenas os digitais
-        return matchBusca && matchStatus && ehSemFrete;
-      }
-      if (filtroLogistica === "retirada") {
-        // Mostra apenas retirada
-        return matchBusca && matchStatus && ehRetirada;
-      }
+            // Regras exclusivas por aba
+            if (abaAtiva === 'concluidos') {
+                if (statusGeral !== 'concluído' && statusGeral !== 'concluido') return false;
+            } else {
+                if (statusGeral === 'concluído' || statusGeral === 'concluido') return false;
+            }
 
-      return matchBusca && matchStatus;
-    }).sort((a, b) => {
-      const d1 = new Date(a.data || (a.cliente as any)?.data || 0).getTime();
-      const d2 = new Date(b.data || (b.cliente as any)?.data || 0).getTime();
-      return ordenacao === "recentes" ? d2 - d1 : d1 - d2;
-    });
-  }, [localPedidos, busca, filtroStatus, filtroLogistica, ordenacao]);
-  useEffect(() => { setPaginaAtual(1); }, [pedidosFiltrados]);
+            if (abaAtiva === 'pedidos') {
+                if (p.pago || statusProdAtual === 'pronto') return false;
+            } else if (abaAtiva === 'pendente') {
+                if (!(statusProdAtual === 'pendente' && p.pago)) return false;
+            } else if (abaAtiva === 'producao') {
+                if (!(statusProdAtual === 'produção' && p.pago)) return false;
+            } else if (abaAtiva === 'pronto') {
+                if (!(statusProdAtual === 'pronto' && p.pago)) return false;
+            } else if (abaAtiva === 'cotar') {
+                if (p.etiquetaGerada || statusGeral === 'concluído' || statusGeral === 'concluido') return false;
+                if (statusProdAtual !== 'pronto') return false;
+                const itens = Array.isArray(p.itens) ? p.itens : [];
+                const temItemFisico = itens.some((item: any) => item.precisaFrete !== false);
+                if (!temItemFisico) return false;
 
-  const pedidosPaginados = useMemo(() => {
-    const inicio = (paginaAtual - 1) * itensPorPagina;
-    return pedidosFiltrados.slice(inicio, inicio + itensPorPagina);
-  }, [pedidosFiltrados, paginaAtual]);
+                const transpFinanceiro = String(p.financeiro?.dsTransportadoraId || "").trim();
+                const transpLogistica = String((p as any).logistica?.dsTransportadoraId || "").trim();
+                const transpCotacao = String((p as any).Cotacao?.dsTransportadoraIdCotado || "").trim();
+                const temTransportadoraReal =
+                    (transpFinanceiro !== "" && transpFinanceiro !== "null" && transpFinanceiro !== "undefined" && transpFinanceiro !== "0" && transpFinanceiro !== "frete_gratis_ativado") ||
+                    (transpLogistica !== "" && transpLogistica !== "null" && transpLogistica !== "undefined" && transpLogistica !== "0" && transpLogistica !== "frete_gratis_ativado") ||
+                    (transpCotacao !== "" && transpCotacao !== "null" && transpCotacao !== "undefined" && transpCotacao !== "0" && transpCotacao !== "frete_gratis_ativado");
+                if (temTransportadoraReal) return false;
+            } else if (abaAtiva === 'etiquetas') {
+                // FILTRO DA ABA ETIQUETAS
+                if (p.status === 'Concluído' || p.status === 'enviado' || (p as any).enviado === true) return false;
 
-  const totalPaginas = Math.ceil(pedidosFiltrados.length / itensPorPagina);
+                const transpFinanceiro = String(p.financeiro?.dsTransportadoraId || "").trim();
+                const transpLogistica = String((p as any).logistica?.dsTransportadoraId || "").trim();
+                const transpCotacao = String((p as any).Cotacao?.dsTransportadoraIdCotado || "").trim();
 
-  const qtdAptosParaEtiqueta = useMemo(() => {
-    // Olhamos apenas para os pedidos visíveis na página atual (pedidosPaginados)
-    return pedidosPaginados.filter(p => {
-      // 1. O pedido deve estar selecionado (checkbox)
-      const estaSelecionado = selecionados.includes(p.id);
+                if (transpFinanceiro === "frete_gratis_ativado" || transpLogistica === "frete_gratis_ativado" || transpCotacao === "frete_gratis_ativado") {
+                    return false;
+                }
 
-      // 2. Deve ter uma transportadora válida definida (dsTransportadoraId preenchido)
-      // E não pode ser o estado de Frete Grátis "padrão" (se este não for cotável)
-      const idTransporte = String(p.financeiro?.dsTransportadoraId || "");
-      const isCotado = idTransporte.length > 0 && idTransporte !== "frete_gratis_ativado";
+                const temTransportadoraId =
+                    (transpFinanceiro !== "" && transpFinanceiro !== "null" && transpFinanceiro !== "undefined" && transpFinanceiro !== "0") ||
+                    (transpLogistica !== "" && transpLogistica !== "null" && transpLogistica !== "undefined" && transpLogistica !== "0") ||
+                    (transpCotacao !== "" && transpCotacao !== "null" && transpCotacao !== "undefined" && transpCotacao !== "0");
 
-      // 3. NÃO deve ter etiqueta já gerada
-      const semEtiqueta = !p.etiquetaGerada;
+                if (!temTransportadoraId) return false;
+            } else if (abaAtiva === 'enviados') {
+                if (p.status !== 'enviado' && !(p as any).enviado) return false;
+            }
 
-      // 4. Status válido (opcional, conforme sua regra de negócio)
-      const statusValido = p.status !== 'Concluído';
+            // Filtros globais de busca e logística
+            const termo = busca.toLowerCase().trim();
+            const numPedidoStr = p.numeroPedido !== undefined && p.numeroPedido !== null ? String(p.numeroPedido) : (p.numero !== undefined && p.numero !== null ? String(p.numero) : "");
+            const itemsStr = (p.itens || []).map(i => i.nome || i.title || "").join(" ").toLowerCase();
+            let clienteNome = typeof p.cliente === 'object' ? String(p.cliente.nome || "").toLowerCase() : String(p.cliente || "").toLowerCase();
 
-      return estaSelecionado && isCotado && semEtiqueta && statusValido;
-    }).length;
-  }, [pedidosPaginados, selecionados]); // Dependência em pedidosPaginados garante o foco na página atual
+            const matchBusca = termo === "" || numPedidoStr.includes(termo) || clienteNome.includes(termo) || itemsStr.includes(termo);
 
-  const toggleSelectAll = () => {
-    const idsPaginaAtual = pedidosPaginados.map(p => p.id);
-    const todosSelecionadosNaPagina = idsPaginaAtual.every(id => selecionados.includes(id));
-    if (todosSelecionadosNaPagina) {
-      setSelecionados(prev => prev.filter(id => !idsPaginaAtual.includes(id)));
-    } else {
-      setSelecionados(prev => [...new Set([...prev, ...idsPaginaAtual])]);
-    }
-  };
+            const formaEntregaStr = String(p.logistica?.dsFormaEntrega || p.formaEntrega || '').trim().toLowerCase();
+            const ehRetirada = p.logistica?.isRetirada === true || p.retirada === true || p.retirarNaLoja === true || formaEntregaStr === 'retirada';
+            const ehSemFrete = Array.isArray(p.itens) && p.itens.length > 0 ? p.itens.every(item => item.precisaFrete === true) : false;
 
-  const mudarStatusDireto = async (pedido: Pedido, novoStatus: string) => {
-    // 1. Bloqueio padrão se já estiver concluído
-    if (pedido.status === 'Concluído') return;
+            if (filtroLogistica === "pendentes") return matchBusca && p.etiquetaGerada && p.statusEtiqueta === 'pendente';
+            if (filtroLogistica === "freteGratis") return matchBusca && (p.logistica?.isFreteGratis || p.financeiro?.freteGratis) === true;
+            if (filtroLogistica === "semFrete") return matchBusca && ehSemFrete;
+            if (filtroLogistica === "retirada") return matchBusca && ehRetirada;
 
-    // 2. Trava de Segurança: Verifica se o usuário está tentando concluir
-    if (novoStatus === 'Concluído') {
-
-      // NOVA TRAVA: Exige que o pedido esteja marcado como PAGO
-      if (pedido.pago !== true) {
-        alert("❌ Ação bloqueada: Este pedido ainda não foi PAGO!");
-        return;
-      }
-
-      const formaEntregaStr = String(pedido.formaEntrega || '').trim().toLowerCase();
-      const isRetirada = pedido.retirada === true || pedido.retirarNaLoja === true || formaEntregaStr === 'retirada' || formaEntregaStr === 'retirar na loja';
-      const isDigital = itemCarrinhoEhDigital(pedido);
-
-      // Regra de Logística: 
-      // Se NÃO for retirada e NÃO for digital...
-      if (!isRetirada && !isDigital) {
-        // Exige que a etiqueta tenha sido gerada E que o status seja 'paga'
-        if (!pedido.etiquetaGerada || pedido.statusEtiqueta !== 'paga') {
-          alert("❌ Ação bloqueada: O pedido só pode ser concluído se a etiqueta de frete estiver paga!");
-          return;
-        }
-      }
-
-      // Pergunta de confirmação apenas se passou por TODAS as travas
-      if (!confirm("⚠️ Confirmar finalização? O pedido será marcado como pago e concluído.")) return;
-    }
-
-    // Se passou pelas travas, atualiza no Firebase
-    setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: novoStatus } : p));
-    if (db) try {
-      await updateDoc(doc(db, "lojistas", lojistaIdApp, "pedidos", pedido.id), { status: novoStatus });
-    } catch (error) {
-      alert("Erro ao atualizar status no banco de dados.");
-    }
-  };
-  const alternarPago = async (pedido: Pedido) => {
-    if (pedido.status === 'Concluído') return;
-    const novoPago = !pedido.pago;
-    setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, pago: novoPago } : p));
-    if (db) try { await updateDoc(doc(db, "lojistas", lojistaIdApp, "pedidos", pedido.id), { pago: novoPago }); } catch (e) { }
-  };
-
-  const abrirJanelaCotacao = async (pedido: Pedido) => {
-    if (pedido.status === 'Concluído') return;
-    setPedidoSelecionadoParaFrete(pedido);
-    setErroFrete(null);
-    const opcoes = await cotarFrete(pedido);
-    if (!opcoes || opcoes.length === 0) setErroFrete("Nenhuma transportadora encontrada.");
-    setOpcoesFreteCotadas(opcoes);
-  };
-
-  const selecionarEtiquetaMaisBarata = async (opcaoFrete: any) => {
-    if (!db || !pedidoSelecionadoParaFrete || !lojistaIdApp) return;
-
-    try {
-      const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoSelecionadoParaFrete.id);
-      const novoMetodo = `Logística: ${opcaoFrete.name}`;
-
-      // 1. Atualiza Firebase
-      await updateDoc(pedidoRef, {
-        "financeiro.metodo": novoMetodo,
-        "financeiro.dsTransportadoraId": String(opcaoFrete.id)
-      });
-
-      // 2. Atualiza ESTADO LOCAL com o nome correto do campo
-      setLocalPedidos(prev => prev.map(p => p.id === pedidoSelecionadoParaFrete.id ? {
-        ...p,
-        financeiro: {
-          ...p.financeiro,
-          metodo: novoMetodo,
-          dsTransportadoraId: String(opcaoFrete.id) // <--- O nome que o card espera
-        }
-      } : p));
-
-      setPedidoSelecionadoParaFrete(null);
-    } catch (e: any) {
-      alert("Erro ao selecionar: " + e.message);
-    }
-  };
-
-  const resetarEtiqueta = async (pedido: Pedido) => {
-    if (!confirm("⚠️ Resetar etiqueta? Isso permitirá cotar novamente.")) return;
-    try {
-      const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedido.id);
-
-      // Identifica se é frete grátis da campanha original
-      const isOriginalmenteFreteGratis = pedido.financeiro?.dsTransportadoraId === "frete_gratis_ativado" || pedido.financeiro?.freteGratis;
-
-      await updateDoc(pedidoRef, {
-        etiquetaGerada: false,
-        statusEtiqueta: null,
-        urlEtiqueta: null,
-        "financeiro.dsTransportadoraId": isOriginalmenteFreteGratis ? "frete_gratis_ativado" : null,
-        "financeiro.metodo": null
-      });
-      // 2. Atualiza o estado local para forçar a renderização imediata
-      setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? {
-        ...p,
-        etiquetaGerada: false,
-        statusEtiqueta: undefined,
-        financeiro: {
-          ...p.financeiro,
-          dstransportadoraId: p.financeiro?.freteGratis ? "frete_gratis_ativado" : undefined,
-          metodo: undefined
-        }
-      } : p));
-
-      alert("✅ Etiqueta resetada!");
-    } catch (e: any) {
-      alert("Erro ao resetar: " + e.message);
-    }
-  };
-
-  const resetarStatusErro = (pedido: Pedido) => {
-    setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? {
-      ...p,
-      statusPagamento: undefined,
-      erroPagamento: undefined
-    } : p));
-  };
-
-  const tentarPagamento = async (pedido: Pedido) => {
-    try {
-      const res = await fetch("/api/frete/tentar-pagamento", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        // CORREÇÃO AQUI ABAIXO:
-        body: JSON.stringify({
-          lojistaId: lojistaIdApp,
-          pedidoId: pedido.id,
-          transportadoraId: pedido.financeiro?.dsTransportadoraId // Alterado de .transportadoraId para .dsTransportadoraId
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("✅ Pagamento processado!");
-        window.location.reload();
-      } else {
-        alert("⚠️ Falha ao pagar.");
-      }
-    } catch (e) {
-      alert("Erro de comunicação.");
-    }
-  };
-
-  const gerarEtiquetasEmMassa = async () => {
-    // 1. Filtrar baseando-se no que está visível na tela e selecionado
-    const pedidosParaGerar = pedidosPaginados.filter(p => {
-      const estaSelecionado = selecionados.includes(p.id);
-
-      // Verifica se tem transportadora (seja string ou número)
-      const idTransporte = String(p.financeiro?.dsTransportadoraId || "");
-      const temTransportadora = idTransporte.length > 0 && idTransporte !== "frete_gratis_ativado";
-
-      const jaGerada = p.etiquetaGerada === true;
-      const concluido = p.status === 'Concluído';
-
-      return estaSelecionado && temTransportadora && !jaGerada && !concluido;
-    });
-
-    if (pedidosParaGerar.length === 0) {
-      alert("⚠️ Nenhum pedido apto para geração selecionado nesta página.");
-      return;
-    }
-
-    setModalProgresso({
-      aberto: true,
-      titulo: "Gerando etiquetas...",
-      itens: pedidosParaGerar.map(p => ({
-        id: p.id,
-        numero: String(p.numeroPedido || p.numero || p.id.slice(-4)),
-        status: 'processando'
-      }))
-    });
-
-    setProcessandoMassa(true);
-
-    for (const pedido of pedidosParaGerar) {
-      try {
-        const res = await fetch("/api/frete/gerar-massa", {
-          method: "POST",
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lojistaId: lojistaIdApp, orders: [pedido] })
+            return matchBusca;
+        }).sort((a, b) => {
+            const d1 = new Date(a.data || (a.cliente as any)?.data || 0).getTime();
+            const d2 = new Date(b.data || (b.cliente as any)?.data || 0).getTime();
+            return ordenacao === "recentes" ? d2 - d1 : d1 - d2;
         });
+    }, [localPedidos, busca, filtroLogistica, ordenacao, abaAtiva]);
 
-        const data = await res.json();
-        const sucesso = data.success;
+    // IDs visíveis estritamente na aba ativa aberta
+    const idsVisiveisDaAba = useMemo(() => pedidosFiltradosGlobais.map(p => p.id), [pedidosFiltradosGlobais]);
 
-        setModalProgresso(prev => ({
-          ...prev,
-          itens: prev.itens.map(i => i.id === pedido.id ? {
-            ...i,
-            status: sucesso ? 'sucesso' : 'erro',
-            mensagem: sucesso ? "" : (data.errors?.[0]?.message || data.error || "Erro na geração")
-          } : i)
-        }));
+    // Contagem restrita aos itens selecionados que pertencem à aba aberta atual
+    const selecionadosNestaAbaCount = useMemo(() => {
+        return (selecionados || []).filter(id => idsVisiveisDaAba.includes(id)).length;
+    }, [selecionados, idsVisiveisDaAba]);
 
-        if (sucesso) {
-          // Atualiza localmente o status do pedido para 'paga' ou 'pendente'
-          setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? {
-            ...p,
-            etiquetaGerada: true,
-            statusEtiqueta: 'paga'
-          } : p));
+    const alterarStatusMassa = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const valorAcao = e.target.value;
+        if (!valorAcao) return;
 
-        } else {
-          // AQUI: Atualiza o estado para exibir o card de erro na tela
-          setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? {
-            ...p,
-            etiquetaGerada: false,
-            statusPagamento: 'erro', // Isso ativa o card vermelho
-            erroPagamento: data.errors?.[0]?.message || data.message || "Erro no checkout"
-          } : p));
+        const selecionadosAtuais = selecionados || [];
+        if (selecionadosAtuais.length === 0) {
+            alert("Selecione ao menos um pedido.");
+            e.target.value = "";
+            return;
         }
 
-      } catch (err) {
-        setModalProgresso(prev => ({
-          ...prev,
-          itens: prev.itens.map(i => i.id === pedido.id ? {
-            ...i,
-            status: 'erro',
-            // Usamos false, pois se caiu no catch, houve erro na requisição
-            mensagem: "Erro de rede ou falha na API"
-          } : i)
-        }));
-      }
-    }
-    setProcessandoMassa(false);
-    setSelecionados([]); // Limpa a seleção após o processamento
-  };
+        setProcessandoMassaStatus(true);
+        try {
+            if (valorAcao === 'pago' || valorAcao === 'nao_pago') {
+                const novoPago = valorAcao === 'pago';
+                const novoStatusProd = novoPago ? 'pendente' : (localPedidos.find(p => selecionadosAtuais.includes(p.id))?.statusProducao || 'pendente');
 
-  // 2. PAGAMENTO PENDENTES (Mantido e estável)
-  const pagarPendentes = async () => {
-    const pedidosPendentes = localPedidos.filter(p => p.etiquetaGerada && p.statusEtiqueta === 'pendente');
-    if (pedidosPendentes.length === 0) return;
+                for (const pedidoId of selecionadosAtuais) {
+                    const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
+                    await updateDoc(pedidoRef, {
+                        pago: novoPago,
+                        statusProducao: novoPago ? 'pendente' : novoStatusProd
+                    });
+                }
+                setLocalPedidos(prev => prev.map(p => selecionadosAtuais.includes(p.id) ? { ...p, pago: novoPago, statusProducao: novoPago ? 'pendente' : p.statusProducao } : p));
+                setSelecionados([]);
+                alert(`✅ ${selecionadosAtuais.length} pedido(s) atualizado(s) para ${novoPago ? 'PAGO (Movido para Pendente)' : 'NÃO PAGO'}!`);
+                if (novoPago) setAbaAtiva('pendente');
+            } else {
+                const pedidosInvalidos = localPedidos.filter(p => selecionadosAtuais.includes(p.id) && !p.pago);
+                if (pedidosInvalidos.length > 0) {
+                    alert("❌ Ação bloqueada: Esta ação não pode ser feita porque o pedido não foi pago.");
+                    e.target.value = "";
+                    return;
+                }
 
-    if (!confirm(`⚠️ Você tem ${pedidosPendentes.length} etiquetas pendentes de pagamento. Deseja continuar?`)) return;
+                if (!confirm(`Deseja alterar o status de produção de ${selecionadosAtuais.length} pedido(s) para "${valorAcao.toUpperCase()}"?`)) {
+                    e.target.value = "";
+                    return;
+                }
 
-    setModalProgresso({
-      aberto: true,
-      titulo: "Pagando Etiquetas...",
-      itens: pedidosPendentes.map(p => ({
-        id: p.id,
-        numero: String(p.numeroPedido || p.id.slice(-4)),
-        status: 'processando'
-      }))
-    });
+                for (const pedidoId of selecionadosAtuais) {
+                    const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
+                    await updateDoc(pedidoRef, { statusProducao: valorAcao });
+                }
 
-    for (const pedido of pedidosPendentes) {
-      try {
-        const res = await fetch("/api/frete/tentar-pagamento", {
-          method: "POST",
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lojistaId: lojistaIdApp, pedidoId: pedido.id })
-        });
-        const data = await res.json();
+                setLocalPedidos(prev => prev.map(p => selecionadosAtuais.includes(p.id) ? { ...p, statusProducao: valorAcao as any } : p));
 
-        setModalProgresso(prev => ({
-          ...prev,
-          itens: prev.itens.map(i => i.id === pedido.id ? {
-            ...i,
-            status: data.success ? 'sucesso' : 'erro',
-            mensagem: data.success ? "" : (data.message || "Falha no pagamento")
-          } : i)
-        }));
-      } catch (e) {
-        setModalProgresso(prev => ({
-          ...prev,
-          itens: prev.itens.map(i => i.id === pedido.id ? { ...i, status: 'erro', mensagem: "Erro de comunicação" } : i)
-        }));
-      }
-    }
-  };
+                if (valorAcao === 'pronto') {
+                    const primeiroSelecionado = localPedidos.find(p => p.id === selecionadosAtuais[0]);
+                    if (primeiroSelecionado) {
+                        const pedidoLogistica = (primeiroSelecionado as any).logistica || {};
+                        const forma = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
+                        const isRetirada = pedidoLogistica.isRetirada === true || forma === 'retirada' || primeiroSelecionado.retirada || primeiroSelecionado.retirarNaLoja;
+                        const isDigital = forma === 'digital' || primeiroSelecionado.itens?.some((i: any) => i.precisaFrete === false);
+                        const temTransportadoraID = pedidoLogistica.dsTransportadoraId || primeiroSelecionado.financeiro?.dsTransportadoraId;
 
-  const dispararSegurancaDeletar = (pedido: Pedido) => { setPedidoParaDeletar(pedido); setConfirmacaoTexto(""); };
+                        if (isRetirada) {
+                            setAbaAtiva('retirada');
+                        } else if (isDigital) {
+                            setAbaAtiva('digital');
+                        } else if (temTransportadoraID) {
+                            setAbaAtiva('etiquetas');
+                        } else {
+                            setAbaAtiva('cotar');
+                        }
+                    }
+                }
 
-  const ejecutarExclusaoPermanente = async () => {
-    if (!db || !lojistaIdApp || !pedidoParaDeletar) return;
-    const identificador = pedidoParaDeletar.numeroPedido ? String(pedidoParaDeletar.numeroPedido) : pedidoParaDeletar.id.slice(-4);
-    if (confirmacaoTexto !== identificador) return alert("Incorreto.");
-    if (!confirm("⚠️ ATENÇÃO: Ação IRREVERSÍVEL.")) return;
-    try {
-      await deleteDoc(doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoParaDeletar.id));
-      setLocalPedidos(prev => prev.filter(p => p.id !== pedidoParaDeletar.id));
-      setPedidoParaDeletar(null);
-      alert("💥 Pedido excluído!");
-    } catch (error) { }
-  };
+                setSelecionados([]);
+                alert("✅ Status de produção atualizados com sucesso!");
+            }
+        } catch (e: any) {
+            alert("Erro ao atualizar em massa: " + e.message);
+        } finally {
+            setProcessandoMassaStatus(false);
+            e.target.value = "";
+        }
+    };
 
-  // 1. Modelo para Separação (Sua lista antiga adaptada)
-  const imprimirListaSeparacao = () => {
-    if (selecionados.length === 0) {
-      return alert("⚠️ Nenhum pedido selecionado! Marque os pedidos na lista.");
-    }
+    const executarExclusaoPermanente = async () => {
+        if (!db || !lojistaIdApp || !pedidoParaDeletar) return;
+        const identificador = pedidoParaDeletar.numeroPedido ? String(pedidoParaDeletar.numeroPedido) : pedidoParaDeletar.id.slice(-4);
+        if (confirmacaoTexto !== identificador) return alert("Incorreto.");
+        if (!confirm("⚠️ ATENÇÃO: Ação IRREVERSÍVEL.")) return;
+        try {
+            await deleteDoc(doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoParaDeletar.id));
+            setLocalPedidos(prev => prev.filter(p => p.id !== pedidoParaDeletar.id));
+            setPedidoParaDeletar(null);
+            alert("💥 Pedido excluído!");
+        } catch (error) { }
+    };
 
-    const pToPrint = localPedidos.filter(p => selecionados.includes(p.id));
+    return (
+        <div style={styles.contentArea}>
+            <div style={styles.headerFixoContainer}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h2 style={{ fontSize: '20px', color: '#1e293b', margin: 0, fontWeight: 800 }}>📋 Gestão de Pedidos</h2>
 
-    const win = window.open("", "_blank", "width=800,height=900");
-    if (win) {
-      const lines = pToPrint.map(p => {
-        const clienteNome = typeof p.cliente === 'object' ? p.cliente.nome : p.cliente;
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
 
-        return `
-        <tr style="border-bottom: 1px solid #000;">
-          <td style="padding: 4px; font-size: 12px; font-weight: bold; vertical-align: top;">#${p.numeroPedido || p.numero || p.id.slice(-4)}</td>
-          <td style="padding: 4px; font-size: 12px; vertical-align: top;">${clienteNome}</td>
-          <td style="padding: 4px; font-size: 12px; vertical-align: top;">
-            ${p.itens.map(i => `
-              <div style="margin-bottom: 6px; border-bottom: 1px dotted #ccc; padding-bottom: 2px;">
-                <strong>${i.nome || i.title}</strong> (${i.quantidade || i.qty || 1}x)<br>
-                <small style="color: #000; font-weight: bold;">SKU: ${i.sku || 'N/A'}</small>
-                ${i.variacao ? `<br><small style="color: #444;">Var: ${i.variacao}</small>` : ''}
-                ${i.respostasFormatadas ? `<br><small style="color: #444;">${Object.entries(i.respostasFormatadas).map(([k, v]) => `${k}: ${v}`).join(', ')}</small>` : ''}
-              </div>
-            `).join('')}
-          </td>
-        </tr>
-      `;
-      }).join('');
-
-      win.document.write(`
-      <html>
-        <head>
-          <style>
-            body { font-family: sans-serif; margin: 5mm; }
-            table { width: 100%; border-collapse: collapse; }
-            th { border-bottom: 2px solid #000; padding: 4px; font-size: 12px; text-align: left; }
-          </style>
-        </head>
-        <body>
-          <h3 style="margin: 0 0 10px 0; font-size: 16px;">Lista de Separação (${pToPrint.length} pedidos)</h3>
-          <table>
-            <thead>
-              <tr><th>Pedido</th><th>Cliente</th><th>Produto / SKU / Detalhes</th></tr>
-            </thead>
-            <tbody>${lines}</tbody>
-          </table>
-          <script>
-            window.onload = () => { window.print(); window.onafterprint = () => window.close(); };
-          </script>
-        </body>
-      </html>
-    `);
-      win.document.close();
-    }
-  };
-
-  // 2. Modelo para Etiquetas A6 (4 por folha A4)
-  const imprimirEtiquetas = () => {
-    // Filtra apenas os que possuem etiqueta gerada
-    const pToPrint = selecionados.length > 0
-      ? localPedidos.filter(p => selecionados.includes(p.id) && p.etiquetaGerada && p.urlEtiqueta)
-      : localPedidos.filter(p => p.etiquetaGerada && p.urlEtiqueta);
-
-    if (pToPrint.length === 0) return alert("Nenhum pedido selecionado possui etiqueta gerada.");
-
-    const win = window.open("", "_blank", "width=800,height=900");
-    if (win) {
-      win.document.write(`
-        <html>
-          <head>
-            <style>
-              @page { size: A4; margin: 0; }
-              body { margin: 0; padding: 0; display: flex; flex-wrap: wrap; }
-              .etiqueta { width: 105mm; height: 148mm; border: 1px solid #eee; box-sizing: border-box; overflow: hidden; }
-              @media print { .etiqueta { page-break-inside: avoid; } }
-            </style>
-          </head>
-          <body>
-            ${pToPrint.map(p => `
-              <div class="etiqueta">
-                <img src="${p.urlEtiqueta}" style="width:100%; height:100%; object-fit: contain;"/>
-              </div>
-            `).join('')}
-            <script>window.print(); window.onafterprint=()=>window.close();</script>
-          </body>
-        </html>
-      `);
-      win.document.close();
-    }
-  };
-
-  return (
-    <div style={styles.contentArea}>
-      <div style={styles.header}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h2 style={{ fontSize: '20px', color: '#1e293b', margin: 0, fontWeight: 800 }}>📋 Gestão de Pedidos</h2>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <label style={styles.checkboxLabelGlobal}>
-            <input
-              type="checkbox"
-              onChange={toggleSelectAll}
-              checked={pedidosPaginados.length > 0 && pedidosPaginados.every(p => selecionados.includes(p.id))}
-              style={{ transform: 'scale(1.2)' }}
-            />
-            <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>Selecionar Página</span>
-          </label>
-
-          <button onClick={imprimirListaSeparacao} style={{ ...styles.btnMassPrint, backgroundColor: "#34495e" }}>
-            🖨️ Imprimir Pedidos
-          </button>
-
-          <button
-            onClick={gerarEtiquetasEmMassa}
-            disabled={processandoMassa || qtdAptosParaEtiqueta === 0}
-            style={{ ...styles.btnMassPrint, backgroundColor: (processandoMassa || qtdAptosParaEtiqueta === 0) ? "#94a3b8" : "#2563eb" }}
-          >
-            {processandoMassa ? "⏳ Gerando..." : `🚚 Gerar ${qtdAptosParaEtiqueta} Etiquetas`}
-          </button>
-
-          <button onClick={imprimirEtiquetas} style={{ ...styles.btnMassPrint, backgroundColor: "#059669" }}>
-            🖨️ Imprimir Etiquetas (A6)
-          </button>
-
-          <button onClick={async () => {
-            const res = await fetch("/api/frete/sincronizar", { method: "POST", body: JSON.stringify({ lojistaId: lojistaIdApp }) });
-            const data = await res.json();
-            alert(`Sincronização concluída: ${data.atualizados} pedidos atualizados.`);
-            window.location.reload();
-          }} style={{ ...styles.btnMassPrint, backgroundColor: "#8b5cf6" }}>
-            🔄 Sincronizar Pagamentos
-          </button>
-
-          {temPedidosPendentes && (
-            <button
-              onClick={pagarPendentes} // Agora chama a função que definimos acima
-              style={{ ...styles.btnMassPrint, backgroundColor: "#eab308" }}
-            >
-              🔄 Pagar Pendentes
-            </button>
-          )}
-        </div>
-      </div>
-      <div style={styles.filterBar}>
-        <div style={styles.statusTabs}>
-          {["Todos", "Pendente", "Em Produção", "Concluído"].map(s => (
-            <button key={s} onClick={() => setFiltroStatus(s)} style={{ ...styles.tabBtn, backgroundColor: filtroStatus === s ? "#2c3e50" : "transparent", color: filtroStatus === s ? "#fff" : "#64748b" }}>{s}</button>
-          ))}
-        </div>
-        <select value={filtroLogistica} onChange={(e) => setFiltroLogistica(e.target.value)} style={styles.selectLogistica}>
-          <option value="todos">🗂️ Todos os Pedidos</option>
-          <option value="pendentes">🏷️ Etiqueta Pendente</option>
-          <option value="freteGratis">🚚 Frete Grátis</option>
-          <option value="semFrete">📦 Sem Frete</option>
-          <option value="retirada">🏪 Retirada Loja</option>
-        </select>
-        <select value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)} style={styles.selectOrdenacaoStyle}>
-          <option value="recentes">📅 Mais Recentes</option>
-          <option value="antigos">⏳ Mais Antigos</option>
-        </select>
-        <input type="text" placeholder="🔍 Buscar..." value={busca} onChange={(e) => setBusca(e.target.value)} style={styles.searchInput} />
-      </div>
-
-      <div style={localStyles.containerGridCards}>
-        {loading ? <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Carregando...</div>
-          : pedidosPaginados.length === 0 ? <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Nenhum pedido encontrado.</div>
-            : pedidosPaginados.map((pedido) => {
-              const formaEntregaStr = String(pedido.formaEntrega || '').trim().toLowerCase();
-              const isRetirada = pedido.retirada === true || pedido.retirarNaLoja === true || formaEntregaStr === 'retirada' || formaEntregaStr === 'retirar na loja';
-              const isDigital = itemCarrinhoEhDigital(pedido);
-              const ehFinalizado = pedido.status === 'Concluído';
-              const podeSelecionar = !ehFinalizado;
-
-              return (
-                <div key={pedido.id} style={{ ...localStyles.cardMasterLayout, ...(ehFinalizado ? { border: '2px solid #2ecc71' } : {}) }}>
-                  <div style={{ ...localStyles.faixaSuperiorCard, backgroundColor: pedido.pago ? '#2ecc71' : '#e74c3c' }}>
-                    <div style={localStyles.faixaEsquerdaInfoRow}>
-                      <input type="checkbox" disabled={!podeSelecionar} checked={selecionados.includes(pedido.id)} onChange={() => setSelecionados(prev => prev.includes(pedido.id) ? prev.filter(item => item !== pedido.id) : [...prev, pedido.id])} />
-                      <span style={localStyles.numeroPedidoTexto}>#{String(pedido.numeroPedido || pedido.numero || pedido.id.slice(-4)).padStart(5, '0')}</span>
-                      <span style={localStyles.clienteNomeTexto}>{typeof pedido.cliente === 'object' ? pedido.cliente.nome : pedido.cliente}</span>
-                      <span style={localStyles.enderecoTexto}>{[pedido.endereco?.rua, pedido.endereco?.numero, pedido.endereco?.cidade].filter(Boolean).join(", ")}</span>
-                      <span style={localStyles.dataTexto}>🕒 {formatarData(pedido.data || (pedido.cliente as any)?.data)}</span>
+                        <button onClick={async () => {
+                            const res = await fetch("/api/frete/sincronizar", { method: "POST", body: JSON.stringify({ lojistaId: lojistaIdApp }) });
+                            const data = await res.json();
+                            alert(`Sincronização concluída: ${data.atualizados} pedidos atualizados.`);
+                            window.location.reload();
+                        }} style={{ padding: '8px 14px', backgroundColor: "#8b5cf6", color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}>
+                            🔄 Sincronizar Pagamentos
+                        </button>
                     </div>
-                    <button disabled={ehFinalizado} onClick={() => alternarPago(pedido)} style={localStyles.badgeNaoPago}>
-                      {pedido.pago ? "✅ PAGO" : "❌ NÃO PAGO"}
-                    </button>
-                  </div>
-
-                  <div style={localStyles.corpoCardInterno}>
-                    <div style={localStyles.colunaEspecificacoesCentro}>
-                      {pedido.itens?.map((item, idx) => <LinhaItemProduto key={idx} item={item} lojistaId={lojistaIdApp} isRetirada={isRetirada} db={db} />)}
-                    </div>
-                    <div style={localStyles.colunaControlesDireita}>
-                      {/* CARD DE LOGÍSTICA COM LÓGICA DE ESTADOS */}
-
-
-
-                      <div style={localStyles.cardLogistica}>
-
-
-                        {/* 2. CASO: ETIQUETA JÁ GERADA (Card Verde de sucesso) */}
-                        {pedido.etiquetaGerada && (
-                          <div style={{ backgroundColor: pedido.statusEtiqueta === 'paga' ? '#ecfdf5' : '#fef3c7', padding: '8px', borderRadius: '6px', border: `1px solid ${pedido.statusEtiqueta === 'paga' ? '#a7f3d0' : '#fbbf24'}` }}>
-                            <div style={{ fontWeight: 'bold', color: pedido.statusEtiqueta === 'paga' ? '#065f46' : '#92400e', fontSize: '11px', marginBottom: '4px' }}>
-                              {pedido.statusEtiqueta === 'paga' ? '✅ Etiqueta Gerada Ok' : '⏳ Pendente de Pagamento'}
-                            </div>
-                            {pedido.idEtiquetaMelhorEnvio && (
-                              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Cód. Envio: <b>{pedido.idEtiquetaMelhorEnvio}</b></div>
-                            )}
-                            <div style={{ fontSize: '10px', fontWeight: 'bold', marginTop: '6px' }}>Numero de Rastreio</div>
-                            <div style={{ backgroundColor: '#fff', padding: '4px', marginTop: '2px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '11px' }}>
-                              {pedido.dsNumRastreio || "Aguardando..."}
-                            </div>
-                            <button onClick={() => resetarEtiqueta(pedido)} style={{ ...localStyles.btnReset, display: 'block', width: '100%', fontSize: '11px', color: '#64748b', marginTop: '8px' }}>
-                              🗑️ Resetar Etiqueta
-                            </button>
-                          </div>
-                        )}
-
-                        {/* 3. CASO: FRETE GRÁTIS PROMOCIONAL (Visual Sem título-4) */}
-                        {!pedido.etiquetaGerada && pedido.financeiro?.isFreteGratis === true && (
-                          <div style={{ padding: '8px', borderRadius: '6px', border: '1px solid #2ecc71', backgroundColor: '#f0fdf4', textAlign: 'center' }}>
-                            <div style={{ color: '#065f46', fontWeight: 'bold', fontSize: '11px', marginBottom: '5px' }}>✅ Frete Grátis Promocional</div>
-
-                            {/* Se NÃO tem transportadora escolhida, mostra o botão de Cotação */}
-                            {!pedido.financeiro?.dsTransportadoraId || pedido.financeiro?.dsTransportadoraId === "frete_gratis_ativado" ? (
-                              <button onClick={() => abrirJanelaCotacao(pedido)} style={{ ...localStyles.btnReset, color: '#065f46', fontSize: '11px', display: 'block', width: '100%', fontWeight: 'bold' }}>
-                                🚚 Cotar Transportadora
-                              </button>
-                            ) : (
-                              /* Se JÁ TEM transportadora (após cotar), mostra o botão de Gerar Etiqueta */
-                              <>
-                                <div style={{ fontSize: '12px', color: '#065f46', marginBottom: '5px' }}>
-                                  Selecionado: <b>{pedido.financeiro.metodo?.replace('Logística: ', '')}</b>
-                                </div>
-
-                                {/* Botão de Reset com confirmação */}
-                                <button onClick={() => resetarEtiqueta(pedido)} style={{ ...localStyles.btnReset, color: '#991b1b', fontSize: '12px', marginTop: '5px' }}>
-                                  🔄 Resetar Cotação
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {/* 4. CASO: NÃO GERADO - TRANSPORTADORA DEFINIDA (Visual Sem título-5) */}
-                        {!pedido.etiquetaGerada && pedido.financeiro?.isFreteGratis === false && (
-                          <div style={{ padding: '8px', borderRadius: '6px', border: '1px solid #fef3c7', backgroundColor: '#fffbeb', textAlign: 'center' }}>
-                            <div style={{ color: '#92400e', fontSize: '11px' }}>Selecionado: <b>{pedido.financeiro.dsMetodoPagamento?.replace('Logística: ', '')}</b></div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Select de Status */}
-                      <select
-                        disabled={ehFinalizado}
-                        value={pedido.status}
-                        onChange={(e) => mudarStatusDireto(pedido, e.target.value)}
-                        style={{ ...localStyles.selectStatusAmarelo, backgroundColor: ehFinalizado ? '#2ecc71' : getStatusColor(pedido.status) }}
-                      >
-                        <option value="Pendente">⏳ PENDENTE</option>
-                        <option value="Em Produção">🛠️ EM PRODUÇÃO</option>
-                        <option value="Concluído">✅ CONCLUÍDO</option>
-                      </select>
-
-                      {/* Botão Remover */}
-                      <button onClick={() => dispararSegurancaDeletar(pedido)} style={localStyles.btnRemoverTransparente}>
-                        🗑️ Remover Pedido
-                      </button>
-                    </div>
-                  </div>
                 </div>
-              );
-            })}
-      </div>
-      {totalPaginas > 1 && (
-        <div style={styles.paginationContainer}>
-          <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} style={styles.pageBtn}>Anterior</button>
-          <span style={{ margin: '0 15px' }}>Página {paginaAtual} de {totalPaginas}</span>
-          <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} style={styles.pageBtn}>Próxima</button>
-        </div>
-      )}
 
-      {pedidoSelecionadoParaFrete && (
-        <div style={localStyles.modalOverlayCentroFix}>
-          <div style={localStyles.modalContentCentroCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0, color: '#1e293b', fontSize: '16px' }}>📦 Logística</h3>
-              <button onClick={() => setPedidoSelecionadoParaFrete(null)} style={styles.modalCloseBtn}>✕</button>
+                <div style={styles.filterBar}>
+                    <select value={filtroLogistica} onChange={(e) => setFiltroLogistica(e.target.value)} style={styles.selectLogistica}>
+                        <option value="todos">🗂️ Todas Logísticas</option>
+                        <option value="pendentes">🏷️ Etiqueta Pendente</option>
+                        <option value="freteGratis">🚚 Frete Grátis</option>
+                        <option value="semFrete">📦 Sem Frete</option>
+                        <option value="retirada">🏪 Retirada Loja</option>
+                    </select>
+                    <select value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)} style={styles.selectOrdenacaoStyle}>
+                        <option value="recentes">📅 Mais Recentes</option>
+                        <option value="antigos">⏳ Mais Antigos</option>
+                    </select>
+                    <input type="text" placeholder="🔍 Buscar..." value={busca} onChange={(e) => setBusca(e.target.value)} style={styles.searchInput} />
+                </div>
+
+                <div style={styles.selectionBar}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                            type="checkbox"
+                            onChange={() => {
+                                const todosEstaoSelecionados = idsVisiveisDaAba.length > 0 && idsVisiveisDaAba.every(id => (selecionados || []).includes(id));
+
+                                if (todosEstaoSelecionados) {
+                                    // Remove apenas os desta aba aberta
+                                    setSelecionados(prev => (prev || []).filter(id => !idsVisiveisDaAba.includes(id)));
+                                } else {
+                                    // Adiciona todos os desta aba aberta mantendo seleções de outras se houver
+                                    setSelecionados(prev => [...new Set([...(prev || []), ...idsVisiveisDaAba])]);
+                                }
+                            }}
+                            checked={
+                                idsVisiveisDaAba.length > 0 &&
+                                idsVisiveisDaAba.every(id => (selecionados || []).includes(id))
+                            }
+                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>
+                            {selecionadosNestaAbaCount > 0
+                                ? `${selecionadosNestaAbaCount} selecionado${selecionadosNestaAbaCount > 1 ? 's' : ''}`
+                                : `Nenhum selecionado`}
+                        </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {selecionadosNestaAbaCount > 0 && (
+                            <>
+                                <select
+                                    disabled={processandoMassaStatus}
+                                    onChange={async (e) => {
+                                        const acao = e.target.value;
+                                        if (!acao) return;
+
+                                        if (acao === 'deletar') {
+                                            const selecionadosAtuais = selecionados || [];
+                                            if (selecionadosAtuais.length === 0) {
+                                                alert("Selecione ao menos um pedido.");
+                                                e.target.value = "";
+                                                return;
+                                            }
+                                            setTextoDigitadoMassa("");
+                                            setModalExclusaoMassaAberto(true);
+                                            e.target.value = "";
+                                            return;
+                                        }
+
+                                        alterarStatusMassa(e);
+                                    }}
+                                    defaultValue=""
+                                    style={styles.selectAcaoMassa}
+                                >
+                                    <option value="" disabled>⚙️ Mudar Status / Ações...</option>
+                                    <option value="pago">✅ Marcar como Pago</option>
+                                    <option value="nao_pago">❌ Marcar como Não Pago</option>
+                                    <option value="pendente">⏳ Status: Pendente</option>
+                                    <option value="produção">⚙️ Status: Produção</option>
+                                    <option value="pronto">✅ Status: Pronto</option>
+                                    <option value="deletar" style={{ color: '#ef4444', fontWeight: 'bold' }}>🗑️ Excluir Pedidos</option>
+                                </select>
+                                <button onClick={() => setSelecionados([])} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Limpar</button>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div style={styles.tabContainer}>
+                    <button onClick={() => setAbaAtiva('pedidos')} style={{ ...styles.tabStyle, ...(abaAtiva === 'pedidos' ? styles.tabAtiva : {}) }}>PEDIDOS</button>
+                    <button onClick={() => setAbaAtiva('pendente')} style={{ ...styles.tabStyle, ...(abaAtiva === 'pendente' ? styles.tabAtiva : {}) }}>PENDENTE</button>
+                    <button onClick={() => setAbaAtiva('producao')} style={{ ...styles.tabStyle, ...(abaAtiva === 'producao' ? styles.tabAtiva : {}) }}>PRODUÇÃO</button>
+                    <button onClick={() => setAbaAtiva('pronto')} style={{ ...styles.tabStyle, ...(abaAtiva === 'pronto' ? styles.tabAtiva : {}) }}>PRONTO</button>
+                    <button onClick={() => setAbaAtiva('cotar')} style={{ ...styles.tabStyle, ...(abaAtiva === 'cotar' ? styles.tabAtiva : {}) }}>COTAR FRETE</button>
+                    <button onClick={() => setAbaAtiva('etiquetas')} style={{ ...styles.tabStyle, ...(abaAtiva === 'etiquetas' ? styles.tabAtiva : {}) }}>ETIQUETAS</button>
+                    <button onClick={() => setAbaAtiva('retirada')} style={{ ...styles.tabStyle, ...(abaAtiva === 'retirada' ? styles.tabAtiva : {}) }}>RETIRADA</button>
+                    <button onClick={() => setAbaAtiva('digital')} style={{ ...styles.tabStyle, ...(abaAtiva === 'digital' ? styles.tabAtiva : {}) }}>DIGITAL</button>
+                    <button onClick={() => setAbaAtiva('enviados')} style={{ ...styles.tabStyle, ...(abaAtiva === 'enviados' ? styles.tabAtivaEnviados : {}) }}>ENVIADOS</button>
+                    <button onClick={() => setAbaAtiva('concluidos')} style={{ ...styles.tabStyle, ...(abaAtiva === 'concluidos' ? styles.tabAtivaConcluidos : {}) }}>CONCLUÍDOS</button>
+                </div>
             </div>
-            {loadingFreteAdmin ? <p>Consultando frete...</p> : opcoesFreteCotadas.map((opt) => (
-              <div key={opt.id} onClick={() => selecionarEtiquetaMaisBarata(opt)} style={styles.opcaoFreteCard}>
-                <div>{opt.name}</div><b>R$ {Number(opt.price).toFixed(2)}</b>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {pedidoParaDeletar && (
-        <div style={localStyles.modalOverlayCentroFix}>
-          <div style={{ ...localStyles.modalContentCentroCard, borderTop: '5px solid #ef4444' }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#ef4444' }}>⚠️ EXCLUSÃO DEFINITIVA</h3>
-            <input type="text" placeholder={`Digite ${pedidoParaDeletar.numeroPedido || pedidoParaDeletar.id.slice(-4)}...`} value={confirmacaoTexto} onChange={(e) => setConfirmacaoTexto(e.target.value)} style={{ ...styles.searchInput, width: '100%', marginBottom: '20px', padding: '10px' }} />
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setPedidoParaDeletar(null)} style={{ ...styles.tabBtn, background: '#e2e8f0', border: 'none', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={ejecutarExclusaoPermanente} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Confirmar e Excluir</button>
+            <div style={styles.conteudoDinamicoArea}>
+                {abaAtiva === 'cotar' ? (
+                    <TabCotarFrete
+                        pedidos={localPedidos}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        dadosLoja={dadosLoja}
+                        cotarFrete={cotarFrete}
+                        setLocalPedidos={setLocalPedidos}
+                        selecionados={selecionados || []}
+                        setSelecionados={setSelecionados}
+                    />
+                ) : abaAtiva === 'retirada' ? (
+                    <TabRetiradaLoja
+                        pedidos={localPedidos}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        dadosLoja={dadosLoja}
+                        setLocalPedidos={setLocalPedidos}
+                        mudarStatusDireto={async (p, s) => { }}
+                        selecionados={selecionados || []}
+                        setSelecionados={setSelecionados}
+                    />
+                ) : abaAtiva === 'digital' ? (
+                    <TabDigital
+                        pedidos={localPedidos}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        dadosLoja={dadosLoja}
+                        setLocalPedidos={setLocalPedidos}
+                        mudarStatusDireto={async (p, s) => { }}
+                        selecionados={selecionados || []}
+                        setSelecionados={setSelecionados}
+                    />
+                ) : abaAtiva === 'etiquetas' ? (
+                    <TabEmitirEtiquetas
+                        pedidos={localPedidos}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        dadosLoja={dadosLoja}
+                        setModalProgresso={setModalProgresso}
+                        setLocalPedidos={setLocalPedidos}
+                        selecionados={selecionados || []}
+                        setSelecionados={setSelecionados}
+                    />
+                ) : abaAtiva === 'enviados' ? (
+                    <TabPedidosEnviados
+                        pedidos={localPedidos}
+                        loading={loading}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        mudarStatusDireto={async (p, s) => { /* sua lógica existente */ }}
+                        selecionados={selecionados || []}
+                        setSelecionados={setSelecionados}
+                    />
+                ) : abaAtiva === 'concluidos' ? (
+                    <TabPedidosConcluidos
+                        pedidos={localPedidos}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        dadosLoja={dadosLoja}
+                        setLocalPedidos={setLocalPedidos}
+                        selecionados={selecionados || []}
+                        setSelecionados={setSelecionados}
+                    />
+                ) : abaAtiva === 'pronto' ? (
+                    <TabProntoPedidos
+                        pedidos={localPedidos}
+                        loading={loading}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        cotarFrete={cotarFrete}
+                        setLocalPedidos={setLocalPedidos}
+                        mudarStatusDireto={async (p, s) => { }}
+                        setModalProgresso={setModalProgresso}
+                    />
+                ) : (
+                    <TabTodosPedidos
+                        pedidos={pedidosFiltradosGlobais}
+                        loading={loading}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        mudarStatusDireto={async (p, s) => { }}
+                        alternarPago={async (p) => { }}
+                        dispararSegurancaDeletar={(p) => setPedidoParaDeletar(p)}
+                        cotarFrete={cotarFrete}
+                        setLocalPedidos={setLocalPedidos}
+                        dadosLoja={dadosLoja}
+                        selecionados={selecionados || []}
+                        setSelecionados={setSelecionados}
+                    />
+                )}
             </div>
-          </div>
-        </div>
-      )}
 
-      <ModalProcessamento
-        aberto={modalProgresso.aberto}
-        titulo={modalProgresso.titulo}
-        itens={modalProgresso.itens}
-        onFechar={() => {
-          setModalProgresso(prev => ({ ...prev, aberto: false }));
-          window.location.reload();
-        }}
-      />
-    </div>
-  );
+            {/* MODAL DE EXCLUSÃO INDIVIDUAL */}
+            {pedidoParaDeletar && (
+                <div style={localStyles.modalOverlayCentroFix}>
+                    <div style={{ ...localStyles.modalContentCentroCard, borderTop: '5px solid #ef4444' }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: '#ef4444' }}>⚠️ EXCLUSÃO DEFINITIVA</h3>
+                        <input
+                            type="text"
+                            placeholder={`Digite ${pedidoParaDeletar.numeroPedido || pedidoParaDeletar.id.slice(-4)}...`}
+                            value={confirmacaoTexto}
+                            onChange={(e) => setConfirmacaoTexto(e.target.value)}
+                            style={{ width: '100%', marginBottom: '20px', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                        />
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setPedidoParaDeletar(null)} style={{ padding: '8px 12px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
+                            <button onClick={executarExclusaoPermanente} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Confirmar e Excluir</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE EXCLUSÃO EM MASSA */}
+            {modalExclusaoMassaAberto && (
+                <div style={localStyles.modalOverlayCentroFix}>
+                    <div style={{ ...localStyles.modalContentCentroCard, borderTop: '5px solid #ef4444' }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: '#ef4444' }}>⚠️ EXCLUSÃO EM MASSA</h3>
+                        <p style={{ fontSize: '13px', color: '#475569', marginBottom: '15px', lineHeight: '1.4' }}>
+                            {selecionados.length === 1 ? (
+                                <>Para excluir o pedido, digite o número <strong>{String(localPedidos.find(p => p.id === selecionados[0])?.numeroPedido || selecionados[0].slice(-4))}</strong> abaixo:</>
+                            ) : (
+                                <>Para confirmar a exclusão de <strong>{selecionados.length} pedidos</strong>, digite a palavra <strong>selecionados</strong> abaixo:</>
+                            )}
+                        </p>
+                        <input
+                            type="text"
+                            placeholder={selecionados.length === 1 ? "Digite o número do pedido..." : "Digite selecionados..."}
+                            value={textoDigitadoMassa}
+                            onChange={(e) => setTextoDigitadoMassa(e.target.value)}
+                            style={{ width: '100%', marginBottom: '20px', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                        />
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setModalExclusaoMassaAberto(false)} style={{ padding: '8px 12px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
+                            <button
+                                onClick={async () => {
+                                    const selecionadosAtuais = selecionados || [];
+                                    const textoEsperado = selecionadosAtuais.length === 1
+                                        ? String(localPedidos.find(p => p.id === selecionadosAtuais[0])?.numeroPedido || selecionadosAtuais[0].slice(-4))
+                                        : "selecionados";
+
+                                    if (textoDigitadoMassa !== textoEsperado) {
+                                        alert("Confirmação incorreta.");
+                                        return;
+                                    }
+
+                                    try {
+                                        setProcessandoMassaStatus(true);
+                                        for (const pedidoId of selecionadosAtuais) {
+                                            await deleteDoc(doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId));
+                                        }
+                                        setLocalPedidos(prev => prev.filter(p => !selecionadosAtuais.includes(p.id)));
+                                        setSelecionados([]);
+                                        setModalExclusaoMassaAberto(false);
+                                        alert("💥 Pedido(s) excluído(s) com sucesso!");
+                                    } catch (err: any) {
+                                        alert("Erro ao excluir: " + err.message);
+                                    } finally {
+                                        setProcessandoMassaStatus(false);
+                                    }
+                                }}
+                                style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                Confirmar e Excluir
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <ModalProcessamento
+                aberto={modalProgresso.aberto}
+                titulo={modalProgresso.titulo}
+                itens={modalProgresso.itens}
+                onFechar={() => {
+                    setModalProgresso(prev => ({ ...prev, aberto: false }));
+                    window.location.reload();
+                }}
+            />
+        </div>
+    );
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-  contentArea: { padding: '0px 20px 20px 20px', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', boxSizing: 'border-box' },
-  header: { marginBottom: '20px', marginTop: '0px' },
-  checkboxLabelGlobal: { display: 'flex', alignItems: 'center', fontSize: '14px', color: '#475569', cursor: 'pointer' },
-  btnMassPrint: { padding: '8px 16px', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' },
-  filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#fff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
-  statusTabs: { display: 'flex', gap: '5px' },
-  tabBtn: { padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
-  selectLogistica: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer' },
-  selectOrdenacaoStyle: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer' },
-  searchInput: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', flex: 1 },
-  modalCloseBtn: { background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer' },
-  opcaoFreteCard: { padding: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', marginBottom: '8px', cursor: 'pointer' },
-  paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
-  pageBtn: { padding: '8px 16px', cursor: 'pointer', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 'bold' }
+    contentArea: { padding: '0px 20px 20px 20px', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', boxSizing: 'border-box' },
+    headerFixoContainer: {
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000,
+        backgroundColor: '#f8fafc',
+        paddingTop: '15px',
+        paddingBottom: '10px',
+        borderBottom: '1px solid #e2e8f0'
+    },
+    filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px', backgroundColor: '#fff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' },
+    selectionBar: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: '10px',
+        backgroundColor: '#fff',
+        padding: '0 16px',
+        height: '52px',
+        borderRadius: '8px',
+        border: '1px solid #e2e8f0',
+        flexWrap: 'wrap',
+        gap: '10px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        boxSizing: 'border-box'
+    },
+    selectLogistica: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' },
+    selectOrdenacaoStyle: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' },
+    selectAcaoMassa: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#f8fafc', fontWeight: '600', color: '#1e293b' },
+    searchInput: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', flex: 1, backgroundColor: '#fff' },
+
+    tabContainer: {
+        display: 'flex',
+        gap: '16px',
+        borderBottom: 'none',
+        marginTop: '14px',
+        width: '100%',
+        boxSizing: 'border-box',
+        alignItems: 'center',
+        paddingLeft: '4px'
+    },
+    tabStyle: {
+        background: 'none',
+        borderWidth: '0px 0px 3px 0px',
+        borderStyle: 'solid',
+        borderColor: 'transparent',
+        padding: '8px 4px',
+        fontSize: '13px',
+        fontWeight: '600',
+        color: '#64748b',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        whiteSpace: 'nowrap'
+    },
+    tabAtiva: {
+        color: '#2563eb',
+        borderColor: '#2563eb',
+        fontWeight: 'bold'
+    },
+    tabAtivaEnviados: {
+        color: '#2563eb',
+        borderColor: '#2563eb',
+        fontWeight: 'bold'
+    },
+    tabAtivaConcluidos: {
+        color: '#059669',
+        borderColor: '#059669',
+        fontWeight: 'bold'
+    },
+    conteudoDinamicoArea: {
+        marginTop: '20px'
+    }
 };
 
 const localStyles: { [key: string]: React.CSSProperties } = {
-  containerGridCards: { display: 'flex', flexDirection: 'column', gap: '20px' },
-  cardMasterLayout: { backgroundColor: '#f8fafc', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' },
-  faixaSuperiorCard: { padding: '12px 16px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  faixaEsquerdaInfoRow: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
-  numeroPedidoTexto: { fontSize: '15px', fontWeight: 'bold' },
-  clienteNomeTexto: { fontSize: '14px', fontWeight: 'bold' },
-  enderecoTexto: { fontSize: '13px', opacity: 0.9 },
-  dataTexto: { fontSize: '12px', opacity: 0.8 },
-  badgeNaoPago: { padding: '6px 12px', backgroundColor: 'transparent', border: '2px solid rgba(255,255,255,0.6)', borderRadius: '6px', color: '#fff', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' },
-  corpoCardInterno: { padding: '12px', display: 'flex', gap: '16px', alignItems: 'stretch' },
-  colunaEspecificacoesCentro: { flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' },
-  itemCardWhiteBox: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', display: 'flex', gap: '16px' },
-  imageContainer: { position: 'relative', width: '80px', height: '80px', flexShrink: 0 },
-  productImage: { width: '100%', height: '100%', borderRadius: '6px', objectFit: 'cover', transition: 'opacity 0.3s' },
-  productImagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' },
-  imageCrossBadge: { position: 'absolute', top: '-6px', right: '-6px', backgroundColor: '#1e293b', color: '#fff', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '10px', fontWeight: 'bold' },
-  itemDetailsCol: { display: 'flex', flexDirection: 'column', justifyContent: 'center' },
-  itemTitleRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', fontSize: '15px', fontWeight: 'bold', color: '#1e293b' },
-  badgeEnvioStyle: { padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' },
-  personalizacaoText: { fontSize: '13px', color: '#b45309', lineHeight: '1.5' },
-  colunaControlesDireita: { width: '220px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'flex-start', borderLeft: '1px solid #e2e8f0', paddingLeft: '12px' },
-  btnGerarEtiquetaBranco: { padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', color: '#334155' },
-  selectStatusAmarelo: { padding: '10px', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', appearance: 'none' },
-  btnRemoverTransparente: { padding: '10px', backgroundColor: 'transparent', border: '1px solid #ef4444', borderRadius: '6px', color: '#ef4444', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', textAlign: 'center' },
-  cardLogistica: { padding: '10px', border: '1px solid #e2e8f0', borderRadius: '6px', textAlign: 'center', backgroundColor: '#f9fafb', marginBottom: '10px' },
-  cardEtiquetaSucesso: { padding: '10px', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', color: '#065f46', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' },
-  btnReset: { background: 'none', border: 'none', color: '#059669', textDecoration: 'underline', marginTop: '4px', cursor: 'pointer' },
-  modalOverlayCentroFix: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 },
-  modalContentCentroCard: { backgroundColor: '#fff', padding: '24px', borderRadius: '8px', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }
+    modalOverlayCentroFix: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 },
+    modalContentCentroCard: { backgroundColor: '#fff', padding: '24px', borderRadius: '8px', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }
 };

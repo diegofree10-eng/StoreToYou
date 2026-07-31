@@ -1,0 +1,359 @@
+'use client';
+import React, { useState, useMemo } from 'react';
+import { Pedido } from '@/types/pedido';
+import useSWR from 'swr';
+import { doc, getDoc } from 'firebase/firestore';
+
+interface TabEnviadosProps {
+    pedidos: Pedido[];
+    loading: boolean;
+    lojistaIdApp: string;
+    db: any;
+    mudarStatusDireto: (p: Pedido, status: string) => void;
+    selecionados?: string[];
+    setSelecionados?: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
+const formatarData = (dataStr: string | undefined): string => {
+    if (!dataStr) return '-';
+    try {
+        const data = new Date(dataStr);
+        return data.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    } catch (e) { return dataStr; }
+};
+
+const extrairFotoDoItem = (item: any): string => {
+    const chavesPossiveis = ['foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
+    for (const chave of chavesPossiveis) {
+        if (item[chave] && typeof item[chave] === 'string' && item[chave].startsWith('http')) return item[chave];
+    }
+    if (item.variacaoSelecionada?.foto) return item.variacaoSelecionada.foto;
+    return "";
+};
+
+const fetchProduto = async (path: string, db: any) => {
+    const [_, lojistaId, __, idProd] = path.split('/');
+    const docRef = doc(db, "lojistas", lojistaId, "produtos", idProd);
+    const snap = await getDoc(docRef);
+    return snap.exists() ? snap.data() : null;
+};
+
+const obterSeloItem = (item: any, pedidoLogistica: any) => {
+    const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
+    const isRetirada = pedidoLogistica?.isRetirada === true || formaItem === 'retirada';
+    const isDigital = item.precisaFrete === false || formaItem === 'digital';
+
+    if (isRetirada) return { texto: "Retirada", cor: "#f59e0b" };
+    if (isDigital) return { texto: "Digital", cor: "#3b82f6" };
+    return { texto: "Envio", cor: "#10b981" };
+};
+
+const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db }: any) => {
+    const idProd = item.idProduto || item.id;
+    const { data: produtoData } = useSWR(
+        idProd && lojistaId ? `lojistas/${lojistaId}/produtos/${idProd}` : null,
+        (key) => fetchProduto(key, db),
+        { revalidateOnFocus: false }
+    );
+
+    const selo = obterSeloItem(item, pedidoLogistica);
+    const qtd = item.quantidade || item.qty || 1;
+
+    const fotoUrl = useMemo(() => {
+        const fotoDireta = extrairFotoDoItem(item);
+        if (fotoDireta) return fotoDireta;
+        if (produtoData) {
+            if (item.variacao && Array.isArray(produtoData.variacoes)) {
+                const match = produtoData.variacoes.find((v: any) => v.nome === item.variacao);
+                if (match?.foto) return match.foto;
+            }
+            return produtoData.capa || "";
+        }
+        return "";
+    }, [item, produtoData]);
+
+    return (
+        <div style={localStyles.itemLinhaResumida}>
+            <img src={fotoUrl || "https://placehold.co/40x40?text=Prod"} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', backgroundColor: selo.cor, color: '#fff' }}>
+                        {selo.texto}
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
+                        {qtd}x {item.nome || item.title}
+                    </span>
+                </div>
+                {item.variacao && (
+                    <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '2px' }}>
+                        Variação: {item.variacao}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+});
+
+export default function TabPedidosEnviados({
+    pedidos, loading, lojistaIdApp, db, mudarStatusDireto, selecionados = [], setSelecionados = () => { }
+}: TabEnviadosProps) {
+    const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
+
+    const pedidosEnviados = useMemo(() => {
+        return (pedidos || []).filter(p => {
+            const statusGeral = String(p.status || '').trim().toLowerCase();
+            const etiquetaGerada = p.etiquetaGerada === true || p.statusEtiqueta === 'paga' || p.statusEtiqueta === 'enviado';
+
+            if (statusGeral === 'concluído' || statusGeral === 'concluido') return false;
+
+            return etiquetaGerada || p.rastreio || p.codigoRastreio || (p as any).logistica?.tracking;
+        });
+    }, [pedidos]);
+
+    const idsVisiveisNestaAba = useMemo(() => pedidosEnviados.map(p => p.id), [pedidosEnviados]);
+    const selecionadosNestaAbaCount = useMemo(() => {
+        return (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id)).length;
+    }, [selecionados, idsVisiveisNestaAba]);
+
+    const toggleExpandir = (id: string) => {
+        setPedidosExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const confirmarRecebimentoEmLote = () => {
+        const aptos = pedidosEnviados.filter(p => (selecionados || []).includes(p.id));
+        if (aptos.length === 0) return alert("Nenhum pedido selecionado.");
+
+        if (!confirm(`Deseja realmente marcar ${aptos.length} pedido(s) como entregue/concluído?`)) return;
+
+        for (const pedido of aptos) {
+            mudarStatusDireto(pedido, 'Concluído');
+        }
+        setSelecionados(prev => prev.filter(id => !idsVisiveisNestaAba.includes(id)));
+    };
+
+    return (
+        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
+                <div>
+                    <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>🚚 Pedidos Enviados / Em Trânsito ({pedidosEnviados.length})</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Acompanhe o rastreio e atualize para concluído assim que forem entregues.</p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', minHeight: '40px' }}>
+                    {selecionadosNestaAbaCount > 0 ? (
+                        <div style={{ display: 'flex', gap: '10px', backgroundColor: '#eff6ff', padding: '8px 14px', borderRadius: '8px', border: '1px solid #bfdbfe', alignItems: 'center' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e40af' }}>{selecionadosNestaAbaCount} selecionados</span>
+                            <button onClick={confirmarRecebimentoEmLote} style={{ padding: '8px 14px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>
+                                ✅ Confirmar Recebimento ({selecionadosNestaAbaCount})
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{ visibility: 'hidden', height: '40px' }} />
+                    )}
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {loading ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Carregando pedidos enviados...</div>
+                ) : pedidosEnviados.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#64748b', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        Nenhum pedido enviado ou em trânsito no momento. 🎉
+                    </div>
+                ) : (
+                    pedidosEnviados.map(pedido => {
+                        const nomeCliente = typeof pedido.cliente === 'object' ? (pedido.cliente?.nmNomeCliente || pedido.cliente?.nome || "Cliente") : (pedido.cliente || "Cliente");
+                        const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
+                        const idPedidoExibicao = String(pedido.id || "");
+                        const expandido = !!pedidosExpandidos[pedido.id];
+
+                        const logistica = (pedido as any).logistica || {};
+                        const etiquetaData = (pedido as any).Etiqueta || {};
+                        //const codigoRastreio = etiquetaData.codigoEnvio || pedido.rastreio || pedido.codigoRastreio || logistica.tracking || logistica.dsRastreio || "Disponível no Melhor Envio";
+                        const codigoRastreio = pedido.dsNumRastreio || etiquetaData.dsNumRastreio || logistica.dsNumRastreio || "Indisponível";
+                        const linkRastreio = pedido.linkRastreio || logistica.linkRastreio || `https://www.melhorrastreio.com.br/rastreio/${codigoRastreio}`;
+
+                        const pedidoLogistica = (pedido as any).logistica || {};
+                        const cotacao = (pedido as any).Cotacao || {};
+                        const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
+                        const formaEntrega = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
+                        const isRetirada = pedidoLogistica.isRetirada === true || formaEntrega === 'retirada' || pedido.retirada || pedido.retirarNaLoja;
+                        const isDigital = formaEntrega === 'digital';
+                        const precisaFrete = pedido.itens?.some((i: any) => i.precisaFrete !== false) && !isRetirada && !isDigital;
+
+                        const temPersonalizacao = pedido.itens?.some(i => {
+                            const resp = i.respostasFormatadas || i.personalizacao;
+                            if (!resp) return false;
+                            if (typeof resp === 'object' && Object.keys(resp).length > 0) return true;
+                            if (typeof resp === 'string' && resp.trim() !== '') return true;
+                            return false;
+                        });
+
+                        return (
+                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${pedido.pago ? '#2ecc71' : '#e74c3c'}` }}>
+                                {/* LINHA PRINCIPAL DO CARD COM COLUNAS FIXAS */}
+                                <div
+                                    onClick={() => toggleExpandir(pedido.id)}
+                                    style={localStyles.cardHeaderLinha}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                            type="checkbox"
+                                            checked={(selecionados || []).includes(pedido.id)}
+                                            onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
+                                            style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
+                                        />
+
+                                        {/* Número do Pedido Fixo */}
+                                        <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+
+                                        {/* Nome do Cliente Fixo */}
+                                        <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+
+                                        {/* ID do Pedido Fixo */}
+                                        <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '220px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+
+
+                                        {/* Número de Rastreio Fixo */}
+                                        <span style={{ fontSize: '12px', color: '#1e40af', fontWeight: 'bold', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #bfdbfe', width: '200px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={codigoRastreio}>Cód Rastreio: {codigoRastreio}</span>
+                                    </div>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
+                                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+                                            {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                        </span>
+                                        <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                    </div>
+                                </div>
+
+                                {/* LISTA DE ITENS COMPACTA */}
+                                <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {pedido.itens?.map((item: any, idx: number) => (
+                                        <ItemResumido key={idx} item={item} lojistaId={lojistaIdApp} pedidoLogistica={pedidoLogistica} db={db} />
+                                    ))}
+                                </div>
+
+                                {/* CONTEÚDO EXPANDIDO (4 BLOCOS) */}
+                                {expandido && (
+                                    <div style={localStyles.conteudoExpandido}>
+                                        <div style={localStyles.gridExpandido}>
+                                            {/* Bloco 1: Personalização */}
+                                            <div style={localStyles.caixaPersonalizacao}>
+                                                <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
+                                                    ✨ Personalização:
+                                                </div>
+                                                {temPersonalizacao ? (
+                                                    pedido.itens.map((item: any, idx: number) => {
+                                                        const resp = item.respostasFormatadas || item.personalizacao;
+                                                        if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
+                                                        return (
+                                                            <div key={idx} style={{ fontSize: '12px', color: '#78350f', lineHeight: '1.4', marginBottom: '4px' }}>
+                                                                {typeof resp === 'object' ? (
+                                                                    Object.entries(resp).map(([k, v]) => (
+                                                                        <div key={k}>{k}: <strong>{String(v)}</strong></div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div>{String(resp)}</div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <div style={{ fontSize: '12px', color: '#92400e', fontStyle: 'italic' }}>Este pedido não tem personalização.</div>
+                                                )}
+                                            </div>
+
+                                            {/* Bloco 2: Endereço */}
+                                            <div style={localStyles.caixaBlocoPadrao}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>📍 Endereço de Entrega</div>
+                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                                    {isRetirada ? (
+                                                        <strong>Retirada na Loja física</strong>
+                                                    ) : (
+                                                        <>
+                                                            {endereco.dsRuaCliente || endereco.rua}, {endereco.dsNumeroCliente || endereco.numero}
+                                                            <br />
+                                                            {endereco.dsBairroCliente || endereco.bairro} - {endereco.dsCidadeCliente || endereco.cidade}/{endereco.dsUfCliente || endereco.uf}
+                                                            <br />
+                                                            CEP: {endereco.dsCepCliente || endereco.cep}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Bloco 3: Dados da Transportadora */}
+                                            <div style={localStyles.caixaBlocoPadrao}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🚚 Transportadora / Logística</div>
+                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                                    {!precisaFrete ? (
+                                                        <div style={{ color: '#64748b', fontStyle: 'italic' }}>Pedido sem Frete</div>
+                                                    ) : isRetirada ? (
+                                                        <div>
+                                                            <div><strong>Forma:</strong> Retirada na Loja</div>
+                                                            <div><strong>Status:</strong> {pedidoLogistica.dsMetodoPagamento || "Retirar na Loja (Grátis)"}</div>
+                                                        </div>
+                                                    ) : isDigital ? (
+                                                        <div>
+                                                            <div><strong>Forma:</strong> Digital</div>
+                                                            <div><strong>Status:</strong> Envio por E-mail</div>
+                                                        </div>
+                                                    ) : (pedido.financeiro?.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || pedido.etiquetaGerada) ? (
+                                                        <div>
+                                                            <div><strong>Método:</strong> {cotacao.dsMetodoPagamentoCotado || pedido.financeiro?.metodo?.replace('Logística: ', '') || pedidoLogistica.dsMetodoPagamento || "Definida"}</div>
+                                                            <div><strong>Valor:</strong> R$ {Number(cotacao.vlFreteCotado ?? pedido.financeiro?.vlFrete ?? 0).toFixed(2).replace('.', ',')}</div>
+                                                            <div><strong>Prazo:</strong> {cotacao.prazoEntregaCotado ?? pedido.financeiro?.prazoEntrega ?? 0} dias</div>
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <div style={{ color: '#d97706', marginBottom: '6px' }}>Precisa Cotar Frete</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Bloco 4: Dados da Etiqueta / Rastreio e Ação */}
+                                            <div style={localStyles.caixaBlocoPadrao}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🏷️ Rastreio e Ação</div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
+                                                        <div><b>Código Rastreio:</b> {codigoRastreio}</div>
+                                                        {codigoRastreio !== "Disponível no Melhor Envio" && (
+                                                            <a href={linkRastreio} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px', fontWeight: 'bold' }}>
+                                                                🔍 Rastrear Envio
+                                                            </a>
+                                                        )}
+                                                        {etiquetaData.urlEtiqueta || pedido.urlEtiqueta ? (
+                                                            <a href={etiquetaData.urlEtiqueta || pedido.urlEtiqueta} target="_blank" rel="noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px' }}>
+                                                                Ver Etiqueta PDF
+                                                            </a>
+                                                        ) : null}
+                                                    </div>
+
+                                                    <div style={{ marginTop: '6px' }}>
+                                                        <button onClick={() => mudarStatusDireto(pedido, 'Concluído')} style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>
+                                                            ✅ Marcar como Entregue
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+        </div>
+    );
+}
+
+const localStyles: { [key: string]: React.CSSProperties } = {
+    cardContainer: { borderRadius: '8px', backgroundColor: '#fff', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+    cardHeaderLinha: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', minHeight: '45px', boxSizing: 'border-box' },
+    itemLinhaResumida: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 8px', backgroundColor: '#fdfdfd', borderRadius: '6px', border: '1px solid #f1f5f9' },
+    conteudoExpandido: { padding: '16px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' },
+    gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' },
+    caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px' },
+    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }
+};

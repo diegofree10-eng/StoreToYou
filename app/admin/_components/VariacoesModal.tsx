@@ -59,6 +59,7 @@ export default function VariacoesModal({
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [precoGlobal, setPrecoGlobal] = useState("");
   const [custoGlobal, setCustoGlobal] = useState("");
+  const [estoqueGlobal, setEstoqueGlobal] = useState("");
   const [draftTabela, setDraftTabela] = useState(tabelaPrecos);
   const [showVar2, setShowVar2] = useState(nomeVar2 !== "" || opcoesVar2.length > 0);
 
@@ -109,7 +110,7 @@ export default function VariacoesModal({
       <div style={{
         ...shopeeStyles.modal,
         width: isMobile ? '95%' : shopeeStyles.modal.width,
-        maxWidth: isMobile ? '100%' : '700px',
+        maxWidth: isMobile ? '100%' : '950px',
         maxHeight: isMobile ? '90vh' : '95vh',
         boxSizing: 'border-box',
         display: 'flex',
@@ -189,16 +190,22 @@ export default function VariacoesModal({
             gap: '10px'
           }}>
             <input
-              placeholder="0,00"
+              placeholder="Preço (0,00)"
               value={precoGlobal}
               onChange={(e) => setPrecoGlobal(formatarMoeda(e.target.value))}
               style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
             />
             <input
-              placeholder="0,00"
+              placeholder="Custo (0,00)"
               value={custoGlobal}
               onChange={(e) => setCustoGlobal(formatarMoeda(e.target.value))}
               style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
+            />
+            <input
+              placeholder="Estoque"
+              value={estoqueGlobal}
+              onChange={(e) => setEstoqueGlobal(e.target.value.replace(/\D/g, ""))}
+              style={{ padding: '8px', border: '1px solid #dcdcdc', width: isMobile ? '100%' : '90px', borderRadius: '4px' }}
             />
             <button
               onClick={() => {
@@ -208,8 +215,9 @@ export default function VariacoesModal({
                     const key = comb.key;
                     novaTabela[key] = {
                       ...(novaTabela[key] || {}),
-                      preco: precoGlobal,
-                      custo: custoGlobal
+                      preco: precoGlobal || novaTabela[key]?.preco,
+                      custo: custoGlobal || novaTabela[key]?.custo,
+                      estoque: estoqueGlobal || novaTabela[key]?.estoque
                     };
                   });
                   return novaTabela;
@@ -230,6 +238,7 @@ export default function VariacoesModal({
                   return combsDesteGrupo.map((c, idx) => {
                     const valorPreco = draftTabela[c.key]?.preco || "";
                     const valorCusto = draftTabela[c.key]?.custo || "";
+                    const valorEstoque = draftTabela[c.key]?.estoque || "";
                     const valorSku = draftTabela[c.key]?.sku || "";
                     const temFoto = !!draftTabela[c.key]?.foto;
 
@@ -301,6 +310,15 @@ export default function VariacoesModal({
                                 isMobile={isMobile}
                               />
                             </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Estoque</label>
+                              <input
+                                style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }}
+                                value={valorEstoque}
+                                onChange={e => handleDraftInput(c.key, "estoque", e.target.value.replace(/\D/g, ""))}
+                                placeholder="0"
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -323,6 +341,7 @@ export default function VariacoesModal({
                     <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>SKU</th>
                     <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Preço</th>
                     <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Custo</th>
+                    <th style={{ ...shopeeStyles.th, textAlign: 'center', width: '90px' }}>Estoque</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -332,6 +351,7 @@ export default function VariacoesModal({
 
                       const valorPreco = draftTabela[c.key]?.preco || "";
                       const valorCusto = draftTabela[c.key]?.custo || "";
+                      const valorEstoque = draftTabela[c.key]?.estoque || "";
                       const valorSku = draftTabela[c.key]?.sku || "";
                       const temFoto = !!draftTabela[c.key]?.foto;
                       return (
@@ -374,10 +394,9 @@ export default function VariacoesModal({
                                       onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (!file) return;
-                                        // Dispara o Cropper em vez de ler direto
                                         setArquivoParaCortar(file);
                                         setCombsParaAtualizar(combsDesteGrupo);
-                                        e.target.value = ""; // Limpa o input
+                                        e.target.value = "";
                                       }} 
                                     />
                                   </>
@@ -404,6 +423,14 @@ export default function VariacoesModal({
                               isMobile={isMobile}
                             />
                           </td>
+                          <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
+                            <input
+                              style={{ ...shopeeStyles.tableInput, width: '70px', textAlign: 'center' }}
+                              value={valorEstoque}
+                              onChange={e => handleDraftInput(c.key, "estoque", e.target.value.replace(/\D/g, ""))}
+                              placeholder="0"
+                            />
+                          </td>
                         </tr>
                       );
                     });
@@ -420,6 +447,7 @@ export default function VariacoesModal({
             onClick={() => {
               setPrecoGlobal("");
               setCustoGlobal("");
+              setEstoqueGlobal("");
               setDraftTabela(tabelaPrecos);
               setShowVarModal(false);
             }}

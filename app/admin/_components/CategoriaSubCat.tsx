@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import { 
-  collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy 
+  collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, getDocs, where, writeBatch 
 } from "firebase/firestore";
-import { FiPlus, FiTrash2, FiX, FiFolder, FiCornerDownRight } from "react-icons/fi";
+import { FiPlus, FiTrash2, FiX, FiFolder, FiCornerDownRight, FiEdit2, FiCheck } from "react-icons/fi";
 
 interface Props {
   lojistaId: string;
@@ -17,6 +17,9 @@ export default function CategoriaSubCat({ lojistaId, onClose, limite }: Props) {
   const [categorias, setCategorias] = useState<any[]>([]);
   const [novaCat, setNovaCat] = useState("");
   const [novaSub, setNovaSub] = useState<{ [key: string]: string }>({});
+
+  const [editandoSubIndex, setEditandoSubIndex] = useState<{ catId: string; index: number } | null>(null);
+  const [textoSubEditada, setTextoSubEditada] = useState("");
 
   useEffect(() => {
     if (!lojistaId) return;
@@ -43,7 +46,7 @@ export default function CategoriaSubCat({ lojistaId, onClose, limite }: Props) {
     }
   };
 
-  const adicionarSubcategoria = async (catId: string, nomeCat: string) => {
+  const adicionarSubcategoria = async (catId: string) => {
     const nomeSub = novaSub[catId];
     if (!nomeSub?.trim()) return;
 
@@ -52,11 +55,55 @@ export default function CategoriaSubCat({ lojistaId, onClose, limite }: Props) {
 
     try {
       await updateDoc(doc(db, "lojistas", lojistaId, "categorias", catId), {
-        subcategorias: [...subsExistentes, nomeSub]
+        subcategorias: [...subsExistentes, nomeSub.trim()]
       });
       setNovaSub({ ...novaSub, [catId]: "" });
     } catch (e) {
       alert("Erro ao adicionar subcategoria.");
+    }
+  };
+
+  // Atualiza a subcategoria na categoria E propaga a alteração para os produtos vinculados
+  const salvarEdicaoSubcategoria = async (catId: string, index: number) => {
+    const nomeNovo = textoSubEditada.trim();
+    if (!nomeNovo) return;
+
+    const catAtual = categorias.find(c => c.id === catId);
+    const subsExistentes = catAtual.subcategorias || [];
+    const nomeAntigo = subsExistentes[index];
+
+    if (nomeAntigo === nomeNovo) {
+      setEditandoSubIndex(null);
+      return;
+    }
+
+    try {
+      // 1. Atualiza no array da categoria
+      const novasSubs = [...subsExistentes];
+      novasSubs[index] = nomeNovo;
+
+      await updateDoc(doc(db, "lojistas", lojistaId, "categorias", catId), {
+        subcategorias: novasSubs
+      });
+
+      // 2. Procura todos os produtos que usavam essa subcategoria antiga e atualiza a referência
+      const produtosRef = collection(db, "lojistas", lojistaId, "produtos");
+      const qProd = query(produtosRef, where("subcategoria", "==", nomeAntigo));
+      const querySnapshot = await getDocs(qProd);
+
+      if (!querySnapshot.empty) {
+        const batch = writeBatch(db);
+        querySnapshot.forEach((produtoDoc) => {
+          batch.update(produtoDoc.ref, { subcategoria: nomeNovo });
+        });
+        await batch.commit();
+      }
+
+      setEditandoSubIndex(null);
+      setTextoSubEditada("");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao atualizar subcategoria e os produtos vinculados.");
     }
   };
 
@@ -113,15 +160,56 @@ export default function CategoriaSubCat({ lojistaId, onClose, limite }: Props) {
 
                 {/* Lista de Subcategorias */}
                 <div style={styles.subList}>
-                  {cat.subcategorias?.map((sub: string, index: number) => (
-                    <div key={index} style={styles.subItem}>
-                      <div style={styles.subNameGroup}>
-                        <FiCornerDownRight size={14} color="#94a3b8" />
-                        <span>{sub}</span>
+                  {cat.subcategorias?.map((sub: string, index: number) => {
+                    const isEditing = editandoSubIndex?.catId === cat.id && editandoSubIndex?.index === index;
+                    return (
+                      <div key={index} style={styles.subItem}>
+                        <div style={styles.subNameGroup}>
+                          <FiCornerDownRight size={14} color="#94a3b8" />
+                          {isEditing ? (
+                            <input 
+                              style={styles.inputEdit}
+                              value={textoSubEditada}
+                              onChange={e => setTextoSubEditada(e.target.value)}
+                              autoFocus
+                            />
+                          ) : (
+                            <span>{sub}</span>
+                          )}
+                        </div>
+
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          {isEditing ? (
+                            <button 
+                              onClick={() => salvarEdicaoSubcategoria(cat.id, index)} 
+                              style={styles.btnSaveMini}
+                              title="Salvar"
+                            >
+                              <FiCheck size={14} />
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => {
+                                setEditandoSubIndex({ catId: cat.id, index });
+                                setTextoSubEditada(sub);
+                              }} 
+                              style={styles.btnEditMini}
+                              title="Editar"
+                            >
+                              <FiEdit2 size={13} />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => removerSubcategoria(cat.id, index)} 
+                            style={styles.btnTrashMini}
+                            title="Excluir"
+                          >
+                            <FiX size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <button onClick={() => removerSubcategoria(cat.id, index)} style={styles.btnTrashMini}><FiX /></button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Campo Criar Subcategoria */}
@@ -132,7 +220,7 @@ export default function CategoriaSubCat({ lojistaId, onClose, limite }: Props) {
                     value={novaSub[cat.id] || ""}
                     onChange={e => setNovaSub({ ...novaSub, [cat.id]: e.target.value })}
                   />
-                  <button onClick={() => adicionarSubcategoria(cat.id, cat.nome)} style={styles.btnAddMini}>+</button>
+                  <button onClick={() => adicionarSubcategoria(cat.id)} style={styles.btnAddMini}>+</button>
                 </div>
               </div>
             ))}
@@ -162,8 +250,11 @@ const styles: any = {
   btnTrash: { background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: "5px" },
   subList: { display: "flex", flexDirection: "column", gap: "5px", paddingLeft: "10px", marginBottom: "10px" },
   subItem: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: "#fff", borderRadius: "8px", fontSize: "13px", color: "#64748b" },
-  subNameGroup: { display: "flex", alignItems: "center", gap: "8px" },
-  btnTrashMini: { background: "none", border: "none", color: "#cbd5e1", cursor: "pointer", fontSize: "12px" },
+  subNameGroup: { display: "flex", alignItems: "center", gap: "8px", flex: 1, marginRight: "10px" },
+  inputEdit: { width: "100%", padding: "2px 6px", borderRadius: "4px", border: "1px solid #3b82f6", outline: "none", fontSize: "13px" },
+  btnEditMini: { background: "none", border: "none", color: "#3b82f6", cursor: "pointer", display: "flex", alignItems: "center" },
+  btnSaveMini: { background: "none", border: "none", color: "#10b981", cursor: "pointer", display: "flex", alignItems: "center" },
+  btnTrashMini: { background: "none", border: "none", color: "#cbd5e1", cursor: "pointer", display: "flex", alignItems: "center" },
   addSubSection: { display: "flex", gap: "5px" },
   inputMini: { flex: 1, padding: "6px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none", fontSize: "12px" },
   btnAddMini: { background: "#3b82f6", color: "#fff", border: "none", width: "30px", height: "30px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }

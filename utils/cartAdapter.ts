@@ -7,6 +7,7 @@ export const formatarPedidoParaPadrao = (dados: any): Pedido => {
   if (!dados) return {} as Pedido;
 
   return {
+    id: dados.id || "",
     dscliente: {
       dsNome: dados.dscliente?.dsNome || dados.cliente?.nmNome || dados.cliente?.nome || "",
       dsTelefone: dados.dscliente?.dsTelefone || dados.cliente?.dsTelefone || dados.cliente?.telefone || "",

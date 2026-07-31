@@ -8,8 +8,8 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
     setLoading(true);
     setErro(null);
 
-    // Agora lendo dsCep (novo padrão) e mantendo os fallbacks antigos
-    const cep = pedido.endereco?.dsCep || pedido.endereco?.cep || pedido.cliente?.cep || "";
+    // 📦 Atualizado para ler dsCepCliente corretamente do objeto do pedido
+    const cep = pedido.endereco?.dsCepCliente || pedido.endereco?.dsCep || pedido.endereco?.cep || pedido.cliente?.cep || "";
     
     if (!cep || cep.replace(/\D/g, "").length < 8) {
       setLoading(false);
@@ -36,8 +36,8 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
       let lista: any[] = Array.isArray(resposta) ? resposta : (resposta.fretes || []);
 
       // Lógica de Retirada na Loja
-      const cidadeLojista = String(dadosLoja?.cidade || "").trim().toLowerCase();
-      const cidadeCliente = String(pedido.endereco?.cidade || pedido.endereco?.city || "").trim().toLowerCase();
+      const cidadeLojista = String(dadosLoja?.cidade || dadosLoja?.dsCidadeLoja || "").trim().toLowerCase();
+      const cidadeCliente = String(pedido.endereco?.dsCidadeCliente || pedido.endereco?.cidade || pedido.endereco?.city || "").trim().toLowerCase();
       
       if (cidadeLojista && cidadeCliente && cidadeLojista === cidadeCliente) {
         if (!lista.find((f: any) => f.id === "retirar_loja")) {
@@ -48,11 +48,11 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
       return lista.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
     } catch (err: any) {
       setErro(err.message);
-      return [{ id: "retirar_loja", name: "Retirar na Loja (Fallback)", price: 0 }];
+      throw err; // Lança o erro para que a Central de Cotação consiga capturar e exibir corretamente no console/alerta
     } finally {
       setLoading(false);
     }
-  }; // <--- Este fechamento estava faltando ou mal posicionado
+  };
 
   return { cotarFrete, loadingFrete: loading, erroFrete: erro };
-}; // <--- Fechamento da função useFrete
+};

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Save, Trash } from "lucide-react";
+import { Plus, Trash2, Save, Trash, Edit2, XCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
 
@@ -49,6 +49,11 @@ const modalStyles: { [key: string]: React.CSSProperties } = {
     width: '100%', padding: '12px', background: '#d946ef', color: '#fff', 
     border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' 
   },
+  btnRemoveCustom: {
+    width: '100%', padding: '10px', background: '#fef2f2', color: '#ef4444',
+    border: '1px dashed #fca5a5', borderRadius: '8px', fontWeight: '600',
+    cursor: 'pointer', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+  },
   btnDeleteField: {
     position: 'absolute', top: '10px', right: '10px', color: '#ef4444', cursor: 'pointer',
     background: 'none', border: 'none'
@@ -60,7 +65,7 @@ interface CampoPersonalizado {
   label: string;
   tipo: "text" | "number" | "date" | "time";
   obrigatorio: boolean;
-  defaultValue?: string; // Para armazenar o valor padrão se necessário
+  defaultValue?: string;
 }
 
 interface Props {
@@ -75,11 +80,17 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
   const [modelos, setModelos] = useState<any[]>([]);
   const [nomeModelo, setNomeModelo] = useState("");
   const [idModeloSelecionado, setIdModeloSelecionado] = useState("");
+  const [expandido, setExpandido] = useState(false);
 
   useEffect(() => {
     if (config) {
       if (Array.isArray(config)) {
         setCampos(config);
+        // Se já vier com campos salvos ao abrir, podemos manter recolhido por padrão se desejar, 
+        // ou aberto se preferir ver direto. Aqui se houver campos, deixamos recolhido se não for vazio.
+        if (config.length > 0) {
+          setExpandido(false);
+        }
       } else if (typeof config === "object") {
         const mapeados: CampoPersonalizado[] = [];
         if (config.pedeNome) mapeados.push({ id: "pedeNome", label: "Solicitar Nome", tipo: "text", obrigatorio: true });
@@ -87,6 +98,7 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
         if (config.pedeData) mapeados.push({ id: "pedeData", label: "Solicitar Data do Evento", tipo: "date", obrigatorio: true });
         if (config.pedeObs) mapeados.push({ id: "pedeObs", label: "Campo de Observações", tipo: "text", obrigatorio: false });
         setCampos(mapeados);
+        if (mapeados.length > 0) setExpandido(false);
       }
     }
   }, [config]);
@@ -113,30 +125,34 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
       obrigatorio: true
     };
     setCampos(prev => [...prev, novo]);
+    setExpandido(true);
   };
 
   const removerCampo = (id: string) => {
     setCampos(prev => prev.filter(c => c.id !== id));
   };
 
-  // 🔥 NOVA FUNÇÃO: Máscara estrita de Horário executada em tempo real 🔥
-  const aplicarMascaraHora = (valorBruto: string): string => {
-    let limpo = valorBruto.replace(/\D/g, ""); // Remove letras imediatamente
-    
-    if (limpo.length > 4) limpo = limpo.substring(0, 4);
+  // 🔥 NOVA FUNÇÃO: Remove totalmente a personalização do produto
+  const removerPersonalizacaoTotal = () => {
+    setCampos([]);
+    setIdModeloSelecionado("");
+    setExpandido(true);
+    onSave([]); // Salva vazio imediatamente ou ao aplicar
+  };
 
+  const aplicarMascaraHora = (valorBruto: string): string => {
+    let limpo = valorBruto.replace(/\D/g, "");
+    if (limpo.length > 4) limpo = limpo.substring(0, 4);
     if (limpo.length >= 2) {
       let horas = parseInt(limpo.substring(0, 2), 10);
-      if (horas > 23) horas = 23; // Teto de horas de um dia
+      if (horas > 23) horas = 23;
       limpo = String(horas).padStart(2, "0") + limpo.substring(2);
     }
-
     if (limpo.length === 4) {
       let minutos = parseInt(limpo.substring(2, 4), 10);
-      if (minutos > 59) minutos = 59; // Teto de minutos de uma hora
+      if (minutos > 59) minutos = 59;
       limpo = limpo.substring(0, 2) + String(minutos).padStart(2, "0");
     }
-
     if (limpo.length > 2) {
       return limpo.substring(0, 2) + ":" + limpo.substring(2);
     }
@@ -146,7 +162,6 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
   const atualizarSubCampo = (id: string, chave: keyof CampoPersonalizado, valor: any) => {
     setCampos(prev => prev.map(c => {
       if (c.id === id) {
-        // Se o lojista estiver digitando um valor padrão para o campo e for do tipo "time", mascara ele
         if (chave === "defaultValue" && c.tipo === "time") {
           return { ...c, [chave]: aplicarMascaraHora(valor) };
         }
@@ -199,17 +214,18 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
   const handleAplicarAoProduto = () => {
     const camposValidados = campos.filter(c => c.label.trim() !== "");
     if (camposValidados.length === 0 && campos.length > 0) {
-    alert("Alguns campos estão sem nome. Por favor, preencha ou exclua.");
-    return;
-  }
+      alert("Alguns campos estão sem nome. Por favor, preencha ou exclua.");
+      return;
+    }
     onSave(camposValidados);
   };
 
   return (
-    <div style={modalStyles.overlay} onClick={onClose}>
+    <div style={modalStyles.overlay}>
       <div style={modalStyles.content} onClick={e => e.stopPropagation()}>
         <h3 style={modalStyles.title}>🎯 Personalização Inteligente</h3>
 
+        {/* SELEÇÃO DE MODELO PRONTO */}
         <div style={modalStyles.headerSection}>
           <label style={{fontSize: '11px', fontWeight: 'bold', color: '#64748b'}}>USAR MODELO SALVO:</label>
           <div style={modalStyles.modelSelectContainer}>
@@ -219,8 +235,15 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
               onChange={(e) => {
                 const id = e.target.value;
                 setIdModeloSelecionado(id);
-                const mod = modelos.find(m => m.id === id);
-                if (mod) setCampos(mod.campos || []);
+                if (id) {
+                  const mod = modelos.find(m => m.id === id);
+                  if (mod) {
+                    setCampos(mod.campos || []);
+                    setExpandido(false);
+                  }
+                } else {
+                  setExpandido(true);
+                }
               }}
             >
               <option value="">Selecione um modelo pronto...</option>
@@ -235,77 +258,110 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
           </div>
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          {campos.length === 0 && (
-            <p style={{textAlign: 'center', fontSize: '13px', color: '#94a3b8', margin: '20px 0'}}>
-              Nenhum campo adicionado ainda.
+        {/* SE HOUVER CAMPOS CONFIGURADOS E ESTIVER RECOLHIDO */}
+        {campos.length > 0 && !expandido ? (
+          <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px', marginBottom: '20px', textAlign: 'center' }}>
+            <p style={{ fontSize: '13px', color: '#334155', fontWeight: '600', marginBottom: '8px' }}>
+              Personalização ativa ({campos.length} campos configurados).
             </p>
-          )}
-          {campos.map((campo, index) => (
-            <div key={campo.id} style={modalStyles.fieldCard}>
-              <button type="button" style={modalStyles.btnDeleteField} onClick={() => removerCampo(campo.id)}>
-                <Trash2 size={18} />
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '10px' }}>
+              <button 
+                type="button" 
+                onClick={() => setExpandido(true)} 
+                style={{ background: 'none', border: 'none', color: '#d946ef', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              >
+                <Edit2 size={14} /> Ver / Editar campos
               </button>
-              
-              <label style={{fontSize: '11px', fontWeight: '700', color: '#64748b', display: 'block', marginBottom: '4px'}}>
-                PERGUNTA #{index + 1}
-              </label>
-              
-              <input 
-                style={modalStyles.input}
-                placeholder="Ex: Horário da Cerimônia"
-                value={campo.label}
-                onChange={(e) => atualizarSubCampo(campo.id, 'label', e.target.value)}
-              />
+              <button 
+                type="button" 
+                onClick={removerPersonalizacaoTotal} 
+                style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              >
+                <XCircle size={14} /> Remover Personalização
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* MODO DE CRIAÇÃO / EDIÇÃO LIVRE */
+          <div style={{ marginBottom: '20px' }}>
+            {campos.length > 0 && (
+              <button type="button" style={modalStyles.btnRemoveCustom} onClick={removerPersonalizacaoTotal}>
+                <XCircle size={16} /> Remover / Cancelar Personalização deste Produto
+              </button>
+            )}
 
-              {/* Se for do tipo hora, renderiza opcionalmente um teste da máscara */}
-              {campo.tipo === "time" && (
-                <input
-                  style={{ ...modalStyles.input, background: '#fff', borderColor: '#d946ef' }}
-                  placeholder="Teste a máscara de hora aqui (Ex: 14:30)"
-                  maxLength={5}
-                  value={campo.defaultValue || ""}
-                  onChange={(e) => atualizarSubCampo(campo.id, 'defaultValue', e.target.value)}
+            {campos.length === 0 && (
+              <p style={{textAlign: 'center', fontSize: '13px', color: '#94a3b8', margin: '20px 0'}}>
+                Nenhum campo adicionado. O produto não terá campos de personalização.
+              </p>
+            )}
+
+            {campos.map((campo, index) => (
+              <div key={campo.id} style={modalStyles.fieldCard}>
+                <button type="button" style={modalStyles.btnDeleteField} onClick={() => removerCampo(campo.id)}>
+                  <Trash2 size={18} />
+                </button>
+                
+                <label style={{fontSize: '11px', fontWeight: '700', color: '#64748b', display: 'block', marginBottom: '4px'}}>
+                  PERGUNTA #{index + 1}
+                </label>
+                
+                <input 
+                  style={modalStyles.input}
+                  placeholder="Ex: Horário da Cerimônia"
+                  value={campo.label}
+                  onChange={(e) => atualizarSubCampo(campo.id, 'label', e.target.value)}
                 />
-              )}
 
-              <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-                <select 
-                  style={{...modalStyles.input, marginBottom: 0, flex: 1}}
-                  value={campo.tipo}
-                  onChange={(e) => {
-                    const novoTipo = e.target.value;
-                    atualizarSubCampo(campo.id, 'tipo', novoTipo);
-                    if (novoTipo !== "time") atualizarSubCampo(campo.id, 'defaultValue', "");
-                  }}
-                >
-                  <option value="text">Texto</option>
-                  <option value="number">Número</option>
-                  <option value="date">Data</option>
-                  <option value="time">Hora</option>
-                </select>
+                {campo.tipo === "time" && (
+                  <input
+                    style={{ ...modalStyles.input, background: '#fff', borderColor: '#d946ef' }}
+                    placeholder="Teste a máscara de hora aqui (Ex: 14:30)"
+                    maxLength={5}
+                    value={campo.defaultValue || ""}
+                    onChange={(e) => atualizarSubCampo(campo.id, 'defaultValue', e.target.value)}
+                  />
+                )}
 
-                <div 
-                  onClick={() => atualizarSubCampo(campo.id, 'obrigatorio', !campo.obrigatorio)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', userSelect: 'none' }}
-                >
-                   <div style={{
-                     width: '16px', height: '16px', border: '2px solid #d946ef', 
-                     borderRadius: '4px', background: campo.obrigatorio ? '#d946ef' : 'transparent',
-                     transition: '0.2s'
-                   }} />
-                   Obrigatório
+                <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                  <select 
+                    style={{...modalStyles.input, marginBottom: 0, flex: 1}}
+                    value={campo.tipo}
+                    onChange={(e) => {
+                      const novoTipo = e.target.value;
+                      atualizarSubCampo(campo.id, 'tipo', novoTipo);
+                      if (novoTipo !== "time") atualizarSubCampo(campo.id, 'defaultValue', "");
+                    }}
+                  >
+                    <option value="text">Texto</option>
+                    <option value="number">Número</option>
+                    <option value="date">Data</option>
+                    <option value="time">Hora</option>
+                  </select>
+
+                  <div 
+                    onClick={() => atualizarSubCampo(campo.id, 'obrigatorio', !campo.obrigatorio)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', userSelect: 'none' }}
+                  >
+                     <div style={{
+                       width: '16px', height: '16px', border: '2px solid #d946ef', 
+                       borderRadius: '4px', background: campo.obrigatorio ? '#d946ef' : 'transparent',
+                       transition: '0.2s'
+                     }} />
+                     Obrigatório
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
 
-        <button type="button" style={modalStyles.btnAdd} onClick={adicionarCampo}>
-          <Plus size={18} /> Adicionar Campo Manual
-        </button>
+            <button type="button" style={modalStyles.btnAdd} onClick={adicionarCampo}>
+              <Plus size={18} /> Adicionar Campo Manual
+            </button>
+          </div>
+        )}
 
-        {campos.length > 0 && (
+        {/* OPÇÃO DE SALVAR COMO NOVO MODELO */}
+        {campos.length > 0 && expandido && (
           <div style={{ marginBottom: '20px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
              <label style={{fontSize: '11px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '5px'}}>
                SALVAR ESTA CONFIGURAÇÃO COMO MODELO:
@@ -343,3 +399,4 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
     </div>
   );
 }
+//Modal de personalizaçao de castro de produto

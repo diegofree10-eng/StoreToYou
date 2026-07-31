@@ -26,7 +26,8 @@ export default function AuthPage() {
     useEffect(() => {
         async function buscarLogoSistema() {
             try {
-                const docRef = doc(db, "configuracoes", "sistema", "landPage", "banners");
+                //const docRef = doc(db, "configuracoes", "sistema", "landPage", "banners");
+                const docRef = doc(db, "configuracoes/sistema/landPage/banners");
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists() && docSnap.data().logoTipo) {
                     setLogoSistema(docSnap.data().logoTipo);
@@ -147,6 +148,7 @@ export default function AuthPage() {
                     <img
                         src={logoSistema}
                         alt="Logo do Sistema"
+                        fetchPriority="high"
                         style={{ maxHeight: '60px', maxWidth: '150px', width: 'auto', objectFit: 'contain', borderRadius: '8px' }}
                     />
                 </div>

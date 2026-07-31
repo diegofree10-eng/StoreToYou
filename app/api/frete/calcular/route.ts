@@ -4,10 +4,21 @@ import { dbAdmin } from '@/lib/firebaseAdmin';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { cepDestino, pacote, lojistaId, itensFiltrados } = body;
+    let { cepDestino, pacote, lojistaId, itensFiltrados } = body;
+
+    // 🔄 Suporte flexível: Se a API recebeu um "pedido" inteiro em vez de cepDestino isolado
+    if (!cepDestino && body.endereco) {
+      cepDestino = body.endereco.dsCepCliente || body.endereco.cep || body.cliente?.dsCepCliente || body.cliente?.cep;
+    }
+    if (!lojistaId && body.lojistaIdApp) {
+      lojistaId = body.lojistaIdApp;
+    }
+    if (!itensFiltrados && body.itens) {
+      itensFiltrados = body.itens;
+    }
 
     if (!lojistaId || !cepDestino) {
-      return NextResponse.json({ error: "Dados obrigatórios ausentes." }, { status: 400 });
+      return NextResponse.json({ error: "Dados obrigatórios ausentes (lojistaId ou cepDestino)." }, { status: 400 });
     }
 
     // Sanitiza o CEP de destino
@@ -68,13 +79,14 @@ export async function POST(request: Request) {
     
     if (apenasItensComFrete.length > 0) {
       apenasItensComFrete.forEach((item: any) => {
-        const pesoItem = Number(item.peso || item.weight || item.dsPeso || 0.2);
-        const quantidade = Number(item.qty || item.quantity || 1);
+        // 📦 Lê peso e dimensões priorizando os novos campos salvos no pedido, com fallbacks seguros
+        const pesoItem = Number(item.weight || item.peso || item.dsPeso || 0.2);
+        const quantidade = Number(item.qty || item.quantity || item.quantidade || 1);
         pesoTotalCalculado += pesoItem * quantidade;
 
-        const a = Number(item.altura || item.height || item.dsAltura || 2);
-        const c = Number(item.comprimento || item.length || item.dsComprimento || 16);
-        const l = Number(item.largura || item.width || item.dsLargura || 11);
+        const a = Number(item.height || item.altura || item.dsAltura || 2);
+        const c = Number(item.length || item.comprimento || item.dsComprimento || 16);
+        const l = Number(item.width || item.largura || item.dsLargura || 11);
 
         if (a > maiorAltura) maiorAltura = a;
         if (c > maiorComprimento) maiorComprimento = c;
