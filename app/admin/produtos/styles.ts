@@ -66,7 +66,7 @@ export const styles: { [key: string]: React.CSSProperties } = {
   cardImgContainer: {
     width: '120px',
     height: '120px',
-    minHeight: '120px',
+    minHeight: '100px',
     border: '1px solid #cbd5e1',
     borderRadius: '8px',
     background: '#ffffff',

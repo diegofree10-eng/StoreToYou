@@ -1,11 +1,12 @@
 // app/admin/produtos/_components/ListaProdutos.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { FiDownload } from "react-icons/fi";
-import { styles } from "../styles"; // Ajuste o caminho do import de estilos se necessário
+import { styles } from "../styles";
+import { excluirProdutoCompleto } from "@/utils/exclusao";
 
 interface ListaProdutosProps {
     produtos: any[];
@@ -40,11 +41,72 @@ export default function ListaProdutos({
     onEditar
 }: ListaProdutosProps) {
 
+    const [modalPrecoMassaAberto, setModalPrecoMassaAberto] = useState(false);
+    const [novoPrecoMassa, setNovoPrecoMassa] = useState("");
+
     const calcularLucro = (venda: string, custo: string) => {
         const v = parseFloat(venda);
         const c = parseFloat(custo);
         if (!v || !c || c === 0) return null;
         return (((v - c) / c) * 100).toFixed(0);
+    };
+
+    const handleExcluirIndividual = async (produto: any) => {
+        if (!uid) return;
+        const confirmar = window.confirm(`Deseja realmente excluir o produto "${produto.nome}"? Esta ação não pode ser desfeita.`);
+        if (!confirmar) return;
+
+        try {
+            await excluirProdutoCompleto(uid, produto);
+            alert("Produto excluído com sucesso! 🗑️");
+        } catch (error) {
+            console.error("Erro ao excluir produto:", error);
+            alert("Erro ao excluir o produto.");
+        }
+    };
+
+    const excluirEmMassa = async () => {
+        if (!uid || selecionados.length === 0) return;
+        const confirmar = window.confirm(`Deseja realmente excluir os ${selecionados.length} produtos selecionados do sistema e do armazenamento?`);
+        if (!confirmar) return;
+
+        try {
+            for (const id of selecionados) {
+                const produto = produtos.find(p => p.id === id) || produtosFiltrados.find(p => p.id === id);
+                if (produto) {
+                    await excluirProdutoCompleto(uid, produto);
+                }
+            }
+            setSelecionados([]);
+            setModoMassa(false);
+            alert("Produtos selecionados excluídos com sucesso! 🗑️");
+        } catch (error) {
+            console.error("Erro ao excluir em massa:", error);
+            alert("Erro ao excluir os produtos selecionados.");
+        }
+    };
+
+    const aplicarPrecoEmMassa = async () => {
+        if (!uid || selecionados.length === 0 || !novoPrecoMassa) return;
+        const confirmar = window.confirm(`Deseja alterar o preço básico de ${selecionados.length} produto(s) para R$ ${novoPrecoMassa}?`);
+        if (!confirmar) return;
+
+        try {
+            for (const id of selecionados) {
+                await updateDoc(doc(db, "lojistas", uid, "produtos", id), {
+                    precoBasico: novoPrecoMassa,
+                    updatedAt: Date.now()
+                });
+            }
+            setSelecionados([]);
+            setModoMassa(false);
+            setModalPrecoMassaAberto(false);
+            setNovoPrecoMassa("");
+            alert("Preços atualizados com sucesso! 💰");
+        } catch (error) {
+            console.error("Erro ao atualizar preços em massa:", error);
+            alert("Erro ao atualizar os preços.");
+        }
     };
 
     const exportarProdutosCSV = () => {
@@ -75,6 +137,40 @@ export default function ListaProdutos({
 
     return (
         <div>
+            {modalPrecoMassaAberto && (
+                <div style={styles.modalOverlay}>
+                    <div style={styles.modalContent}>
+                        <h3 style={{ marginBottom: '10px' }}>Alterar Preço em Massa</h3>
+                        <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px' }}>
+                            Defina o novo preço básico para os {selecionados.length} produtos selecionados:
+                        </p>
+                        <input
+                            type="text"
+                            placeholder="Ex: 49.90"
+                            value={novoPrecoMassa}
+                            onChange={e => setNovoPrecoMassa(e.target.value)}
+                            style={{ ...styles.searchBar, width: '100%', marginBottom: '15px' }}
+                            autoFocus
+                        />
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button
+                                type="button"
+                                onClick={() => setModalPrecoMassaAberto(false)}
+                                style={{ ...styles.btnGeneric, background: '#cbd5e1', color: '#1e293b' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={aplicarPrecoEmMassa}
+                                style={{ ...styles.btnGeneric, background: '#10b981', color: '#fff', border: 'none' }}
+                            >
+                                Aplicar Preço
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div style={styles.topHeader}>
                 <div style={styles.filterRow}>
@@ -159,21 +255,36 @@ export default function ListaProdutos({
                             <button
                                 type="button"
                                 onClick={() => {
+                                    if (selecionados.length === 0) return alert("Selecione ao menos um produto.");
+                                    setModalPrecoMassaAberto(true);
+                                }}
+                                style={{ ...styles.btnMass, color: '#2563eb' }}
+                            >
+                                💰 Preço em Massa
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
                                     const selecionadosObj = produtos.filter(p => selecionados.includes(p.id));
                                     setListaParaImprimir(selecionadosObj);
                                 }}
                                 style={{ ...styles.btnMass, color: '#f59e0b' }}
                             >
-                                🖨️ Imprimir Selecionados
+                                🖨️ Imprimir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={excluirEmMassa}
+                                style={{ ...styles.btnMass, color: '#dc2626' }}
+                            >
+                                🗑️ Excluir
                             </button>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Grid de Produtos */}
             <div>
-                {/* Regra responsiva embutida para forçar exatamente 4 colunas no mobile sem conflitos */}
                 <style dangerouslySetInnerHTML={{
                     __html: `
         @media (max-width: 768px) {
@@ -183,8 +294,8 @@ export default function ListaProdutos({
                 gap: 4px !important;
             }
             .product-grid-responsivo > div {
-                height: 180px !important;
-                max-height: 180px !important;
+                height: 195px !important;
+                max-height: 195px !important;
                 padding: 3px !important;
                 display: flex !important;
                 flex-direction: column !important;
@@ -235,7 +346,6 @@ export default function ListaProdutos({
                                         />
                                     )}
 
-                                    {/* QUADRO / MOLDURA DA FOTO (CORRIGIDO PARA CONTER PERFEITAMENTE) */}
                                     <div style={styles.cardImgContainer}>
                                         <img
                                             src={p.capa || p.imagens?.[0] || ""}
@@ -257,7 +367,7 @@ export default function ListaProdutos({
                                                 onClick={() => uid && updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { destaque: !p.destaque })}
                                                 style={styles.btnSlim}
                                             >
-                                                {p.destaque ? "⭐ Destacado" : "☆ Destacar"}
+                                                {p.destaque ? "⭐ Destacar" : "☆ Destacar"}
                                             </button>
                                             <button
                                                 type="button"
@@ -280,6 +390,13 @@ export default function ListaProdutos({
                                             >
                                                 🖨️ Etiqueta
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleExcluirIndividual(p)}
+                                                style={{ ...styles.btnSlim, background: '#dc2626', color: '#fff', fontWeight: 'bold' }}
+                                            >
+                                                🗑️ Excluir
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -291,3 +408,5 @@ export default function ListaProdutos({
         </div>
     );
 }
+
+// barra de edicao em massa . ..

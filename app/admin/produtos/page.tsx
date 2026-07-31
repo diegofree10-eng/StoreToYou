@@ -236,15 +236,52 @@ export default function CadastroProdutos() {
         setTabela({ ...novaTabela });
     };
 
+    const validarProdutoParaSalvar = () => {
+        if (!nome || !nome.trim()) {
+            alert("Preencha o Nome do produto.");
+            return false;
+        }
+        if (!descricao || !descricao.trim()) {
+            alert("Preencha a Descrição do produto.");
+            return false;
+        }
+        if (!temVariaveisComPreco) {
+            if (!precoBasico || parseFloat(precoBasico.replace(',', '.')) <= 0) {
+                alert("Informe o preço de Venda.");
+                return false;
+            }
+            if (!custoUnitario || parseFloat(custoUnitario.replace(',', '.')) < 0) {
+                alert("Informe o Custo Unitário.");
+                return false;
+            }
+        }
+        if ((!imagens || imagens.length === 0) && (!files || files.length === 0)) {
+            alert("Adicione pelo menos uma foto ao produto.");
+            return false;
+        }
+        if (!envioTransportadora && !permiteRetirada) {
+            alert("Selecione pelo menos uma modalidade de disponibilidade: Envio por Transportadora ou Retirada na Loja.");
+            return false;
+        }
+        if (envioTransportadora) {
+            if (!peso || parseFloat(peso) <= 0 || !comprimento || parseFloat(comprimento) <= 0 || !largura || parseFloat(largura) <= 0 || !altura || parseFloat(altura) <= 0) {
+                alert("Preencha todas as Medidas para Cálculo (Peso, Comprimento, Largura e Altura) corretamente.");
+                return false;
+            }
+        }
+        return true;
+    };
+
     async function salvar() {
         if (!uid) return;
+        if (!validarProdutoParaSalvar()) return;
+
         if (!editId && produtos.length >= limites.produtos) {
             alert(`Limite de produtos atingido!`);
             return;
         }
         if (!validarTexto(nome) || !nome.trim()) return alert("Nome inválido.");
         if (!categoria) return alert("Selecione uma categoria.");
-        if (imagens.length === 0 && files.length === 0) return alert("Adicione pelo menos uma foto.");
 
         setLoading(true);
         try {
@@ -292,7 +329,7 @@ export default function CadastroProdutos() {
                     sku: novaTabelaPrecos[c.key]?.sku || "",
                     preco: novaTabelaPrecos[c.key]?.preco || precoBasico,
                     custo: novaTabelaPrecos[c.key]?.custo || custoUnitario,
-                    estoque: novaTabelaPrecos[c.key]?.estoque || "", // <--- ADICIONADO AQUI
+                    estoque: novaTabelaPrecos[c.key]?.estoque || "",
                     foto: novaTabelaPrecos[c.key]?.foto || ""
                 })) : [],
                 updatedAt: Date.now()
@@ -325,7 +362,7 @@ export default function CadastroProdutos() {
         setNome(p.nome); setSku(p.sku || ""); setCategoria(p.categoria || ""); setSubcategoria(p.subcategoria || "");
         setPrecoBasico(p.precoBasico || "");
         setCustoUnitario(p.custoUnitario || "");
-        setEstoque(p.estoque || ""); // <--- Carrega o estoque do produto simples
+        setEstoque(p.estoque || "");
         setEnvioTransportadora(p.envioTransportadora ?? true); setPermiteRetirada(p.permiteRetirada ?? false);
         setImagens(p.imagens || []); setDescricao(p.descricao || "");
         setPeso(p.peso || ""); setComprimento(p.comprimento || "");
@@ -339,7 +376,7 @@ export default function CadastroProdutos() {
                 tab[key] = {
                     preco: v.preco,
                     custo: v.custo,
-                    estoque: v.estoque || "", // <--- Carrega o estoque de cada variação
+                    estoque: v.estoque || "",
                     foto: v.foto || "",
                     sku: v.sku || ""
                 };
@@ -436,7 +473,7 @@ export default function CadastroProdutos() {
                         descricao={descricao} setShowDescModal={setShowDescModal}
                         precoBasico={precoBasico} setPrecoBasico={setPrecoBasico}
                         custoUnitario={custoUnitario} setCustoUnitario={setCustoUnitario}
-                        estoque={estoque} setEstoque={setEstoque} // <--- Adicione esta linha
+                        estoque={estoque} setEstoque={setEstoque}
                         temVariaveisComPreco={temVariaveisComPreco}
                         setShowVarModal={setShowVarModal}
                         setShowReqModal={setShowReqModal}
@@ -612,7 +649,7 @@ export default function CadastroProdutos() {
                         descricao={descricao} setShowDescModal={setShowDescModal}
                         precoBasico={precoBasico} setPrecoBasico={setPrecoBasico}
                         custoUnitario={custoUnitario} setCustoUnitario={setCustoUnitario}
-                        estoque={estoque} setEstoque={setEstoque} // <--- Adicione esta linha
+                        estoque={estoque} setEstoque={setEstoque}
                         temVariaveisComPreco={temVariaveisComPreco}
                         setShowVarModal={setShowVarModal}
                         setShowReqModal={setShowReqModal}

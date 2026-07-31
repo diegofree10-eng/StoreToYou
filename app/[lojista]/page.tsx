@@ -37,7 +37,8 @@ export default function HomeLoja() {
           const catsSnap = await getDocs(collection(db, "lojistas", docId, "categorias"));
           setCategoriasState(catsSnap.docs.map(c => ({ id: c.id, ...c.data() })));
 
-          const prodRef = collection(db, "lojistas", docId, "produtos");
+          // Filtra diretamente no Firestore para buscar apenas os produtos com destaque == true
+          const prodRef = query(collection(db, "lojistas", docId, "produtos"), where("destaque", "==", true));
           onSnapshot(prodRef, (pSnap) => {
             setProdutosDestaque(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           });
