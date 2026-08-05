@@ -115,8 +115,15 @@ export default function TabPedidosEnviados({
         return (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id)).length;
     }, [selecionados, idsVisiveisNestaAba]);
 
-    const toggleExpandir = (id: string) => {
+    const toggleExpandir = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
         setPedidosExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const copiarIdCompleto = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(id);
+        alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
     };
 
     const confirmarRecebimentoEmLote = () => {
@@ -133,6 +140,73 @@ export default function TabPedidosEnviados({
 
     return (
         <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
+            <style jsx>{`
+                /* Estilos aplicados EXCLUSIVAMENTE em telas mobile (max-width: 768px) */
+                @media (max-width: 768px) {
+                    .card-header-linha {
+                        flex-direction: column !important;
+                        align-items: flex-start !important;
+                        gap: 8px !important;
+                        padding: 10px 12px !important;
+                    }
+                    .pc-bloco-linha-unica {
+                        display: none !important;
+                    }
+                    .mobile-bloco-organizado {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        width: 100% !important;
+                        gap: 8px !important;
+                    }
+                    .mobile-linha-topo {
+                        display: flex !important;
+                        align-items: center !important;
+                        gap: 10px !important;
+                        width: 100% !important;
+                    }
+                    .mobile-linha-baixo {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: space-between !important;
+                        width: 100% !important;
+                        padding-left: 0 !important;
+                        gap: 8px !important;
+                        cursor: pointer !important;
+                    }
+                    .mobile-id-badge {
+                        font-size: 11px !important;
+                        font-family: monospace !important;
+                        background-color: #e2e8f0 !important;
+                        color: #1e293b !important;
+                        padding: 4px 8px !important;
+                        border-radius: 4px !important;
+                        font-weight: 600 !important;
+                        cursor: pointer !important;
+                        border: 1px solid #cbd5e1 !important;
+                        white-space: nowrap !important;
+                        display: inline-block !important;
+                    }
+                    .grid-expandido {
+                        grid-template-columns: 1fr !important;
+                        gap: 10px !important;
+                    }
+                }
+
+                /* Estilos aplicados EXCLUSIVAMENTE em telas PC (min-width: 769px) */
+                @media (min-width: 769px) {
+                    .mobile-bloco-organizado {
+                        display: none !important;
+                    }
+                    .pc-bloco-linha-unica {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: space-between !important;
+                        width: 100% !important;
+                        cursor: pointer !important;
+                    }
+                }
+            `}</style>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
                     <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>🚚 Pedidos Enviados / Em Trânsito ({pedidosEnviados.length})</h3>
@@ -165,11 +239,11 @@ export default function TabPedidosEnviados({
                         const nomeCliente = typeof pedido.cliente === 'object' ? (pedido.cliente?.nmNomeCliente || pedido.cliente?.nome || "Cliente") : (pedido.cliente || "Cliente");
                         const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
                         const idPedidoExibicao = String(pedido.id || "");
+                        const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
                         const expandido = !!pedidosExpandidos[pedido.id];
 
                         const logistica = (pedido as any).logistica || {};
                         const etiquetaData = (pedido as any).Etiqueta || {};
-                        //const codigoRastreio = etiquetaData.codigoEnvio || pedido.rastreio || pedido.codigoRastreio || logistica.tracking || logistica.dsRastreio || "Disponível no Melhor Envio";
                         const codigoRastreio = pedido.dsNumRastreio || etiquetaData.dsNumRastreio || logistica.dsNumRastreio || "Indisponível";
                         const linkRastreio = pedido.linkRastreio || logistica.linkRastreio || `https://www.melhorrastreio.com.br/rastreio/${codigoRastreio}`;
 
@@ -189,55 +263,91 @@ export default function TabPedidosEnviados({
                             return false;
                         });
 
+                        const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).statusPagamento === 'pago';
+                        const corBordaCard = isPagoReal ? '#2ecc71' : '#e74c3c';
+
+                        const fin = pedido.financeiro || {};
+                        const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
+                        const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
+                        const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
+                        const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
+                        const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
+                        const formaPgtoStr = fin.metodo ?? fin.formaPagamento ?? fin.dsFormaPagamento ?? "-";
+                        const statusPgtoStr = fin.status ?? fin.statusPagamento ?? (isPagoReal ? "Pago" : "Pendente");
+
                         return (
-                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${pedido.pago ? '#2ecc71' : '#e74c3c'}` }}>
-                                {/* LINHA PRINCIPAL DO CARD COM COLUNAS FIXAS */}
+                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${corBordaCard}` }}>
                                 <div
-                                    onClick={() => toggleExpandir(pedido.id)}
+                                    onClick={(e) => toggleExpandir(e, pedido.id)}
+                                    className="card-header-linha"
                                     style={localStyles.cardHeaderLinha}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
-                                        <input
-                                            type="checkbox"
-                                            checked={(selecionados || []).includes(pedido.id)}
-                                            onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
-                                            style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
-                                        />
+                                    {/* ESTRUTURA ORIGINAL PARA PC */}
+                                    <div className="pc-bloco-linha-unica">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                checked={(selecionados || []).includes(pedido.id)}
+                                                onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
+                                                style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
+                                            />
 
-                                        {/* Número do Pedido Fixo */}
-                                        <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                            <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                            <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '220px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+                                        </div>
 
-                                        {/* Nome do Cliente Fixo */}
-                                        <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
-
-                                        {/* ID do Pedido Fixo */}
-                                        <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '220px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
-
-
-                                        {/* Número de Rastreio Fixo */}
-                                        <span style={{ fontSize: '12px', color: '#1e40af', fontWeight: 'bold', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #bfdbfe', width: '200px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={codigoRastreio}>Cód Rastreio: {codigoRastreio}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
+                                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+                                                {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                            </span>
+                                            <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                        </div>
                                     </div>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
-                                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
-                                            {formatarData(pedido.data || (pedido.cliente as any)?.data)}
-                                        </span>
-                                        <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                    {/* ESTRUTURA ORGANIZADA EXCLUSIVA PARA MOBILE */}
+                                    <div className="mobile-bloco-organizado" style={{ display: 'none' }}>
+                                        <div className="mobile-linha-topo">
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={(selecionados || []).includes(pedido.id)}
+                                                    onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
+                                                    style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
+                                                />
+                                                <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                                <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mobile-linha-baixo">
+                                            <span 
+                                                className="mobile-id-badge" 
+                                                onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
+                                                title="Toque para copiar o ID completo"
+                                            >
+                                                📋ID: {idEncurtadoMobile}
+                                            </span>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
+                                                    {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                                </span>
+                                                <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* LISTA DE ITENS COMPACTA */}
                                 <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {pedido.itens?.map((item: any, idx: number) => (
                                         <ItemResumido key={idx} item={item} lojistaId={lojistaIdApp} pedidoLogistica={pedidoLogistica} db={db} />
                                     ))}
                                 </div>
 
-                                {/* CONTEÚDO EXPANDIDO (4 BLOCOS) */}
                                 {expandido && (
                                     <div style={localStyles.conteudoExpandido}>
-                                        <div style={localStyles.gridExpandido}>
-                                            {/* Bloco 1: Personalização */}
+                                        <div className="grid-expandido" style={localStyles.gridExpandido}>
                                             <div style={localStyles.caixaPersonalizacao}>
                                                 <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
                                                     ✨ Personalização:
@@ -263,7 +373,6 @@ export default function TabPedidosEnviados({
                                                 )}
                                             </div>
 
-                                            {/* Bloco 2: Endereço */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>📍 Endereço de Entrega</div>
                                                 <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
@@ -281,7 +390,6 @@ export default function TabPedidosEnviados({
                                                 </div>
                                             </div>
 
-                                            {/* Bloco 3: Dados da Transportadora */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🚚 Transportadora / Logística</div>
                                                 <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
@@ -311,7 +419,6 @@ export default function TabPedidosEnviados({
                                                 </div>
                                             </div>
 
-                                            {/* Bloco 4: Dados da Etiqueta / Rastreio e Ação */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🏷️ Rastreio e Ação</div>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -336,6 +443,24 @@ export default function TabPedidosEnviados({
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO COMPLETO */}
+                                            <div style={localStyles.caixaBlocoPadrao}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <div><strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
+                                                    <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
+                                                    <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
+                                                        <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+                                                    </div>
+                                                    <div><strong>Cupom:</strong> {cupomStr}</div>
+                                                    
+                                                    
+                                                    <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
+                                                        <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -353,7 +478,7 @@ const localStyles: { [key: string]: React.CSSProperties } = {
     cardHeaderLinha: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', minHeight: '45px', boxSizing: 'border-box' },
     itemLinhaResumida: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 8px', backgroundColor: '#fdfdfd', borderRadius: '6px', border: '1px solid #f1f5f9' },
     conteudoExpandido: { padding: '16px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' },
-    gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' },
+    gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' },
     caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px' },
     caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }
 };

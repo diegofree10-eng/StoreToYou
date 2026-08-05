@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "clean": "rimraf .next",
-    "reset": "npm run clean && next dev --webpack"
+    "reset": "npm run clean && next dev --webpack",
+    "geral": "concurrently \"npm run dev\" \"firebase functions:log --only prepararNovoLojista\""
   },
   "dependencies": {
     "browser-image-compression": "^2.0.2",
@@ -34,6 +35,7 @@
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "rimraf": "^6.1.3",

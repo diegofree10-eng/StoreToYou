@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState } from "react";
 import { aplicarMascara } from "@/utils/formatters";
 
 export default function SistemaTab({
@@ -10,9 +11,34 @@ export default function SistemaTab({
   showToken,
   setShowToken
 }: any) {
+  // Estados para controlar a exibição dos balões de ajuda (tooltips) de cada seção
+  const [mostrarAjudaCupom, setMostrarAjudaCupom] = useState(false);
+  const [mostrarAjudaFreteGratis, setMostrarAjudaFreteGratis] = useState(false);
+  const [mostrarAjudaTransp, setMostrarAjudaTransp] = useState(false);
+  const [mostrarAjudaLocal, setMostrarAjudaLocal] = useState(false);
+  const [mostrarAjudaStatusLoja, setMostrarAjudaStatusLoja] = useState(false);
+
   return (
     <section>
-      <h3 style={styles.h3}>Marketing</h3>
+      {/* MARKETING / CUPONS */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h3 style={{ ...styles.h3, marginTop: 0, marginBottom: 0 }}>Marketing</h3>
+        <button
+          type="button"
+          onClick={() => setMostrarAjudaCupom(!mostrarAjudaCupom)}
+          style={styles.btnInfo}
+          title="Clique para mais informações"
+        >
+          ℹ️
+        </button>
+      </div>
+
+      {mostrarAjudaCupom && (
+        <div style={styles.tooltipBox}>
+          💡 Crie códigos promocionais para oferecer descontos percentuais ou fixos aos seus clientes na finalização da compra.
+        </div>
+      )}
+
       <button
         type="button"
         disabled={!masterLiberou("temCupons")}
@@ -22,7 +48,25 @@ export default function SistemaTab({
         {masterLiberou("temCupons") ? "🎟️ Gerenciar Cupons de Desconto" : "🔒 Cupons Bloqueados"}
       </button>
 
-      <h3 style={{ ...styles.h3, marginTop: '25px' }}>Configuração de Frete Grátis</h3>
+      {/* FRETE GRÁTIS */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '25px', marginBottom: '8px' }}>
+        <h3 style={{ ...styles.h3, marginTop: 0, marginBottom: 0 }}>Configuração de Frete Grátis</h3>
+        <button
+          type="button"
+          onClick={() => setMostrarAjudaFreteGratis(!mostrarAjudaFreteGratis)}
+          style={styles.btnInfo}
+          title="Clique para mais informações"
+        >
+          ℹ️
+        </button>
+      </div>
+
+      {mostrarAjudaFreteGratis && (
+        <div style={styles.tooltipBox}>
+          💡 Defina um valor mínimo de compra para que o cliente ganhe frete grátis automaticamente no carrinho.
+        </div>
+      )}
+
       <div style={{
         background: !masterLiberou("temFreteGratis") ? '#fafafa' : config.sistema.isFreteGratisAtivo ? '#f0f9ff' : '#f8fafc',
         padding: '15px',
@@ -50,6 +94,7 @@ export default function SistemaTab({
         )}
       </div>
 
+      {/* LOGÍSTICA E ENTREGA */}
       <h3 style={{ ...styles.h3, marginTop: '25px' }}>Logística e Entrega</h3>
       <div style={{ opacity: masterLiberou("temLogistica") ? 1 : 0.6 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -71,7 +116,25 @@ export default function SistemaTab({
           placeholder={masterLiberou("temLogistica") ? "Cole seu token aqui..." : "Bloqueado"}
         />
 
-        <label style={{ ...styles.label, marginTop: '15px' }}>Transportadoras Ativas</label>
+        {/* TRANSPORTADORAS ATIVAS */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', marginBottom: '4px' }}>
+          <label style={{ ...styles.label, marginBottom: 0 }}>Transportadoras Ativas</label>
+          <button
+            type="button"
+            onClick={() => setMostrarAjudaTransp(!mostrarAjudaTransp)}
+            style={styles.btnInfo}
+            title="Clique para mais informações"
+          >
+            ℹ️
+          </button>
+        </div>
+
+        {mostrarAjudaTransp && (
+          <div style={styles.tooltipBox}>
+            💡 Selecione quais transportadoras integradas via Melhor Envio serão disponibilizadas para cotação na sua loja.
+          </div>
+        )}
+
         <div style={styles.gridTransp}>
           {["azul", "correios", "jadlog", "latam"].map(t => (
             <label
@@ -81,9 +144,9 @@ export default function SistemaTab({
               <input
                 type="checkbox"
                 disabled={!masterLiberou("temLogistica")}
-                checked={masterLiberou("temLogistica") ? !!(config.sistema.dstransportadoras?.[t]) : false}
+                checked={masterLiberou("temLogistica") ? !!(config.sistema.dsTransportadoras?.[t]) : false}
                 onChange={() => {
-                  const transportadorasAtuais = config.sistema.dstransportadoras || {};
+                  const transportadorasAtuais = config.sistema.dsTransportadoras || {};
                   const novas = {
                     ...transportadorasAtuais,
                     [t]: !transportadorasAtuais[t]
@@ -93,7 +156,7 @@ export default function SistemaTab({
                     ...config,
                     sistema: {
                       ...config.sistema,
-                      dstransportadoras: novas
+                      dsTransportadoras: novas
                     }
                   });
                 }}
@@ -103,6 +166,54 @@ export default function SistemaTab({
           ))}
         </div>
 
+        {/* ENTREGA LOCAL */}
+        <div style={{
+          marginTop: '15px',
+          background: !masterLiberou("temLogistica") ? '#fafafa' : config.sistema.isFreteLocal ? '#f0f9ff' : '#f8fafc',
+          padding: '15px',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Entrega Local (Taxa Fixa)</span>
+              <button
+                type="button"
+                onClick={() => setMostrarAjudaLocal(!mostrarAjudaLocal)}
+                style={styles.btnInfo}
+                title="Clique para mais informações"
+              >
+                ℹ️
+              </button>
+            </div>
+            <input
+              type="checkbox"
+              disabled={!masterLiberou("temLogistica")}
+              checked={!!config.sistema.isFreteLocal}
+              onChange={e => setConfig({ ...config, sistema: { ...config.sistema, isFreteLocal: e.target.checked } })}
+            />
+          </div>
+
+          {mostrarAjudaLocal && (
+            <div style={styles.tooltipBox}>
+              💡 Ative esta opção caso você faça entregas presenciais ou motoboy na sua região. O cliente poderá selecionar esta modalidade no carrinho e será cobrado o valor fixo definido abaixo.
+            </div>
+          )}
+
+          {config.sistema.isFreteLocal && (
+            <div style={{ marginTop: '10px' }}>
+              <label style={styles.label}>Valor do Frete Fixo (R$)</label>
+              <input
+                style={styles.input}
+                disabled={!masterLiberou("temLogistica")}
+                value={config.sistema.vlFreteLocal || ""}
+                onChange={e => setConfig({ ...config, sistema: { ...config.sistema, vlFreteLocal: aplicarMascara(e.target.value, 'dinheiro') } })}
+                placeholder="Ex: 10,00"
+              />
+            </div>
+          )}
+        </div>
+
         {!masterLiberou("temLogistica") && (
           <div style={styles.lockNotice}>
             🔒 Logística e Integrações indisponíveis no seu plano atual.
@@ -110,7 +221,25 @@ export default function SistemaTab({
         )}
       </div>
 
-      <h3 style={{ ...styles.h3, marginTop: '25px' }}>Status da Loja</h3>
+      {/* STATUS DA LOJA */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '25px', marginBottom: '8px' }}>
+        <h3 style={{ ...styles.h3, marginTop: 0, marginBottom: 0 }}>Status da Loja</h3>
+        <button
+          type="button"
+          onClick={() => setMostrarAjudaStatusLoja(!mostrarAjudaStatusLoja)}
+          style={styles.btnInfo}
+          title="Clique para mais informações"
+        >
+          ℹ️
+        </button>
+      </div>
+
+      {mostrarAjudaStatusLoja && (
+        <div style={styles.tooltipBox}>
+          💡 Alterne para "Vitrine (Catálogo)" se deseja exibir seus produtos sem permitir a conclusão de novos pedidos online no momento.
+        </div>
+      )}
+
       <select
         style={styles.input}
         value={String(config.sistema?.isLojaAberta ?? true)}
@@ -135,11 +264,13 @@ export default function SistemaTab({
 const styles: any = {
   h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
   label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "4px", display: 'block' },
-  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none' },
+  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', background: '#fff' },
   btnCupom: { width: '100%', padding: '15px', background: '#f5f3ff', color: '#8b5cf6', border: '1px solid #ddd6fe', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
   btnDisabledTab: { width: '100%', padding: '15px', background: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '12px', fontWeight: 'bold', cursor: 'not-allowed' },
   gridTransp: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '10px' },
   transpItem: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' },
   lockNotice: { padding: '12px', background: '#fff1f2', color: '#be123c', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #fecdd3', marginTop: '10px' },
-  btnToggleToken: { background: 'none', border: 'none', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }
+  btnToggleToken: { background: 'none', border: 'none', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', padding: 0 },
+  btnInfo: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', padding: 0 },
+  tooltipBox: { marginTop: '8px', marginBottom: '10px', padding: '10px', background: '#e0f2fe', color: '#0369a1', borderRadius: '8px', fontSize: '11px', lineHeight: '1.4', border: '1px solid #bae6fd' }
 };

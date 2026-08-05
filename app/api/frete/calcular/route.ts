@@ -57,11 +57,42 @@ export async function POST(request: Request) {
 
     const token = dados?.sistema?.dsTokenMelhorEnvio || dados?.tokenMelhorEnvio; 
     const cepOrigem = String(dados?.dsCepLoja || dados?.dadosLoja?.dsCepLoja || dados?.cep || "").replace(/\D/g, "");
-    const transportadorasAtivas = dados?.sistema?.dstransportadoras || dados?.transportadoras || {};
+    const transportadorasAtivas = dados?.sistema?.dsTransportadoras || dados?.Transportadoras || {};
+    
+    // Configurações de Entrega Local
+    const entregaLocalAtiva = dados?.sistema?.isFreteLocal || dados?.isFreteLocal || false;
+    
+    // 🛠️ Tratamento blindado para aceitar número ou string com vírgula do Firebase (ex: "20,00" -> 20)
+    const valorFreteLocalBruto = 
+      dados?.sistema?.vlFreteLocal || 
+      dados?.vlFreteLocal || 
+      dados?.dadosLoja?.vlFreteLocal || 
+      0;
+
+    const valorFreteLocalFixo = typeof valorFreteLocalBruto === 'string'
+      ? parseFloat(valorFreteLocalBruto.replace(/\./g, "").replace(",", ".")) || 0
+      : Number(valorFreteLocalBruto) || 0;
+
+    const cidadeLoja = String(dados?.dadosLoja?.dsCidadeLoja || dados?.cidade || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
     if (!token || cepOrigem.length !== 8) {
       return NextResponse.json({ error: "Configuração de Frete incompleta no Firebase (Token ou CEP de origem inválido)." }, { status: 400 });
     }
+
+    // Consulta a cidade do cliente via ViaCEP para validar a Entrega Local e a Retirada na Loja
+    let cidadeCliente = "";
+    try {
+      const rVia = await fetch(`https://viacep.com.br/ws/${cepDestinoLimpo}/json/`);
+      const dadosClienteVia = await rVia.json();
+      if (!dadosClienteVia.erro && dadosClienteVia.localidade) {
+        cidadeCliente = dadosClienteVia.localidade.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      }
+    } catch (err) {
+      console.error("Erro ao consultar ViaCEP no back-end:", err);
+    }
+
+    const mesmaCidade = cidadeCliente && cidadeLoja && cidadeCliente === cidadeLoja;
+    const mesmoCepLoja = cepDestinoLimpo === cepOrigem;
 
     const apenasItensComFrete = Array.isArray(itensFiltrados)
       ? itensFiltrados.filter((item: any) => item.precisaFrete !== false)
@@ -72,14 +103,12 @@ export async function POST(request: Request) {
     }
 
     let pesoTotalCalculado = 0;
-    // Dimensões mínimas seguras recomendadas pelas transportadoras / Melhor Envio
     let maiorLargura = 11;
     let maiorAltura = 2;
     let maiorComprimento = 16;
     
     if (apenasItensComFrete.length > 0) {
       apenasItensComFrete.forEach((item: any) => {
-        // 📦 Lê peso e dimensões priorizando os novos campos salvos no pedido, com fallbacks seguros
         const pesoItem = Number(item.weight || item.peso || item.dsPeso || 0.2);
         const quantidade = Number(item.qty || item.quantity || item.quantidade || 1);
         pesoTotalCalculado += pesoItem * quantidade;
@@ -150,8 +179,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: data.message || "Falha na cotação de frete." }, { status: response.status });
     }
 
+    let fretesFiltrados: any[] = [];
+
     if (Array.isArray(data)) {
-      const fretesFiltrados = data
+      fretesFiltrados = data
         .filter((servico: any) => {
           if (servico.error) return false;
 
@@ -188,11 +219,31 @@ export async function POST(request: Request) {
           delivery_time: servico.delivery_time,
           custom_delivery_time: servico.custom_delivery_time
         }));
-
-      return NextResponse.json(fretesFiltrados);
     }
 
-    return NextResponse.json([]);
+    // 📍 Injeta Retirada na Loja se for do mesmo CEP ou da mesma cidade (com verificação para evitar duplicidade)
+    const jaTemRetirada = fretesFiltrados.some((f: any) => f.id === "retirar_loja");
+    if ((mesmoCepLoja || mesmaCidade) && !jaTemRetirada) {
+      fretesFiltrados.unshift({ 
+        id: "retirar_loja", 
+        name: "Retirar na Loja", 
+        price: 0, 
+        delivery_time: 0 
+      });
+    }
+
+    // 🛵 Injeta Entrega Local se estiver ativa e for da mesma cidade (com verificação para evitar duplicidade)
+    const jaTemEntregaLocal = fretesFiltrados.some((f: any) => f.id === "entrega_local");
+    if (entregaLocalAtiva && mesmaCidade && !jaTemEntregaLocal) {
+      fretesFiltrados.unshift({
+        id: "entrega_local",
+        name: "Entrega Local",
+        price: valorFreteLocalFixo,
+        delivery_time: 1
+      });
+    }
+
+    return NextResponse.json(fretesFiltrados);
 
   } catch (error: any) {
     console.error("🚨 Erro interno na API de frete:", error);

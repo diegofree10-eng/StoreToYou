@@ -87,8 +87,15 @@ export default function TabRetiradaLoja({
         return (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id)).length;
     }, [selecionados, idsVisiveisNestaAba]);
 
-    const toggleExpandir = (id: string) => {
+    const toggleExpandir = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
         setPedidosExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const copiarIdCompleto = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(id);
+        alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
     };
 
     const concluirRetiradaEmLote = async () => {
@@ -127,6 +134,71 @@ export default function TabRetiradaLoja({
 
     return (
         <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
+            <style jsx>{`
+                @media (max-width: 768px) {
+                    .card-header-linha {
+                        flex-direction: column !important;
+                        align-items: flex-start !important;
+                        gap: 8px !important;
+                        padding: 10px 12px !important;
+                    }
+                    .pc-bloco-linha-unica {
+                        display: none !important;
+                    }
+                    .mobile-bloco-organizado {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        width: 100% !important;
+                        gap: 8px !important;
+                    }
+                    .mobile-linha-topo {
+                        display: flex !important;
+                        align-items: center !important;
+                        gap: 10px !important;
+                        width: 100% !important;
+                    }
+                    .mobile-linha-baixo {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: space-between !important;
+                        width: 100% !important;
+                        padding-left: 0 !important;
+                        gap: 8px !important;
+                        cursor: pointer !important;
+                    }
+                    .mobile-id-badge {
+                        font-size: 11px !important;
+                        font-family: monospace !important;
+                        background-color: #e2e8f0 !important;
+                        color: #1e293b !important;
+                        padding: 4px 8px !important;
+                        border-radius: 4px !important;
+                        font-weight: 600 !important;
+                        cursor: pointer !important;
+                        border: 1px solid #cbd5e1 !important;
+                        white-space: nowrap !important;
+                        display: inline-block !important;
+                    }
+                    .grid-expandido {
+                        grid-template-columns: 1fr !important;
+                        gap: 10px !important;
+                    }
+                }
+
+                @media (min-width: 769px) {
+                    .mobile-bloco-organizado {
+                        display: none !important;
+                    }
+                    .pc-bloco-linha-unica {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: space-between !important;
+                        width: 100% !important;
+                        cursor: pointer !important;
+                    }
+                }
+            `}</style>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
                     <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>🏪 Retirada na Loja</h3>
@@ -158,6 +230,7 @@ export default function TabRetiradaLoja({
                         const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
                         const expandido = !!pedidosExpandidos[pedido.id];
                         const idPedidoExibicao = String(pedido.id || "");
+                        const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
                         const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
@@ -172,29 +245,76 @@ export default function TabRetiradaLoja({
                             return false;
                         });
 
+                        const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).statusPagamento === 'pago';
+                        const corBordaCard = isPagoReal ? '#2ecc71' : '#e74c3c';
+
+                        const fin = pedido.financeiro || {};
+                        const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
+                        const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
+                        const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
+                        const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
+                        const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
+                        const formaPgtoStr = fin.metodo ?? fin.formaPagamento ?? fin.dsFormaPagamento ?? "-";
+                        const statusPgtoStr = fin.status ?? fin.statusPagamento ?? (isPagoReal ? "Pago" : "Pendente");
+
                         return (
-                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${pedido.pago ? '#2ecc71' : '#e74c3c'}` }}>
+                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${corBordaCard}` }}>
                                 <div
-                                    onClick={() => toggleExpandir(pedido.id)}
+                                    onClick={(e) => toggleExpandir(e, pedido.id)}
+                                    className="card-header-linha"
                                     style={localStyles.cardHeaderLinha}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
-                                        <input
-                                            type="checkbox"
-                                            checked={(selecionados || []).includes(pedido.id)}
-                                            onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
-                                            style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
-                                        />
-                                        <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
-                                        <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
-                                        <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '235px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+                                    <div className="pc-bloco-linha-unica">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                checked={(selecionados || []).includes(pedido.id)}
+                                                onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
+                                                style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
+                                            />
+                                            <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                            <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '220px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
+                                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+                                                {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                            </span>
+                                            <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                        </div>
                                     </div>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
-                                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
-                                            {formatarData(pedido.data || (pedido.cliente as any)?.data)}
-                                        </span>
-                                        <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                    <div className="mobile-bloco-organizado" style={{ display: 'none' }}>
+                                        <div className="mobile-linha-topo">
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={(selecionados || []).includes(pedido.id)}
+                                                    onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
+                                                    style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
+                                                />
+                                                <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                                <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mobile-linha-baixo">
+                                            <span 
+                                                className="mobile-id-badge" 
+                                                onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
+                                                title="Toque para copiar o ID completo"
+                                            >
+                                                📋ID: {idEncurtadoMobile}
+                                            </span>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
+                                                    {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                                </span>
+                                                <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -206,9 +326,9 @@ export default function TabRetiradaLoja({
 
                                 {expandido && (
                                     <div style={localStyles.conteudoExpandido}>
-                                        <div style={localStyles.gridExpandido}>
+                                        <div className="grid-expandido" style={localStyles.gridExpandido}>
                                             <div style={localStyles.caixaPersonalizacao}>
-                                                <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
+                                                <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '4px', fontSize: '12px' }}>
                                                     ✨ Personalização:
                                                 </div>
                                                 {temPersonalizacao ? (
@@ -216,7 +336,7 @@ export default function TabRetiradaLoja({
                                                         const resp = item.respostasFormatadas || item.personalizacao;
                                                         if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
                                                         return (
-                                                            <div key={idx} style={{ fontSize: '12px', color: '#78350f', lineHeight: '1.4', marginBottom: '4px' }}>
+                                                            <div key={idx} style={{ fontSize: '11px', color: '#78350f', lineHeight: '1.3', marginBottom: '4px' }}>
                                                                 {typeof resp === 'object' ? (
                                                                     Object.entries(resp).map(([k, v]) => (
                                                                         <div key={k}>{k}: <strong>{String(v)}</strong></div>
@@ -228,14 +348,16 @@ export default function TabRetiradaLoja({
                                                         );
                                                     })
                                                 ) : (
-                                                    <div style={{ fontSize: '12px', color: '#92400e', fontStyle: 'italic' }}>Este pedido não tem personalização.</div>
+                                                    <div style={{ fontSize: '11px', color: '#92400e', fontStyle: 'italic' }}>Sem personalização.</div>
                                                 )}
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>📍 Endereço do Cliente</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                                                    {endereco.dsRuaCliente || endereco.rua ? (
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>📍 Endereço</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    {isRetirada ? (
+                                                        <strong>Retirada na Loja física</strong>
+                                                    ) : (
                                                         <>
                                                             {endereco.dsRuaCliente || endereco.rua}, {endereco.dsNumeroCliente || endereco.numero}
                                                             <br />
@@ -243,27 +365,39 @@ export default function TabRetiradaLoja({
                                                             <br />
                                                             CEP: {endereco.dsCepCliente || endereco.cep}
                                                         </>
-                                                    ) : (
-                                                        <span style={{ fontStyle: 'italic', color: '#64748b' }}>Não cadastrado</span>
                                                     )}
                                                 </div>
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🚚 Forma de Entrega</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
                                                     <div><strong>Forma:</strong> Retirada na Loja</div>
-                                                    <div><strong>Status: "Vem Retirar"</strong> </div>
-                                                    
+                                                    <div><strong>Status:</strong> Retirar na Loja (Grátis)</div>
                                                 </div>
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Ações e Status</div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: '#334155' }}>
-                                                    <div><b>Status Pagamento:</b> {pedido.pago ? '✅ Pago' : '❌ Pendente'}</div>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🏷️ Etiqueta</div>
+                                                <div style={{ fontSize: '10px', color: '#64748b', fontStyle: 'italic' }}>
+                                                    Pedido sem etiqueta
+                                                </div>
+                                            </div>
+
+                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO COMPLETO */}
+                                            <div style={localStyles.caixaBlocoPadrao}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>💳 Pagamento</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <div><strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
+                                                    <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
+                                                    <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
+                                                        <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+                                                    </div>
+                                                    <div><strong>Cupom:</strong> {cupomStr}</div>
                                                     
-                                                    
+                                                    <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
+                                                        <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -334,8 +468,7 @@ const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db }: any) 
 
 const styles: { [key: string]: React.CSSProperties } = {
     paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
-    pageBtn: { padding: '8px 16px', cursor: 'pointer', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 'bold' },
-    btnConcluir: { padding: '8px 12px', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', width: '100%', marginTop: '4px' }
+    pageBtn: { padding: '8px 16px', cursor: 'pointer', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 'bold' }
 };
 
 const localStyles: { [key: string]: React.CSSProperties } = {
@@ -343,7 +476,7 @@ const localStyles: { [key: string]: React.CSSProperties } = {
     cardHeaderLinha: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', minHeight: '45px', boxSizing: 'border-box' },
     itemLinhaResumida: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 8px', backgroundColor: '#fdfdfd', borderRadius: '6px', border: '1px solid #f1f5f9' },
     conteudoExpandido: { padding: '16px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' },
-    gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' },
-    caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px' },
-    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }
+    gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' },
+    caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '10px' },
+    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' }
 };

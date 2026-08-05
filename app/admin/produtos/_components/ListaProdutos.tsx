@@ -1,10 +1,10 @@
 // app/admin/produtos/_components/ListaProdutos.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
-import { FiDownload } from "react-icons/fi";
+import { FiDownload, FiMoreVertical } from "react-icons/fi";
 import { styles } from "../styles";
 import { excluirProdutoCompleto } from "@/utils/exclusao";
 
@@ -25,6 +25,7 @@ interface ListaProdutosProps {
     uid: string | null;
     setListaParaImprimir: (v: any[]) => void;
     onEditar: (p: any) => void;
+    onDuplicar: (p: any) => void;
 }
 
 export default function ListaProdutos({
@@ -38,11 +39,32 @@ export default function ListaProdutos({
     listaCategorias,
     uid,
     setListaParaImprimir,
-    onEditar
+    onEditar,
+    onDuplicar
 }: ListaProdutosProps) {
 
     const [modalPrecoMassaAberto, setModalPrecoMassaAberto] = useState(false);
-    const [novoPrecoMassa, setNovoPrecoMassa] = useState("");
+    const [tipoAjustePreco, setTipoAjustePreco] = useState<"fixo" | "soma" | "porcentagem">("porcentagem");
+    const [valorAjustePreco, setValorAjustePreco] = useState("");
+    const [menuAbertoId, setMenuAbertoId] = useState<string | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuAbertoId(null);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const formatarCaixaEletronico = (texto: string) => {
+        const apenasDigitos = texto.replace(/\D/g, "");
+        if (!apenasDigitos) return "0,00";
+        const numero = (parseInt(apenasDigitos, 10) / 100).toFixed(2);
+        return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+    };
 
     const calcularLucro = (venda: string, custo: string) => {
         const v = parseFloat(venda);
@@ -87,22 +109,61 @@ export default function ListaProdutos({
     };
 
     const aplicarPrecoEmMassa = async () => {
-        if (!uid || selecionados.length === 0 || !novoPrecoMassa) return;
-        const confirmar = window.confirm(`Deseja alterar o preço básico de ${selecionados.length} produto(s) para R$ ${novoPrecoMassa}?`);
+        if (!uid || selecionados.length === 0 || !valorAjustePreco) {
+            alert("Preencha o valor do ajuste.");
+            return;
+        }
+
+        let valorTratado = valorAjustePreco;
+        if (tipoAjustePreco === "fixo" || tipoAjustePreco === "soma") {
+            valorTratado = valorAjustePreco.replace(/\./g, "").replace(",", ".");
+        } else {
+            valorTratado = valorAjustePreco.replace(",", ".");
+        }
+
+        const valorNumerico = parseFloat(valorTratado);
+        if (isNaN(valorNumerico)) {
+            alert("Informe um número válido.");
+            return;
+        }
+
+        let tipoTexto = "";
+        if (tipoAjustePreco === "fixo") tipoTexto = `padronizar para R$ ${valorNumerico.toFixed(2)}`;
+        if (tipoAjustePreco === "soma") tipoTexto = `ajustar em R$ ${valorNumerico > 0 ? '+' : ''}${valorNumerico.toFixed(2)}`;
+        if (tipoAjustePreco === "porcentagem") tipoTexto = `ajustar em ${valorNumerico > 0 ? '+' : ''}${valorNumerico}%`;
+
+        const confirmar = window.confirm(`Deseja realmente ${tipoTexto} em ${selecionados.length} produto(s) selecionado(s)?`);
         if (!confirmar) return;
 
         try {
             for (const id of selecionados) {
+                const produtoAtual = produtos.find(p => p.id === id) || produtosFiltrados.find(p => p.id === id);
+                if (!produtoAtual) continue;
+
+                let precoAntigo = parseFloat(String(produtoAtual.precoBasico || "0").replace(/\./g, "").replace(',', '.')) || 0;
+                let novoPrecoCalculado = precoAntigo;
+
+                if (tipoAjustePreco === "fixo") {
+                    novoPrecoCalculado = valorNumerico;
+                } else if (tipoAjustePreco === "soma") {
+                    novoPrecoCalculado = precoAntigo + valorNumerico;
+                } else if (tipoAjustePreco === "porcentagem") {
+                    novoPrecoCalculado = precoAntigo + (precoAntigo * (valorNumerico / 100));
+                }
+
+                if (novoPrecoCalculado < 0) novoPrecoCalculado = 0;
+
                 await updateDoc(doc(db, "lojistas", uid, "produtos", id), {
-                    precoBasico: novoPrecoMassa,
+                    precoBasico: novoPrecoCalculado.toFixed(2).replace(".", ","),
                     updatedAt: Date.now()
                 });
             }
+
             setSelecionados([]);
             setModoMassa(false);
             setModalPrecoMassaAberto(false);
-            setNovoPrecoMassa("");
-            alert("Preços atualizados com sucesso! 💰");
+            setValorAjustePreco("");
+            alert("Preços em massa atualizados com sucesso! 💰");
         } catch (error) {
             console.error("Erro ao atualizar preços em massa:", error);
             alert("Erro ao atualizar os preços.");
@@ -137,35 +198,158 @@ export default function ListaProdutos({
 
     return (
         <div>
+            {/* ORGANIZAÇÃO LIMPA E PROFISSIONAL EXCLUSIVA PARA O MOBILE */}
+            <style jsx>{`
+                .menu-item-hover:hover {
+                    background-color: #f1f5f9 !important;
+                }
+                .menu-item-hover-danger:hover {
+                    background-color: #fee2e2 !important;
+                }
+
+                @media (max-width: 768px) {
+                    /* Grade de 2 colunas limpa no celular */
+                    .product-grid-mobile {
+                        display: grid !important;
+                        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                        gap: 8px !important;
+                    }
+                    
+                    /* Organização compacta do cabeçalho de filtros no mobile */
+                    .mobile-filter-row {
+                        display: flex !important;
+                        flex-direction: row !important;
+                        gap: 6px !important;
+                        width: 100% !important;
+                        align-items: center !important;
+                        flex-wrap: wrap !important;
+                    }
+                    .mobile-filter-row input {
+                        flex: 1 1 100% !important;
+                        margin-bottom: 2px !important;
+                    }
+                    .mobile-filter-row select {
+                        flex: 1 !important;
+                        min-width: calc(50% - 4px) !important;
+                        padding: 8px !important;
+                        font-size: 12px !important;
+                    }
+                    .mobile-filter-row button {
+                        flex: 1 !important;
+                        min-width: calc(50% - 4px) !important;
+                        padding: 8px !important;
+                        font-size: 12px !important;
+                        justify-content: center !important;
+                    }
+
+                    /* Painel de Ações em Massa no Mobile exatamente como solicitado:
+                       Linha 1: Mostrar / Ocultar / Excluir (3 colunas iguais)
+                       Linha 2: Preço em Massa / Imprimir (2 colunas iguais) */
+                    .mobile-mass-panel {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        gap: 8px !important;
+                        background: #fff !important;
+                        border: 1px solid #cbd5e1 !important;
+                        border-radius: 8px !important;
+                        padding: 10px !important;
+                        margin-top: 10px !important;
+                    }
+                    .mobile-mass-panel > div:first-child {
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                        width: 100% !important;
+                    }
+                    
+                    /* Container dos botões de Ação Exata */
+                    .mobile-mass-actions-container {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        gap: 6px !important;
+                        width: 100% !important;
+                    }
+                    .mobile-mass-row-1 {
+                        display: grid !important;
+                        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                        gap: 6px !important;
+                        width: 100% !important;
+                    }
+                    .mobile-mass-row-2 {
+                        display: grid !important;
+                        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                        gap: 6px !important;
+                        width: 100% !important;
+                    }
+                    .mobile-mass-panel button {
+                        width: 100% !important;
+                        justify-content: center !important;
+                        padding: 6px 4px !important;
+                        font-size: 11px !important;
+                    }
+
+                    /* Menu flutuante seguro contra cortes no celular */
+                    .menu-flutuante-pos {
+                        right: 0 !important;
+                        left: auto !important;
+                    }
+                }
+            `}</style>
+
             {modalPrecoMassaAberto && (
                 <div style={styles.modalOverlay}>
-                    <div style={styles.modalContent}>
-                        <h3 style={{ marginBottom: '10px' }}>Alterar Preço em Massa</h3>
-                        <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px' }}>
-                            Defina o novo preço básico para os {selecionados.length} produtos selecionados:
+                    <div style={{ ...styles.modalContent, width: '400px' }}>
+                        <h3 style={{ marginBottom: '10px', fontSize: '16px', fontWeight: 'bold' }}>💰 Ajustar Preços em Massa</h3>
+                        <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '15px' }}>
+                            Aplicar alteração para os <b>{selecionados.length}</b> produtos selecionados:
                         </p>
-                        <input
-                            type="text"
-                            placeholder="Ex: 49.90"
-                            value={novoPrecoMassa}
-                            onChange={e => setNovoPrecoMassa(e.target.value)}
-                            style={{ ...styles.searchBar, width: '100%', marginBottom: '15px' }}
-                            autoFocus
-                        />
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button
-                                type="button"
-                                onClick={() => setModalPrecoMassaAberto(false)}
-                                style={{ ...styles.btnGeneric, background: '#cbd5e1', color: '#1e293b' }}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '15px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>Tipo de Ajuste:</label>
+                            <select
+                                value={tipoAjustePreco}
+                                onChange={(e: any) => {
+                                    const novoTipo = e.target.value;
+                                    setTipoAjustePreco(novoTipo);
+                                    setValorAjustePreco(novoTipo === "porcentagem" ? "" : "0,00");
+                                }}
+                                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
                             >
+                                <option value="porcentagem">📈 Aumentar / Diminuir por Porcentagem (%)</option>
+                                <option value="soma">➕ Somar / Subtrair Valor Fixo (R$)</option>
+                                <option value="fixo">🎯 Padronizar com Preço Fixo (R$)</option>
+                            </select>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>
+                                {tipoAjustePreco === "porcentagem" && "Percentual (Ex: 10 para +10% ou -10 para desconto):"}
+                                {tipoAjustePreco === "soma" && "Valor a somar/subtrair em Reais (Ex: 5,00 ou -2,50):"}
+                                {tipoAjustePreco === "fixo" && "Novo preço fixo para todos (Ex: 49,90):"}
+                            </label>
+                            <input
+                                type="text"
+                                placeholder={tipoAjustePreco === "porcentagem" ? "Ex: 10 ou -10" : "0,00"}
+                                value={valorAjustePreco}
+                                onChange={e => {
+                                    if (tipoAjustePreco === "porcentagem") {
+                                        const valorDigitado = e.target.value.replace(/[^0-9.,-]/g, "");
+                                        setValorAjustePreco(valorDigitado);
+                                    } else {
+                                        setValorAjustePreco(formatarCaixaEletronico(e.target.value));
+                                    }
+                                }}
+                                style={{ ...styles.searchBar, width: '100%', margin: 0 }}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button type="button" onClick={() => setModalPrecoMassaAberto(false)} style={{ ...styles.btnGeneric, background: '#cbd5e1', color: '#1e293b' }}>
                                 Cancelar
                             </button>
-                            <button
-                                type="button"
-                                onClick={aplicarPrecoEmMassa}
-                                style={{ ...styles.btnGeneric, background: '#10b981', color: '#fff', border: 'none' }}
-                            >
-                                Aplicar Preço
+                            <button type="button" onClick={aplicarPrecoEmMassa} style={{ ...styles.btnGeneric, background: '#10b981', color: '#fff', border: 'none' }}>
+                                Aplicar Alteração
                             </button>
                         </div>
                     </div>
@@ -173,170 +357,91 @@ export default function ListaProdutos({
             )}
 
             <div style={styles.topHeader}>
-                <div style={styles.filterRow}>
+                <div className="mobile-filter-row" style={styles.filterRow}>
                     <input
                         style={styles.searchBar}
                         placeholder="🔍 Buscar por nome..."
                         value={busca}
                         onChange={e => setBusca(e.target.value)}
                     />
-                    <select
-                        style={styles.selectTop}
-                        value={filtroCategoria}
-                        onChange={e => setFiltroCategoria(e.target.value)}
-                    >
+                    <select style={styles.selectTop} value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
                         <option value="Todos">Categorias</option>
                         {listaCategorias.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
                     </select>
-                    <select
-                        style={styles.selectStatus}
-                        value={filtroStatus}
-                        onChange={e => setFiltroStatus(e.target.value)}
-                    >
+                    <select style={styles.selectStatus} value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}>
                         <option value="Todos">Status</option>
                         <option value="Visíveis">✅ Visíveis</option>
                         <option value="Ocultos">🚫 Ocultos</option>
                     </select>
-                    <button
-                        type="button"
-                        onClick={() => setModoMassa(!modoMassa)}
-                        style={{ ...styles.btnGeneric, background: modoMassa ? '#3b82f6' : '#fff', color: modoMassa ? '#fff' : '#3b82f6' }}
-                    >
-                        Massa
+                    <button type="button" onClick={() => setModoMassa(!modoMassa)} style={{ ...styles.btnGeneric, background: modoMassa ? '#3b82f6' : '#fff', color: modoMassa ? '#fff' : '#3b82f6' }}>
+                        Editar em Massa
                     </button>
-                    <button
-                        type="button"
-                        onClick={exportarProdutosCSV}
-                        style={{ ...styles.btnGeneric, background: '#10b981', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}
-                    >
+                    <button type="button" onClick={exportarProdutosCSV} style={{ ...styles.btnGeneric, background: '#10b981', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <FiDownload /> Exportar
                     </button>
                 </div>
 
                 {modoMassa && (
-                    <div style={styles.massPanel}>
+                    <div className="mobile-mass-panel" style={styles.massPanel}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <button
-                                type="button"
-                                onClick={() => setSelecionados(selecionados.length === produtosFiltrados.length ? [] : produtosFiltrados.map(p => p.id))}
-                                style={{ ...styles.btnMass, borderColor: '#cbd5e1' }}
-                            >
+                            <button type="button" onClick={() => setSelecionados(selecionados.length === produtosFiltrados.length ? [] : produtosFiltrados.map(p => p.id))} style={{ ...styles.btnMass, borderColor: '#cbd5e1' }}>
                                 {selecionados.length === produtosFiltrados.length ? "Desmarcar Todos" : "Selecionar Todos"}
                             </button>
                             <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e40af' }}>{selecionados.length} itens selecionados</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (selecionados.length === 0 || !uid) return;
-                                    produtosFiltrados.forEach(p => {
-                                        if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: true });
-                                    });
-                                    setSelecionados([]); setModoMassa(false);
-                                }}
-                                style={{ ...styles.btnMass, color: '#059669' }}
-                            >
-                                👁️ Mostrar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (selecionados.length === 0 || !uid) return;
-                                    produtosFiltrados.forEach(p => {
-                                        if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: false });
-                                    });
-                                    setSelecionados([]); setModoMassa(false);
-                                }}
-                                style={{ ...styles.btnMass, color: '#64748b' }}
-                            >
-                                🚫 Ocultar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (selecionados.length === 0) return alert("Selecione ao menos um produto.");
-                                    setModalPrecoMassaAberto(true);
-                                }}
-                                style={{ ...styles.btnMass, color: '#2563eb' }}
-                            >
-                                💰 Preço em Massa
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const selecionadosObj = produtos.filter(p => selecionados.includes(p.id));
-                                    setListaParaImprimir(selecionadosObj);
-                                }}
-                                style={{ ...styles.btnMass, color: '#f59e0b' }}
-                            >
-                                🖨️ Imprimir
-                            </button>
-                            <button
-                                type="button"
-                                onClick={excluirEmMassa}
-                                style={{ ...styles.btnMass, color: '#dc2626' }}
-                            >
-                                🗑️ Excluir
-                            </button>
+                        <div className="mobile-mass-actions-container" style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                            <div className="mobile-mass-row-1" style={{ display: 'contents' }}>
+                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: true }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: '#059669' }}>
+                                    👁️ Mostrar
+                                </button>
+                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: false }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: '#64748b' }}>
+                                    🚫 Ocultar
+                                </button>
+                                <button type="button" onClick={excluirEmMassa} style={{ ...styles.btnMass, color: '#dc2626' }}>
+                                    🗑️ Excluir
+                                </button>
+                            </div>
+                            <div className="mobile-mass-row-2" style={{ display: 'contents' }}>
+                                <button 
+                                    type="button" 
+                                    onClick={() => { 
+                                        if (selecionados.length === 0) return alert("Selecione ao menos um produto."); 
+                                        setValorAjustePreco(tipoAjustePreco === "porcentagem" ? "" : "0,00"); 
+                                        setModalPrecoMassaAberto(true); 
+                                    }} 
+                                    style={{ ...styles.btnMass, color: '#2563eb' }}
+                                >
+                                    💰 Preço em Massa
+                                </button>
+                                <button type="button" onClick={() => { const selecionadosObj = produtos.filter(p => selecionados.includes(p.id)); setListaParaImprimir(selecionadosObj); }} style={{ ...styles.btnMass, color: '#f59e0b' }}>
+                                    🖨️ Imprimir
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
             </div>
 
             <div>
-                <style dangerouslySetInnerHTML={{
-                    __html: `
-        @media (max-width: 768px) {
-            .product-grid-responsivo {
-                display: grid !important;
-                grid-template-columns: repeat(4, 1fr) !important;
-                gap: 4px !important;
-            }
-            .product-grid-responsivo > div {
-                height: 195px !important;
-                max-height: 195px !important;
-                padding: 3px !important;
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: space-between !important;
-            }
-            .product-grid-responsivo div[style*="width: 120px"] {
-                width: 100% !important;
-                height: 50px !important;
-                min-height: 50px !important;
-            }
-            .product-grid-responsivo h4 {
-                font-size: 8px !important;
-                height: 16px !important;
-                line-height: 8px !important;
-                overflow: hidden !important;
-            }
-            .product-grid-responsivo span {
-                font-size: 8px !important;
-            }
-            .product-grid-responsivo .markupTag {
-                font-size: 6px !important;
-                padding: 0 2px !important;
-            }
-            .product-grid-responsivo button {
-                padding: 1px !important;
-                font-size: 7px !important;
-                border-radius: 2px !important;
-                height: 13px !important;
-            }
-        }
-    `}} />
-
-                <div style={styles.productGrid} className="product-grid-responsivo">
+                <div className="product-grid-mobile" style={styles.productGrid}>
                     {produtosFiltrados.length === 0 ? (
                         <p style={{ textAlign: 'center', color: '#64748b', gridColumn: '1 / -1', padding: '30px' }}>Nenhum produto encontrado.</p>
                     ) : (
                         produtosFiltrados.map(p => {
                             const lucro = calcularLucro(p.precoBasico, p.custoUnitario);
+                            const isOpen = menuAbertoId === p.id;
+
                             return (
-                                <div key={p.id} style={{ ...styles.card, opacity: p.ativo ? 1 : 0.6 }}>
-                                    {p.destaque && <span style={styles.starBadge}>⭐</span>}
+                                <div
+                                    key={p.id}
+                                    style={{
+                                        ...styles.card,
+                                        opacity: p.ativo ? 1 : 0.6,
+                                        position: 'relative',
+                                        zIndex: isOpen ? 50 : 1,
+                                        overflow: 'visible'
+                                    }}
+                                >
                                     {modoMassa && (
                                         <input
                                             type="checkbox"
@@ -346,57 +451,145 @@ export default function ListaProdutos({
                                         />
                                     )}
 
+                                    {p.destaque && (
+                                        <div
+                                            title="Produto em Destaque"
+                                            style={{
+                                                position: 'absolute',
+                                                top: '8px',
+                                                left: modoMassa ? '32px' : '8px',
+                                                zIndex: 5,
+                                                background: '#f59e0b',
+                                                border: '1px solid #d97706',
+                                                borderRadius: '50%',
+                                                width: '26px',
+                                                height: '26px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                                                fontSize: '12px',
+                                                pointerEvents: 'none',
+                                                transition: 'left 0.2s ease'
+                                            }}
+                                        >
+                                            ⭐
+                                        </div>
+                                    )}
+
+                                    <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 100 }}>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setMenuAbertoId(isOpen ? null : p.id);
+                                            }}
+                                            style={{
+                                                background: 'rgba(255,255,255,0.95)',
+                                                border: '1px solid #cbd5e1',
+                                                borderRadius: '50%',
+                                                width: '28px',
+                                                height: '28px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                cursor: 'pointer',
+                                                boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                                            }}
+                                        >
+                                            <FiMoreVertical size={14} color="#334155" />
+                                        </button>
+
+                                        {isOpen && (
+                                            <div className="menu-flutuante-pos" style={{
+                                                position: 'absolute',
+                                                top: '32px',
+                                                right: 0,
+                                                background: '#fff',
+                                                border: '1px solid #e2e8f0',
+                                                borderRadius: '8px',
+                                                boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                                                width: '160px',
+                                                zIndex: 9999,
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                padding: '6px 0',
+                                                overflow: 'hidden'
+                                            }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setMenuAbertoId(null);
+                                                        if (uid) {
+                                                            updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { destaque: !p.destaque });
+                                                        }
+                                                    }}
+                                                    className="menu-item-hover"
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                >
+                                                    {p.destaque ? "⭐ Remover Destaque" : "⭐ Destacar"}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); setMenuAbertoId(null); onEditar(p); }}
+                                                    className="menu-item-hover"
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                >
+                                                    ✏️ Editar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); setMenuAbertoId(null); onDuplicar(p); }}
+                                                    className="menu-item-hover"
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#059669', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                >
+                                                    📋 Duplicar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setMenuAbertoId(null);
+                                                        if (uid) {
+                                                            updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: !p.ativo });
+                                                        }
+                                                    }}
+                                                    className="menu-item-hover"
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                >
+                                                    {p.ativo ? "🚫 Ocultar" : "👁️ Mostrar"}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); setMenuAbertoId(null); setListaParaImprimir([p]); }}
+                                                    className="menu-item-hover"
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                >
+                                                    🖨️ Etiqueta
+                                                </button>
+                                                <div style={{ height: '1px', background: '#f1f5f9', margin: '3px 0' }} />
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); setMenuAbertoId(null); handleExcluirIndividual(p); }}
+                                                    className="menu-item-hover-danger"
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                >
+                                                    🗑️ Excluir
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <div style={styles.cardImgContainer}>
-                                        <img
-                                            src={p.capa || p.imagens?.[0] || ""}
-                                            style={styles.cardImg}
-                                            alt={p.nome}
-                                        />
+                                        <img src={p.capa || p.imagens?.[0] || ""} style={styles.cardImg} alt={p.nome} />
                                     </div>
 
                                     <div style={styles.cardBody}>
                                         <h4 style={styles.cardTitle}>{p.nome}</h4>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: '4px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 'auto' }}>
                                             <span style={styles.cardPrice}>R$ {p.precoBasico || "0,00"}</span>
                                             {lucro && <span style={styles.markupTag}>+{lucro}%</span>}
-                                        </div>
-
-                                        <div style={styles.cardActions}>
-                                            <button
-                                                type="button"
-                                                onClick={() => uid && updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { destaque: !p.destaque })}
-                                                style={styles.btnSlim}
-                                            >
-                                                {p.destaque ? "⭐ Destacar" : "☆ Destacar"}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => onEditar(p)}
-                                                style={styles.btnSlim}
-                                            >
-                                                ✏️ Editar
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => uid && updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: !p.ativo })}
-                                                style={styles.btnSlim}
-                                            >
-                                                {p.ativo ? "🚫 Ocultar" : "👁️ Mostrar"}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setListaParaImprimir([p])}
-                                                style={{ ...styles.btnSlim, background: '#f59e0b', color: '#fff', fontWeight: 'bold' }}
-                                            >
-                                                🖨️ Etiqueta
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleExcluirIndividual(p)}
-                                                style={{ ...styles.btnSlim, background: '#dc2626', color: '#fff', fontWeight: 'bold' }}
-                                            >
-                                                🗑️ Excluir
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -408,5 +601,3 @@ export default function ListaProdutos({
         </div>
     );
 }
-
-// barra de edicao em massa . ..

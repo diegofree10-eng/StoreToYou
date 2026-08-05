@@ -26,7 +26,6 @@ export default function AuthPage() {
     useEffect(() => {
         async function buscarLogoSistema() {
             try {
-                //const docRef = doc(db, "configuracoes", "sistema", "landPage", "banners");
                 const docRef = doc(db, "configuracoes/sistema/landPage/banners");
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists() && docSnap.data().logoTipo) {
@@ -93,6 +92,7 @@ export default function AuthPage() {
                     criadoEm: Date.now()
                 }, { merge: true });
 
+                // Salva apenas o básico. O restante (sistema, aparencia, etc) a Cloud Function completa via merge.
                 await setDoc(doc(db, "lojistas", user.uid), {
                     uid: user.uid,
                     email: email,
@@ -108,8 +108,6 @@ export default function AuthPage() {
                         ciclo: "mensal"
                     }
                 }, { merge: true });
-
-                await addDoc(collection(db, "lojistas", user.uid, "categorias"), { nome: "Geral" });
 
                 router.push("/admin");
             }

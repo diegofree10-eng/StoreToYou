@@ -44,7 +44,6 @@ export default function CarrinhoIdentidadeVisual() {
         item.permiteRetirada === false, []);
 
     // Utilizando o Hook Customizado de Lógica
-    // Utilizando o Hook Customizado de Lógica (Sem as funções de máscara antigas)
     const {
         dadosLoja, setDadosLoja, lojistaId, setLojistaId,
         cupomDigitado, setCupomDigitado, descontoAtivo, setDescontoAtivo,
@@ -64,6 +63,12 @@ export default function CarrinhoIdentidadeVisual() {
 
     const nomeLoja = lojaObj?.dsNomeLoja || lojaObj?.nomeLoja || lojistaSlug || "Loja";
     const logoUrl = lojaObj?.dsLogoLoja || lojaObj?.logoUrl || "";
+
+    const cidadeLoja = lojaObj?.dsCidadeLoja || lojaObj?.cidade || "";
+    const isMesmaCidade = useMemo(() => {
+        if (!cidadeLoja || !endereco?.dsCidadeCliente) return false;
+        return cidadeLoja.trim().toLowerCase() === endereco.dsCidadeCliente.trim().toLowerCase();
+    }, [cidadeLoja, endereco?.dsCidadeCliente]);
 
     const config = useMemo(() => ({
         corPrimaria: ap?.dscorPrincipal || ap?.corPrincipal || "#6366f1",
@@ -271,17 +276,6 @@ export default function CarrinhoIdentidadeVisual() {
                 const listaBruta = await rFrete.json();
                 let listaCalculada = Array.isArray(listaBruta) ? listaBruta.filter((f: any) => !f.error) : [];
 
-                const lojaAtual = dadosLoja || dadosLojaContext;
-                const cepLojaBruto = lojaAtual?.dadosLoja?.dsCepLoja || lojaAtual?.dsCepLoja || lojaAtual?.cep || lojaAtual?.CEP || "";
-                const cepLojaLimpo = String(cepLojaBruto).replace(/\D/g, "");
-                const mesmoCepLoja = cepLojaLimpo.length === 8 && cepClienteLimpo === cepLojaLimpo;
-                const cidCli = dadosClienteVia.localidade?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const cidLoj = (lojaAtual?.dadosLoja?.dsCidadeLoja || lojaAtual?.cidade || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-                if (mesmoCepLoja || (cidCli && cidLoj && cidCli === cidLoj)) {
-                    listaCalculada.unshift({ id: "retirar_loja", name: "Retirar na Loja (Grátis)", price: 0 });
-                }
-
                 if (freteGratisConfig.atingido) {
                     const opcaoGratuita = { id: "frete_gratis_ativado", name: "Frete Grátis Promocional", price: 0 };
                     setOpcoesFrete([opcaoGratuita]);
@@ -376,7 +370,6 @@ export default function CarrinhoIdentidadeVisual() {
             }
         }
 
-        // ⚠️ ALERTA CHAMATIVO DE ADVERTÊNCIA ANTES DE ABRIR O WHATSAPP
         const confirmarEnvioComprovante = window.confirm(
             "⚠️ ATENÇÃO IMPORTANTE!\n\nPara que o seu pedido entre em produção, lembre-se de enviar o COMPROVANTE DO PIX diretamente no nosso WhatsApp após finalizar.\n\nDeseja prosseguir?"
         );
@@ -385,13 +378,37 @@ export default function CarrinhoIdentidadeVisual() {
         }
 
         try {
-            const formaEnvio = !temFrete ? 'digital' : (freteSel?.id === 'retirar_loja' ? 'retirada' : 'transportadora');
+            // Mapeamento rigoroso conforme solicitado
+            let dsFormaEntrega = 'transportadora';
+
+            if (!temFrete) {
+                dsFormaEntrega = 'digital';
+            } else if (
+                freteSel?.id === 'retirada' ||
+                freteSel?.id === 'retirar_loja' ||
+                String(freteSel?.name || "").toLowerCase().includes("retirada")
+            ) {
+                dsFormaEntrega = 'retirada';
+            } else if (
+                freteSel?.id === 'entrega_local' ||
+                String(freteSel?.name || "").toLowerCase().includes("entrega local")
+            ) {
+                dsFormaEntrega = 'entrega_local';
+            } else {
+                dsFormaEntrega = 'transportadora';
+            }
+
             const logistica = {
-                formaEnvio,
-                servico: freteSel?.name || "N/A",
-                valorFrete: freteSel?.price || 0,
-                transportadoraId: formaEnvio === 'transportadora' ? (freteSel?.id || "padrao") : null
+                dsFormaEntrega: dsFormaEntrega,
+                isRetirada: dsFormaEntrega === 'retirada',
+                dsServico: freteSel?.name || (temFrete ? "N/A" : "Entrega Digital"),
+                dsTransportadoraId: dsFormaEntrega === 'transportadora' ? (freteSel?.id || null) : (dsFormaEntrega === 'entrega_local' ? 'entrega_local' : null),
+                vlFrete: Number(freteSel?.price || 0),
+                vlPrazo: Number(freteSel?.delivery_time || freteSel?.prazo || 0),
+                isFreteGratis: freteGratisConfig?.atingido || false
             };
+
+            const Cotacao = null;
 
             const itensProcessados = safeCart.map(item => ({
                 ...item,
@@ -423,8 +440,9 @@ export default function CarrinhoIdentidadeVisual() {
                 whatsappNumero: numeroLimpo,
                 dadosLoja: lojaAtual,
                 logistica,
+                Cotacao,
                 cupomDigitado,
-                payloadPixBruto // 👈 Adicionado aqui para ir para a função
+                payloadPixBruto
             });
 
         } catch (error) {
@@ -434,7 +452,7 @@ export default function CarrinhoIdentidadeVisual() {
     };
 
     const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const valorComMascara = aplicarMascara(e.target.value, 'cep'); // 👈 Corrigido aqui
+        const valorComMascara = aplicarMascara(e.target.value, 'cep');
         const novoCliente = { ...cliente, dsCepCliente: valorComMascara };
         setCliente(novoCliente);
         if (typeof window !== "undefined") localStorage.setItem(`cliente_${lojistaSlug}`, JSON.stringify(novoCliente));
@@ -521,7 +539,7 @@ export default function CarrinhoIdentidadeVisual() {
                                 temItemDigital={temItemDigitalNoCarrinho}
                             />
 
-                            {/* 📱 BOTÃO MOBILE DE ESCOLHA DE FRETE (Posicionado entre Dados do Cliente e Resumo) */}
+                            {/* 📱 BOTÃO MOBILE DE ESCOLHA DE FRETE */}
                             {temFrete && (
                                 <div className="botao-frete-mobile-container" style={{ display: 'none', width: '100%', marginTop: '15px' }}>
                                     <button
@@ -566,6 +584,8 @@ export default function CarrinhoIdentidadeVisual() {
                             loadingFrete={loadingFrete}
                             clienteCep={cliente.dsCepCliente}
                             config={config}
+                            isMesmaCidade={isMesmaCidade}
+                            temFreteGratisCampanha={freteGratisConfig.ativo && freteGratisConfig.atingido}
                         />
                     }
                     bloco4={
@@ -596,8 +616,8 @@ export default function CarrinhoIdentidadeVisual() {
                             finalizarNoWhatsApp={finalizarNoWhatsApp}
                             limparTudo={limparTudo}
                             config={config}
-                            temFrete={temFrete}       // 👈 Passando para o componente
-                            freteSel={freteSel}       // 👈 Passando para o componente
+                            temFrete={temFrete}
+                            freteSel={freteSel}
                         />
                     }
                     bloco6={
@@ -620,8 +640,10 @@ export default function CarrinhoIdentidadeVisual() {
                 setFreteSel={setFreteSel}
                 setFreteBackup={setFreteBackup}
                 config={config}
+                clienteCep={cliente.dsCepCliente}
+                isMesmaCidade={isMesmaCidade}
+                temFreteGratisCampanha={freteGratisConfig.ativo && freteGratisConfig.atingido}
             />
-
             {/* RODAPÉ DA LOJA */}
             <footer style={{
                 backgroundColor: config.corSecundaria,

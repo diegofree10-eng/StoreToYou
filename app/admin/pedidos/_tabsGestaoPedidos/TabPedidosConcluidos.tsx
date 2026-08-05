@@ -83,8 +83,79 @@ export default function TabPedidosConcluidos({
         setPedidosExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
+    const copiarIdCompleto = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(id);
+        alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
+    };
+
     return (
         <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
+            <style jsx>{`
+                /* Estilos aplicados EXCLUSIVAMENTE em telas mobile (max-width: 768px) */
+                @media (max-width: 768px) {
+                    .card-header-linha {
+                        flex-direction: column !important;
+                        align-items: flex-start !important;
+                        gap: 8px !important;
+                        padding: 10px 12px !important;
+                    }
+                    .pc-bloco-linha-unica {
+                        display: none !important;
+                    }
+                    .mobile-bloco-organizado {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        width: 100% !important;
+                        gap: 8px !important;
+                    }
+                    .mobile-linha-topo {
+                        display: flex !important;
+                        align-items: center !important;
+                        gap: 10px !important;
+                        width: 100% !important;
+                    }
+                    .mobile-linha-baixo {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: space-between !important;
+                        width: 100% !important;
+                        padding-left: 0 !important;
+                        gap: 8px !important;
+                    }
+                    .mobile-id-badge {
+                        font-size: 11px !important;
+                        font-family: monospace !important;
+                        background-color: #e2e8f0 !important;
+                        color: #1e293b !important;
+                        padding: 4px 8px !important;
+                        border-radius: 4px !important;
+                        font-weight: 600 !important;
+                        cursor: pointer !important;
+                        border: 1px solid #cbd5e1 !important;
+                        white-space: nowrap !important;
+                        display: inline-block !important;
+                    }
+                    .grid-expandido {
+                        grid-template-columns: 1fr !important;
+                        gap: 10px !important;
+                    }
+                }
+
+                /* Estilos aplicados EXCLUSIVAMENTE em telas PC (min-width: 769px) */
+                @media (min-width: 769px) {
+                    .mobile-bloco-organizado {
+                        display: none !important;
+                    }
+                    .pc-bloco-linha-unica {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: space-between !important;
+                        width: 100% !important;
+                    }
+                }
+            `}</style>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
                     <h3 style={{ margin: 0, color: '#059669', fontSize: '18px' }}>🏁 Pedidos Concluídos</h3>
@@ -113,6 +184,7 @@ export default function TabPedidosConcluidos({
                         const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
                         const expandido = !!pedidosExpandidos[pedido.id];
                         const idPedidoExibicao = String(pedido.id || "");
+                        const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
                         const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
@@ -125,45 +197,87 @@ export default function TabPedidosConcluidos({
                             return false;
                         });
 
+                        const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).statusPagamento === 'pago';
+
+                        const fin = pedido.financeiro || {};
+                        const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? fin.valorTotal ?? 0);
+                        const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
+                        const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
+                        const totalVal = Number(fin.vlTotal ?? fin.total ?? fin.valorTotal ?? (subtotalVal + freteVal - descontoVal));
+                        const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
+                        const formaPgtoStr = fin.metodo ?? fin.formaPagamento ?? fin.dsFormaPagamento ?? "-";
+                        const statusPgtoStr = fin.status ?? fin.statusPagamento ?? (isPagoReal ? "Pago" : "Pendente");
+
                         return (
-                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: '1.5px solid #059669' }}>
-                                {/* LINHA PRINCIPAL DO CARD */}
+                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: '1.5px solid #2008fd' }}>
                                 <div
                                     onClick={() => toggleExpandir(pedido.id)}
+                                    className="card-header-linha"
                                     style={localStyles.cardHeaderLinha}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
-                                        <input
-                                            type="checkbox"
-                                            checked={(selecionados || []).includes(pedido.id)}
-                                            onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
-                                            style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
-                                        />
-                                        <span style={{ fontWeight: '800', color: '#059669', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
-                                        <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
-                                        <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '235px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+                                    {/* ESTRUTURA ORIGINAL PARA PC */}
+                                    <div className="pc-bloco-linha-unica" onClick={(e) => e.stopPropagation()}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={(selecionados || []).includes(pedido.id)}
+                                                onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
+                                                style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
+                                            />
+                                            <span style={{ fontWeight: '800', color: '#059669', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                            <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '235px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
+                                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+                                                {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                            </span>
+                                            <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                        </div>
                                     </div>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
-                                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
-                                            {formatarData(pedido.data || (pedido.cliente as any)?.data)}
-                                        </span>
-                                        <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                    {/* ESTRUTURA ORGANIZADA EXCLUSIVA PARA MOBILE */}
+                                    <div className="mobile-bloco-organizado" style={{ display: 'none' }}>
+                                        <div className="mobile-linha-topo" onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                checked={(selecionados || []).includes(pedido.id)}
+                                                onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
+                                                style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
+                                            />
+                                            <span style={{ fontWeight: '800', color: '#059669', fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                            <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                        </div>
+
+                                        <div className="mobile-linha-baixo">
+                                            <span 
+                                                className="mobile-id-badge" 
+                                                onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
+                                                title="Toque para copiar o ID completo"
+                                            >
+                                                📋ID: {idEncurtadoMobile}
+                                            </span>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
+                                                    {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                                </span>
+                                                <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* LISTA DE ITENS COMPACTA */}
                                 <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {pedido.itens?.map((item: any, idx: number) => (
                                         <ItemResumido key={idx} item={item} lojistaId={lojistaIdApp} pedidoLogistica={pedidoLogistica} db={db} />
                                     ))}
                                 </div>
 
-                                {/* CONTEÚDO EXPANDIDO (4 BLOCOS) */}
                                 {expandido && (
                                     <div style={localStyles.conteudoExpandido}>
-                                        <div style={localStyles.gridExpandido}>
-                                            {/* Bloco 1: Personalização */}
+                                        <div className="grid-expandido" style={localStyles.gridExpandido}>
                                             <div style={localStyles.caixaPersonalizacao}>
                                                 <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
                                                     ✨ Personalização / Dados:
@@ -189,7 +303,6 @@ export default function TabPedidosConcluidos({
                                                 )}
                                             </div>
 
-                                            {/* Bloco 2: Endereço ou Contato */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>📍 Destino / Contato</div>
                                                 <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
@@ -205,7 +318,6 @@ export default function TabPedidosConcluidos({
                                                 </div>
                                             </div>
 
-                                            {/* Bloco 3: Logística */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🚚 Logística</div>
                                                 <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
@@ -214,13 +326,28 @@ export default function TabPedidosConcluidos({
                                                 </div>
                                             </div>
 
-                                            {/* Bloco 4: Pagamento e Status */}
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento e Status</div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: '#334155' }}>
-                                                    <div><b>Status:</b> ✅ Concluído</div>
-                                                    <div><b>Método:</b> {pedido.financeiro?.metodo || 'Não informado'}</div>
-                                                    <div><b>Valor Total:</b> R$ {Number(pedido.financeiro?.valorTotal || 0).toFixed(2).replace('.', ',')}</div>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🏷️ Outros / Detalhes</div>
+                                                <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic' }}>
+                                                    Pedido finalizado com sucesso
+                                                </div>
+                                            </div>
+
+                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO COMPLETO */}
+                                            <div style={localStyles.caixaBlocoPadrao}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <div><strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
+                                                    <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
+                                                    <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
+                                                        <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+                                                    </div>
+                                                    <div><strong>Cupom:</strong> {cupomStr}</div>
+                                                    <div><strong>Forma Pgto:</strong> {formaPgtoStr}</div>
+                                                    <div><strong>Status Pgto:</strong> <span style={{ color: isPagoReal ? '#059669' : '#d97706', fontWeight: 'bold' }}>{statusPgtoStr}</span></div>
+                                                    <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
+                                                        <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -299,7 +426,7 @@ const localStyles: { [key: string]: React.CSSProperties } = {
     cardHeaderLinha: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', minHeight: '45px', boxSizing: 'border-box' },
     itemLinhaResumida: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 8px', backgroundColor: '#fdfdfd', borderRadius: '6px', border: '1px solid #f1f5f9' },
     conteudoExpandido: { padding: '16px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' },
-    gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' },
+    gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' },
     caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px' },
     caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }
 };

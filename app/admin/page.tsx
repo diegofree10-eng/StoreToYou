@@ -15,6 +15,7 @@ import { DashboardGestao } from "./DashboardCompleto";
 import { DashboardBronze } from "./DashboardBasico";
 import CadastroProdutos from "./produtos/page";
 import Pedidos from "./pedidos/page";
+import PaginaEstoque from "./estoque/page";
 import AdminConfig from "./config/page";
 import DashboardMaster from "./_tabDashBoardMaster/DashboardMaster";
 
@@ -171,6 +172,7 @@ function AdminLayoutGridDefinitivo() {
 
           {telaAtiva === 'produtos' && <CadastroProdutos />}
           {telaAtiva === 'pedidos' && lojistaIdReal && <Pedidos pedidos={pedidos} db={db} lojistaIdApp={lojistaIdReal} />}
+          {telaAtiva === 'estoque' && <PaginaEstoque />} {/* <--- Adicione esta linha aqui */}
           {telaAtiva === 'config' && <AdminConfig />}
           {telaAtiva === 'gestao-geral' && userRole === 'master' && <DashboardMaster />}
         </div>

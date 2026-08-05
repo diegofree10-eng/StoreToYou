@@ -9,11 +9,12 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, uploadString } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
-import { FiChevronLeft, FiChevronRight, FiMenu, FiX } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiMenu, FiX, FiPlus } from "react-icons/fi";
 
 import FormularioProduto from "./_components/FormularioProduto";
-import SecaoLogistica from "./_components/SecaoLogistica";
+//import SecaoLogistica from "./_components/SecaoLogistica";
 import ListaProdutos from "./_components/ListaProdutos";
+import { duplicarProduto } from "@/utils/duplicarProduto";
 
 import { styles } from "./styles";
 import RequisitosModal from "@/app/admin/_components/RequisitosModal";
@@ -37,9 +38,10 @@ export default function CadastroProdutos() {
     const [limites, setLimites] = useState({ produtos: 0, categorias: 0 });
 
     const [isMobile, setIsMobile] = useState<boolean>(false);
-
     const [isOpenLeft, setIsOpenLeft] = useState(false);
-    const [isOpenRight, setIsOpenRight] = useState(false);
+
+    // Estado para controlar a Tela Deslizante de Cadastro/Edição
+    const [isPainelAberto, setIsPainelAberto] = useState(false);
 
     const [paginaAtual, setPaginaAtual] = useState(1);
     const [itensPorPagina, setItensPorPagina] = useState(20);
@@ -54,6 +56,7 @@ export default function CadastroProdutos() {
     const [precoBasico, setPrecoBasico] = useState("");
     const [custoUnitario, setCustoUnitario] = useState("");
     const [estoque, setEstoque] = useState("");
+    const [estoqueMinimo, setEstoqueMinimo] = useState("");
     const [ativo, setAtivo] = useState(true);
 
     const [envioTransportadora, setEnvioTransportadora] = useState(true);
@@ -96,9 +99,7 @@ export default function CadastroProdutos() {
     const [tipoCropAtual, setTipoCropAtual] = useState<"principal" | "variacao">("principal");
 
     useEffect(() => {
-        const checkScreen = () => {
-            setIsMobile(window.innerWidth <= 768);
-        };
+        const checkScreen = () => setIsMobile(window.innerWidth <= 768);
         checkScreen();
         window.addEventListener("resize", checkScreen);
         return () => window.removeEventListener("resize", checkScreen);
@@ -259,10 +260,6 @@ export default function CadastroProdutos() {
             alert("Adicione pelo menos uma foto ao produto.");
             return false;
         }
-        if (!envioTransportadora && !permiteRetirada) {
-            alert("Selecione pelo menos uma modalidade de disponibilidade: Envio por Transportadora ou Retirada na Loja.");
-            return false;
-        }
         if (envioTransportadora) {
             if (!peso || parseFloat(peso) <= 0 || !comprimento || parseFloat(comprimento) <= 0 || !largura || parseFloat(largura) <= 0 || !altura || parseFloat(altura) <= 0) {
                 alert("Preencha todas as Medidas para Cálculo (Peso, Comprimento, Largura e Altura) corretamente.");
@@ -313,7 +310,9 @@ export default function CadastroProdutos() {
 
             const dados: any = {
                 lojistaId: uid, nome, sku, descricao, categoria, subcategoria,
-                precoBasico: precoFinal, custoUnitario, estoque, ativo,
+                precoBasico: precoFinal, custoUnitario, estoque, 
+                estoqueMinimo: estoqueMinimo ? Number(estoqueMinimo) : 3, 
+                ativo,
                 envioTransportadora, permiteRetirada, precisaFrete: envioTransportadora,
                 peso: envioTransportadora ? peso : null,
                 comprimento: envioTransportadora ? comprimento : null,
@@ -341,6 +340,7 @@ export default function CadastroProdutos() {
 
             alert("Produto salvo com sucesso! ✅");
             limparForm();
+            setIsPainelAberto(false);
         } catch (e) {
             console.error(e);
             alert("Erro ao salvar produto.");
@@ -350,7 +350,7 @@ export default function CadastroProdutos() {
 
     const limparForm = () => {
         setNome(""); setSku(""); setDescricao(""); setCategoria(""); setSubcategoria(""); setPrecoBasico(""); setCustoUnitario("");
-        setEstoque("");
+        setEstoque(""); setEstoqueMinimo("");
         setPeso(""); setComprimento(""); setLargura(""); setAltura(""); setImagens([]); setEditId(null); setFiles([]); setEnvioTransportadora(true); setPermiteRetirada(false);
         setOpcoesVar1([]); setOpcoesVar2([]); setNomeVar1(""); setNomeVar2(""); setTabelaPrecos({});
         setRequisitos({ pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
@@ -363,6 +363,7 @@ export default function CadastroProdutos() {
         setPrecoBasico(p.precoBasico || "");
         setCustoUnitario(p.custoUnitario || "");
         setEstoque(p.estoque || "");
+        setEstoqueMinimo(p.estoqueMinimo !== undefined && p.estoqueMinimo !== null ? String(p.estoqueMinimo) : "");
         setEnvioTransportadora(p.envioTransportadora ?? true); setPermiteRetirada(p.permiteRetirada ?? false);
         setImagens(p.imagens || []); setDescricao(p.descricao || "");
         setPeso(p.peso || ""); setComprimento(p.comprimento || "");
@@ -385,7 +386,21 @@ export default function CadastroProdutos() {
             setOpcoesVar1([...new Set(p.variacoes.map((v: any) => v.v1))] as string[]);
             setOpcoesVar2([...new Set(p.variacoes.map((v: any) => v.v2).filter((v: any) => v))] as string[]);
         }
+        setIsPainelAberto(true);
     };
+
+    const handleDuplicar = (p: any) => {
+        duplicarProduto(p, {
+            setEditId, setProdutoIdAtual, setNome, setSku, setDescricao, setCategoria,
+            setSubcategoria, setPrecoBasico, setCustoUnitario, setEstoque, setEstoqueMinimo, setAtivo,
+            setEnvioTransportadora, setPermiteRetirada, setPeso, setComprimento,
+            setLargura, setAltura, setImagens, setFiles, setRequisitos, setNomeVar1,
+            setNomeVar2, setTabelaPrecos, setOpcoesVar1, setOpcoesVar2,
+            isMobile: false, setIsOpenRight: () => { }
+        });
+        setIsPainelAberto(true);
+    };
+
     const produtosFiltrados = produtos.filter(p => {
         return p.nome?.toLowerCase().includes(busca.toLowerCase()) &&
             (filtroCategoria === "Todos" || p.categoria === filtroCategoria) &&
@@ -399,6 +414,21 @@ export default function CadastroProdutos() {
 
     return (
         <div style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', background: '#f8fafc', position: 'relative', boxSizing: 'border-box' }}>
+
+            <style jsx>{`
+                @media (max-width: 768px) {
+                    .mobile-header-card {
+                        flex-direction: column !important;
+                        align-items: stretch !important;
+                        gap: 12px !important;
+                        padding: 12px !important;
+                    }
+                    .mobile-header-card button {
+                        width: 100% !important;
+                        justify-content: center !important;
+                    }
+                }
+            `}</style>
 
             {/* MODAIS GLOBAIS */}
             <div style={{ position: 'relative', zIndex: 5000 }}>
@@ -420,14 +450,10 @@ export default function CadastroProdutos() {
                     key={showVarModal ? "aberto" : "fechado"}
                     showVarModal={showVarModal}
                     setShowVarModal={setShowVarModal}
-                    nomeVar1={nomeVar1}
-                    setNomeVar1={setNomeVar1}
-                    opcoesVar1={opcoesVar1}
-                    setOpcoesVar1={setOpcoesVar1}
-                    nomeVar2={nomeVar2}
-                    setNomeVar2={setNomeVar2}
-                    opcoesVar2={opcoesVar2}
-                    setOpcoesVar2={setOpcoesVar2}
+                    nomeVar1={nomeVar1} setNomeVar1={setNomeVar1}
+                    opcoesVar1={opcoesVar1} setOpcoesVar1={setOpcoesVar1}
+                    nomeVar2={nomeVar2} setNomeVar2={setNomeVar2}
+                    opcoesVar2={opcoesVar2} setOpcoesVar2={setOpcoesVar2}
                     onCancel={() => { setTabelaPrecos({}); setShowVarModal(false); }}
                     tabelaPrecos={tabelaPrecos}
                     onSave={(novaTabela: any) => setTabelaPrecos(novaTabela)}
@@ -436,133 +462,33 @@ export default function CadastroProdutos() {
                 />
 
                 <EtiquetaModal isOpen={listaParaImprimir.length > 0} listaProdutos={listaParaImprimir} onClose={() => setListaParaImprimir([])} />
-
                 {showCatManager && <CategoriaSubCat lojistaId={uid || ""} onClose={() => setShowCatManager(false)} limite={limites.categorias} />}
-
                 {isModalSKUOpen && <ModalGeradorSKU lojistaId={uid || ""} onClose={() => setIsModalSKUOpen(false)} onSave={(codigo: string) => { setSku(codigo); setIsModalSKUOpen(false); }} />}
             </div>
 
-            {/* VERSÃO PC */}
-            <div className="desktop-view" style={{ display: isMobile ? 'none' : 'flex', flexDirection: 'row', width: '100vw', height: '100vh', overflow: 'hidden', position: 'fixed', top: 0, left: 0, background: '#f8fafc' }}>
-                <div style={{ width: '260px', minWidth: '260px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', height: '100vh', flexShrink: 0 }}>
-                    <h3 style={styles.sideTitle}>📊 Painel Geral</h3>
-                    <div style={styles.planCard}>
-                        <p style={styles.planTitle}>Uso do Plano: {planoLojista}</p>
-                        <div style={{ marginBottom: '8px' }}>
-                            <div style={styles.planStats}><span>📦 Produtos</span><span>{produtos.length} / {limites.produtos}</span></div>
-                            <div style={styles.progressBarBg}><div style={{ ...styles.progressBarFill, width: `${Math.min((produtos.length / limites.produtos) * 100, 100)}%`, background: '#10b981' }} /></div>
-                        </div>
-                        <div>
-                            <div style={styles.planStats}><span>📁 Categorias</span><span>{listaCategorias.length} / {limites.categorias}</span></div>
-                            <div style={styles.progressBarBg}><div style={{ ...styles.progressBarFill, width: `${Math.min((listaCategorias.length / limites.categorias) * 100, 100)}%`, background: '#3b82f6' }} /></div>
-                        </div>
+            {/* TELA PRINCIPAL (LISTAGEM OCUPANDO 100% DA LARGURA ÚTIL) */}
+            <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: '100vh', padding: '15px', boxSizing: 'border-box' }}>
+
+                {/* CABEÇALHO SUPERIOR COM BOTÃO DE NOVO PRODUTO DESTACADO */}
+                <div className="mobile-header-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                    <div>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>📦 Gerenciamento de Produtos</h2>
+                        <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748b' }}>Total de produtos no plano: {produtos.length} / {limites.produtos}</p>
                     </div>
-                </div>
-
-                {/* COLUNA DO FORMULÁRIO COM LARGURA FIXA DE 300px */}
-                <div style={{ width: '300px', minWidth: '300px', maxWidth: '300px', background: '#fff', padding: '15px', overflowY: 'auto', borderRight: '1px solid #e2e8f0', boxSizing: 'border-box', height: '100vh', flexShrink: 0 }}>
-                    <h3 style={styles.sideTitle}>{editId ? "📝 Editar Produto" : "📦 Novo Produto"}</h3>
-                    <FormularioProduto
-                        nome={nome} setNome={setNome}
-                        sku={sku} setSku={setSku}
-                        setIsModalSKUOpen={setIsModalSKUOpen}
-                        categoria={categoria} setCategoria={setCategoria}
-                        subcategoria={subcategoria} setSubcategoria={setSubcategoria}
-                        listaCategorias={listaCategorias}
-                        setShowCatManager={setShowCatManager}
-                        descricao={descricao} setShowDescModal={setShowDescModal}
-                        precoBasico={precoBasico} setPrecoBasico={setPrecoBasico}
-                        custoUnitario={custoUnitario} setCustoUnitario={setCustoUnitario}
-                        estoque={estoque} setEstoque={setEstoque}
-                        temVariaveisComPreco={temVariaveisComPreco}
-                        setShowVarModal={setShowVarModal}
-                        setShowReqModal={setShowReqModal}
-                        requisitos={requisitos}
-                        formatInput={formatInput}
-                        imagens={imagens} setImagens={setImagens}
-                        files={files} setFiles={setFiles}
-                        uploading={uploading}
-                        setTipoCropAtual={setTipoCropAtual}
-                        setArquivoParaCortar={setArquivoParaCortar}
-                    />
-                    <SecaoLogistica
-                        envioTransportadora={envioTransportadora} setEnvioTransportadora={setEnvioTransportadora}
-                        permiteRetirada={permiteRetirada} setPermiteRetirada={setPermiteRetirada}
-                        peso={peso} setPeso={setPeso}
-                        comprimento={comprimento} setComprimento={setComprimento}
-                        largura={largura} setLargura={setLargura}
-                        altura={altura} setAltura={setAltura}
-                        formatInput={formatInput}
-                    />
-                    <button type="button" onClick={salvar} style={styles.btnSave}>
-                        {loading ? "Aguarde..." : editId ? "Atualizar Produto" : "Salvar Produto"}
-                    </button>
-                    <button type="button" onClick={limparForm} style={styles.btnCancel}>
-                        {editId ? "✖ Cancelar" : "🧹 Limpar"}
-                    </button>
-                </div>
-
-                {/* COLUNA DE LISTAGEM COM 5 CARDS FIXOS POR LINHA */}
-                <div style={{ flex: 1, minWidth: 0, padding: '15px', overflowY: 'auto', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100vh' }}>
-                    <div style={{ width: '100%' }}>
-                        <ListaProdutos
-                            produtos={produtos} produtosFiltrados={produtosPaginados} busca={busca} setBusca={setBusca}
-                            filtroCategoria={filtroCategoria} setFiltroCategoria={setFiltroCategoria} filtroStatus={filtroStatus} setFiltroStatus={setFiltroStatus}
-                            modoMassa={modoMassa} setModoMassa={setModoMassa} selecionados={selecionados} setSelecionados={setSelecionados}
-                            listaCategorias={listaCategorias} uid={uid} setListaParaImprimir={setListaParaImprimir} onEditar={carregarDadosProdutoParaEdicao}
-                        />
-                    </div>
-
-                    {/* PAGINAÇÃO PC */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: '1px solid #e2e8f0', background: '#fff', borderRadius: '8px', marginTop: '15px', flexShrink: 0 }}>
-                        <div style={{ width: '60px' }}></div>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
-                            <button type="button" disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => Math.max(p - 1, 1))} style={{ padding: '6px 10px', background: paginaAtual === 1 ? '#cbd5e1' : '#334155', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                                <FiChevronLeft size={14} />
-                            </button>
-                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>{paginaAtual} / {totalPaginas}</span>
-                            <button type="button" disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => Math.min(p + 1, totalPaginas))} style={{ padding: '6px 10px', background: paginaAtual === totalPaginas ? '#cbd5e1' : '#334155', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                                <FiChevronRight size={14} />
-                            </button>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', width: '60px' }}>
-                            <select value={itensPorPagina} onChange={e => setItensPorPagina(Number(e.target.value))} style={{ padding: '6px 4px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}>
-                                <option value={10}>10</option>
-                                <option value={20}>20</option>
-                                <option value={40}>40</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* VERSÃO MOBILE RESPONSIVA */}
-            <div className="mobile-view" style={{ display: isMobile ? 'flex' : 'none', flexDirection: 'column', width: '100%', minHeight: '100vh', background: '#f8fafc', position: 'relative' }}>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 15px', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 99, width: '100%', boxSizing: 'border-box' }}>
                     <button
                         type="button"
-                        onClick={() => setIsOpenLeft(true)}
-                        style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#334155', display: 'flex', alignItems: 'center', padding: 0 }}
+                        onClick={() => {
+                            limparForm();
+                            setIsPainelAberto(true);
+                        }}
+                        style={{ background: '#10b981', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                        <FiMenu />
+                        <FiPlus size={16} /> Novo Produto
                     </button>
-
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                limparForm();
-                                setIsOpenRight(true);
-                            }}
-                            style={{ background: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
-                        >
-                            + Novo
-                        </button>
-                    </div>
                 </div>
 
-                <div style={{ width: '100%', padding: '10px 10px 20px 10px', boxSizing: 'border-box', flex: 1 }}>
+                {/* LISTAGEM DE PRODUTOS */}
+                <div style={{ flex: 1, background: '#fff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <ListaProdutos
                         produtos={produtos}
                         produtosFiltrados={produtosPaginados}
@@ -574,13 +500,12 @@ export default function CadastroProdutos() {
                         listaCategorias={listaCategorias}
                         uid={uid}
                         setListaParaImprimir={setListaParaImprimir}
-                        onEditar={(p: any) => {
-                            carregarDadosProdutoParaEdicao(p);
-                            setIsOpenRight(true);
-                        }}
+                        onEditar={carregarDadosProdutoParaEdicao}
+                        onDuplicar={handleDuplicar}
                     />
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: '1px solid #e2e8f0', marginTop: '20px', background: '#fff', borderRadius: '8px' }}>
+                    {/* PAGINAÇÃO */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: '1px solid #e2e8f0', marginTop: '15px' }}>
                         <div style={{ width: '60px' }}></div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
                             <button type="button" disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => Math.max(p - 1, 1))} style={{ padding: '6px 10px', background: paginaAtual === 1 ? '#cbd5e1' : '#334155', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
@@ -600,44 +525,44 @@ export default function CadastroProdutos() {
                         </div>
                     </div>
                 </div>
+            </div>
 
+            {/* PAINEL / TELA DESLIZANTE LATERAL (DRAWER EM TELA CHEIA AO LADO DA SIDEBAR) */}
+            {isPainelAberto && (
                 <div
-                    onClick={() => { setIsOpenLeft(false); setIsOpenRight(false); }}
-                    style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(0,0,0,0.5)',
-                        zIndex: 1999,
-                        opacity: (isOpenLeft || isOpenRight) ? 1 : 0,
-                        pointerEvents: (isOpenLeft || isOpenRight) ? 'auto' : 'none',
-                        transition: 'opacity 0.3s ease-in-out'
-                    }}
+                    onClick={() => setIsPainelAberto(false)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 4000 }}
                 />
+            )}
 
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '85%', maxWidth: '320px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out', transform: isOpenLeft ? 'translateX(0)' : 'translateX(-100%)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                        <h3 style={styles.sideTitle}>📊 Painel & Plano</h3>
-                        <button type="button" onClick={() => setIsOpenLeft(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}><FiX /></button>
-                    </div>
-                    <div style={styles.planCard}>
-                        <p style={styles.planTitle}>Uso do Plano: {planoLojista}</p>
-                        <div style={{ marginBottom: '8px' }}>
-                            <div style={styles.planStats}><span>📦 Produtos</span><span>{produtos.length} / {limites.produtos}</span></div>
-                            <div style={styles.progressBarBg}><div style={{ ...styles.progressBarFill, width: `${Math.min((produtos.length / limites.produtos) * 100, 100)}%`, background: '#10b981' }} /></div>
-                        </div>
-                        <div>
-                            <div style={styles.planStats}><span>📁 Categorias</span><span>{listaCategorias.length} / {limites.categorias}</span></div>
-                            <div style={styles.progressBarBg}><div style={{ ...styles.progressBarFill, width: `${Math.min((listaCategorias.length / limites.categorias) * 100, 100)}%`, background: '#3b82f6' }} /></div>
-                        </div>
-                    </div>
+            <div style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                width: '650px', // Painel largo e super confortável
+                maxWidth: '90vw',
+                height: '100vh',
+                background: '#fff',
+                zIndex: 4001,
+                boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
+                display: 'flex',
+                flexDirection: 'column',
+                boxSizing: 'border-box',
+                transition: 'transform 0.3s ease-in-out',
+                transform: isPainelAberto ? 'translateX(0)' : 'translateX(100%)'
+            }}>
+                {/* CABEÇALHO DO PAINEL */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 25px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                    <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>
+                        {editId ? "📝 Editar Produto" : "📦 Cadastrar Novo Produto"}
+                    </h2>
+                    <button type="button" onClick={() => setIsPainelAberto(false)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#64748b' }}>
+                        <FiX />
+                    </button>
                 </div>
 
-                <div style={{ position: 'fixed', top: 0, right: 0, width: '90%', maxWidth: '300px', height: '100vh', background: '#fff', zIndex: 2000, boxShadow: '-5px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', padding: '15px', boxSizing: 'border-box', transition: 'transform 0.3s ease-in-out', transform: isOpenRight ? 'translateX(0)' : 'translateX(100%)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                        <h3 style={styles.sideTitle}>{editId ? "📝 Editar Produto" : "📦 Novo Produto"}</h3>
-                        <button type="button" onClick={() => setIsOpenRight(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}><FiX /></button>
-                    </div>
-
+                {/* CORPO DO FORMULÁRIO COM ROLAGEM */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <FormularioProduto
                         nome={nome} setNome={setNome}
                         sku={sku} setSku={setSku}
@@ -650,6 +575,7 @@ export default function CadastroProdutos() {
                         precoBasico={precoBasico} setPrecoBasico={setPrecoBasico}
                         custoUnitario={custoUnitario} setCustoUnitario={setCustoUnitario}
                         estoque={estoque} setEstoque={setEstoque}
+                        estoqueMinimo={estoqueMinimo} setEstoqueMinimo={setEstoqueMinimo}
                         temVariaveisComPreco={temVariaveisComPreco}
                         setShowVarModal={setShowVarModal}
                         setShowReqModal={setShowReqModal}
@@ -660,23 +586,24 @@ export default function CadastroProdutos() {
                         uploading={uploading}
                         setTipoCropAtual={setTipoCropAtual}
                         setArquivoParaCortar={setArquivoParaCortar}
-                    />
-
-                    <SecaoLogistica
+                        // Passando os estados de logística diretamente para o FormularioProduto
                         envioTransportadora={envioTransportadora} setEnvioTransportadora={setEnvioTransportadora}
                         permiteRetirada={permiteRetirada} setPermiteRetirada={setPermiteRetirada}
                         peso={peso} setPeso={setPeso}
                         comprimento={comprimento} setComprimento={setComprimento}
                         largura={largura} setLargura={setLargura}
                         altura={altura} setAltura={setAltura}
-                        formatInput={formatInput}
                     />
+                    {/* <SecaoLogistica /> foi completamente removido daqui para acabar com a duplicação */}
+                </div>
 
-                    <button type="button" onClick={async () => { await salvar(); setIsOpenRight(false); }} style={styles.btnSave}>
+                {/* RODAPÉ FIXO COM AÇÕES */}
+                <div style={{ padding: '15px 25px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', gap: '15px' }}>
+                    <button type="button" onClick={salvar} style={{ ...styles.btnSave, flex: 2, padding: '12px', fontSize: '14px', borderRadius: '8px' }}>
                         {loading ? "Aguarde..." : editId ? "Atualizar Produto" : "Salvar Produto"}
                     </button>
-                    <button type="button" onClick={() => { limparForm(); setIsOpenRight(false); }} style={styles.btnCancel}>
-                        ✖ Cancelar
+                    <button type="button" onClick={() => { limparForm(); setIsPainelAberto(false); }} style={{ ...styles.btnCancel, flex: 1, padding: '12px', fontSize: '14px', borderRadius: '8px' }}>
+                        Cancelar
                     </button>
                 </div>
             </div>

@@ -5,12 +5,14 @@ import { shopeeStyles, styles } from "../produtos/styles";
 
 import { storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
-import ImageCropperModal from "@/utils/ImageCropperModalProduto"; // <--- Importação do Cropper
+import ImageCropperModal from "@/utils/ImageCropperModalProduto";
 
-const formatarMoeda = (valor: string) => {
-  const limpo = valor.replace(/\D/g, "");
-  if (!limpo) return "";
-  return (parseInt(limpo) / 100).toFixed(2);
+// Formatação fluida tipo caixa eletrônico (0,01 -> 0,12 -> 1,23)
+const formatarCaixaEletronico = (texto: string) => {
+  const apenasDigitos = texto.replace(/\D/g, "");
+  if (!apenasDigitos) return "";
+  const numero = (parseInt(apenasDigitos, 10) / 100).toFixed(2);
+  return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
 };
 
 interface VariacoesModalProps {
@@ -30,26 +32,6 @@ interface VariacoesModalProps {
   gerarCombinacoes: () => any[];
   sugerirSkus: (tabela: any, setTabela: any) => void;
 }
-
-const TableInput = ({ value, onBlur, placeholder, isMobile }: any) => {
-  const [tempValue, setTempValue] = useState(value || "");
-
-  useEffect(() => { setTempValue(value || ""); }, [value]);
-
-  return (
-    <input
-      style={{
-        ...shopeeStyles.tableInput,
-        width: isMobile ? '100%' : 'auto',
-        boxSizing: 'border-box'
-      }}
-      value={tempValue}
-      onChange={(e) => setTempValue(e.target.value)}
-      onBlur={() => onBlur(tempValue)}
-      placeholder={placeholder}
-    />
-  );
-};
 
 export default function VariacoesModal({
   showVarModal, setShowVarModal, nomeVar1, setNomeVar1, opcoesVar1, setOpcoesVar1,
@@ -154,7 +136,7 @@ export default function VariacoesModal({
           {/* VARIAÇÃO 2 */}
           <div style={shopeeStyles.section}>
             {!showVar2 ? (
-              <button onClick={() => setShowVar2(true)} style={{ ...shopeeStyles.addBtn, padding: '10px 20px', border: '1px dashed #ee4d2d', color: '#ee4d2d', width: isMobile ? '100%' : 'auto' }}>
+              <button onClick={() => setShowVar2(true)} style={{ ...shopeeStyles.addBtn, padding: '10px 20px', border: '1px dashed #1e293b', color: '#1e293b', width: isMobile ? '100%' : 'auto' }}>
                 + Adicionar Variação 2
               </button>
             ) : (
@@ -180,7 +162,7 @@ export default function VariacoesModal({
           {/* PAINEL DE AÇÃO EM MASSA */}
           <div style={{
             background: '#fff',
-            border: '1px solid #ee4d2d',
+            border: '1px solid #1e293b',
             padding: '12px',
             borderRadius: '4px',
             marginBottom: '20px',
@@ -192,13 +174,13 @@ export default function VariacoesModal({
             <input
               placeholder="Preço (0,00)"
               value={precoGlobal}
-              onChange={(e) => setPrecoGlobal(formatarMoeda(e.target.value))}
+              onChange={(e) => setPrecoGlobal(formatarCaixaEletronico(e.target.value))}
               style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
             />
             <input
               placeholder="Custo (0,00)"
               value={custoGlobal}
-              onChange={(e) => setCustoGlobal(formatarMoeda(e.target.value))}
+              onChange={(e) => setCustoGlobal(formatarCaixaEletronico(e.target.value))}
               style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
             />
             <input
@@ -223,7 +205,7 @@ export default function VariacoesModal({
                   return novaTabela;
                 });
               }}
-              style={{ background: '#ee4d2d', color: '#fff', border: 'none', padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold', borderRadius: '4px' }}
+              style={{ background: '#1e293b', color: '#fff', border: 'none', padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold', borderRadius: '4px' }}
             >
               Aplicar a todos
             </button>
@@ -294,20 +276,20 @@ export default function VariacoesModal({
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <div style={{ flex: 1 }}>
                               <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Preço (R$)</label>
-                              <TableInput
+                              <input
+                                style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }}
                                 value={valorPreco}
-                                onBlur={(val: string) => handleDraftInput(c.key, "preco", formatarMoeda(val))}
+                                onChange={(e) => handleDraftInput(c.key, "preco", formatarCaixaEletronico(e.target.value))}
                                 placeholder="0,00"
-                                isMobile={isMobile}
                               />
                             </div>
                             <div style={{ flex: 1 }}>
                               <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Custo (R$)</label>
-                              <TableInput
+                              <input
+                                style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }}
                                 value={valorCusto}
-                                onBlur={(val: string) => handleDraftInput(c.key, "custo", formatarMoeda(val))}
+                                onChange={(e) => handleDraftInput(c.key, "custo", formatarCaixaEletronico(e.target.value))}
                                 placeholder="0,00"
-                                isMobile={isMobile}
                               />
                             </div>
                             <div style={{ flex: 1 }}>
@@ -328,7 +310,6 @@ export default function VariacoesModal({
               </div>
             ) : (
               <table
-                key={JSON.stringify(draftTabela)}
                 style={{ ...shopeeStyles.table, width: '100%', marginTop: '20px' }}>
                 <thead>
                   <tr style={{ background: '#f6f6f6' }}>
@@ -408,19 +389,19 @@ export default function VariacoesModal({
                           {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '100px' }}> {c.v2 || "-"}</td>)}
                           <td style={shopeeStyles.td}><input style={shopeeStyles.tableInput} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" /></td>
                           <td style={shopeeStyles.td}>
-                            <TableInput
+                            <input
+                              style={shopeeStyles.tableInput}
                               value={valorPreco}
-                              onBlur={(val: string) => handleDraftInput(c.key, "preco", formatarMoeda(val))}
+                              onChange={(e) => handleDraftInput(c.key, "preco", formatarCaixaEletronico(e.target.value))}
                               placeholder="0,00"
-                              isMobile={isMobile}
                             />
                           </td>
                           <td style={shopeeStyles.td}>
-                            <TableInput
+                            <input
+                              style={shopeeStyles.tableInput}
                               value={valorCusto}
-                              onBlur={(val: string) => handleDraftInput(c.key, "custo", formatarMoeda(val))}
+                              onChange={(e) => handleDraftInput(c.key, "custo", formatarCaixaEletronico(e.target.value))}
                               placeholder="0,00"
-                              isMobile={isMobile}
                             />
                           </td>
                           <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
@@ -457,7 +438,7 @@ export default function VariacoesModal({
           </button>
           <button
             onClick={() => { onSave(draftTabela); setShowVarModal(false); }}
-            style={{ padding: '10px 40px', borderRadius: '4px', backgroundColor: '#ee4d2d', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold', flex: isMobile ? 1 : 'unset' }}
+            style={{ padding: '10px 40px', borderRadius: '4px', backgroundColor: '#1e293b', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold', flex: isMobile ? 1 : 'unset' }}
           >
             Salvar Grade
           </button>

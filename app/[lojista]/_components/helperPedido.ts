@@ -25,7 +25,6 @@ export const executarFluxoPedido = async ({
   payloadPixBruto,
 }: any) => {
   try {
-    // 1. Geração do número sequencial
     const contadorRef = doc(
       db,
       "lojistas",
@@ -33,17 +32,86 @@ export const executarFluxoPedido = async ({
       "config",
       "contador_pedidos",
     );
+
     const numPedidoSequencial = await runTransaction(
       db,
       async (transaction) => {
-        const docSnap = await transaction.get(contadorRef);
+        // ==========================================
+        // FASE 1: TODAS AS LEITURAS (READS) PRIMEIRO
+        // ==========================================
+
+        // 1. Ler o documento do contador
+        const docSnapContador = await transaction.get(contadorRef);
         let proximo = 1;
-        if (docSnap.exists()) proximo = (docSnap.data().ultimoNumero || 0) + 1;
+        if (docSnapContador.exists()) {
+          proximo = (docSnapContador.data().ultimoNumero || 0) + 1;
+        }
+
+        // 2. Ler os dados de todos os produtos do carrinho de uma só vez
+        const produtosParaAtualizar: Array<{
+          prodRef: any;
+          prodSnap: any;
+          qtdComprada: number;
+          nomeVar: string;
+        }> = [];
+
+        for (const item of safeCart) {
+          const produtoId = item.idProduto || item.id;
+          if (!produtoId) continue;
+
+          const prodRef = doc(db, "lojistas", lojistaId, "produtos", produtoId);
+          const prodSnap = await transaction.get(prodRef); // 👈 Leitura executada estritamente antes das escritas
+
+          if (!prodSnap.exists()) continue;
+
+          const qtdComprada = Number(item.qty || item.quantidade || 1);
+          const nomeVar = item.variacao || item.nomeVariacao;
+
+          produtosParaAtualizar.push({
+            prodRef,
+            prodSnap,
+            qtdComprada,
+            nomeVar,
+          });
+        }
+
+        // ==========================================
+        // FASE 2: TODAS AS ESCRITAS (WRITES) DEPOIS
+        // ==========================================
+
+        // A. Atualizar o contador
         transaction.set(
           contadorRef,
           { ultimoNumero: proximo },
           { merge: true },
         );
+
+        // B. Executar as baixas de estoque usando os dados já lidos
+        for (const itemAtualizacao of produtosParaAtualizar) {
+          const { prodRef, prodSnap, qtdComprada, nomeVar } = itemAtualizacao;
+          const dadosProd = prodSnap.data();
+
+          if (
+            nomeVar &&
+            nomeVar !== "Produto Único" &&
+            Array.isArray(dadosProd.variacoes)
+          ) {
+            const novasVariacoes = dadosProd.variacoes.map((v: any) => {
+              if (v.nome === nomeVar) {
+                const estoqueAtual = Number(v.estoque || 0);
+                const novoEstoque = Math.max(0, estoqueAtual - qtdComprada);
+                return { ...v, estoque: String(novoEstoque) };
+              }
+              return v;
+            });
+            transaction.update(prodRef, { variacoes: novasVariacoes });
+          } else {
+            const estoqueAtual = Number(dadosProd.estoque || 0);
+            const novoEstoque = Math.max(0, estoqueAtual - qtdComprada);
+            transaction.update(prodRef, { estoque: String(novoEstoque) });
+          }
+        }
+
         return String(proximo).padStart(4, "0");
       },
     );
@@ -89,7 +157,6 @@ export const executarFluxoPedido = async ({
           item.sku ||
           (item.variacaoSelecionada ? item.variacaoSelecionada.sku : "SEM-SKU"),
 
-        // 📦 Pesos e Medidas Padronizados com Fallback
         weight: Number(
           item.weight || item.peso || item.variacaoSelecionada?.peso || 0.3,
         ),
@@ -108,7 +175,6 @@ export const executarFluxoPedido = async ({
       };
     });
 
-    // 3. Estrutura padronizada de Dados do Cliente e Endereço
     const dadosCliente = {
       nmNomeCliente: cliente?.nmNomeCliente || cliente?.nome || "Cliente",
       dsCpfCliente: cliente?.dsCpfCliente || cliente?.cpf || "",
@@ -134,23 +200,16 @@ export const executarFluxoPedido = async ({
         endereco?.dsComplementoCliente || endereco?.complemento || "",
     };
 
-    // 🔑 PRIMEIRO: Criamos a referência e extraímos o ID antes de usá-lo no objeto
     const novoPedidoRef = doc(collection(db, "lojistas", lojistaId, "pedidos"));
     const pedidoIdGerado = novoPedidoRef.id;
 
-    // 4. Objeto estruturado contendo todos os campos solicitados
     const dadosDoPedidoParaSalvar = {
-      pedido: pedidoIdGerado,
-
+      Idpedido: pedidoIdGerado,
       cliente: dadosCliente,
       endereco: dadosEnderecoCliente,
-
       numeroPedido: Number(numPedidoSequencial),
-      status: "Pendente",
-      pago: false,
       data: new Date().toISOString(),
       timestamp: serverTimestamp(),
-
       financeiro: {
         vlSubtotal: Number(valorSubtotalProdutos || 0),
         vlDesconto: Number(valorDesconto || 0),
@@ -163,26 +222,49 @@ export const executarFluxoPedido = async ({
         isRetirada: logistica?.formaEnvio === "retirada",
         dsFormaEntrega: logistica?.formaEnvio || "desconhecida",
         isFreteGratis: freteGratisConfig?.atingido || false,
-        dsMetodoPagamento: logistica?.servico || logistica?.formaEnvio || "pix",
-        dsTransportadoraId: logistica?.transportadoraId || null,
+
+        // 🚚 Seguindo o padrão string (ds)
+        dsServico: logistica?.servico || logistica?.dsServico || "N/A",
+
+        // 💰 Valor do frete na logística (numérico)
+        vlFrete: Number(logistica?.valorFrete || logistica?.vlFrete || 0),
+
+        // ⏱️ Prazo de entrega na logística (numérico, seguindo o padrão vl)
+        vlPrazo: Number(
+          logistica?.prazoEntrega ||
+            logistica?.prazo ||
+            logistica?.vlPrazo ||
+            0,
+        ),
+
+        dsFormaPagamentoEtiqueta:
+          logistica?.formaPagamentoEtiqueta || "saldo_melhor_envio",
+
+        dsTransportadoraId:
+          logistica?.transportadoraId || logistica?.dsTransportadoraId || null,
       },
 
       itens: itensFormatados,
 
       Cotacao: {
+        dsServicoCotado: logistica?.servico || logistica?.dsServico || "N/A",
+
         vlFreteCotado: Number(
           logistica?.valorFrete || logistica?.vlFreteCotado || 0,
         ),
-        dsMetodoPagamentoCotado:
-          logistica?.servico || logistica?.formaEnvio || "pix",
+
+        // Renomeado para refletir o saldo do Melhor Envio
+        dsFormaPagamentoEtiquetaCotado:
+          logistica?.formaPagamentoEtiqueta || "saldo_melhor_envio",
+
         dsTransportadoraIdCotado:
           logistica?.transportadoraId || logistica?.dsTransportadoraId || null,
+
         prazoEntregaCotado: Number(
           logistica?.prazoEntrega || logistica?.prazo || 0,
         ),
       },
 
-      // 🏷️ Estrutura da Etiqueta com todos os campos obrigatórios criados
       Etiqueta: {
         pedido: pedidoIdGerado,
         IdEtiqueta: null,
@@ -193,10 +275,20 @@ export const executarFluxoPedido = async ({
         servicoVinculado: String(logistica?.transportadoraId || ""),
         valorCobrado: 0,
         dataGeracaoEtiqueta: null,
+        isEtiquetaGerada: false,
+      },
+      StatusProducao: {
+        dsStatusProdução: "PEDIDOS",
+        isPago: false,
+        historico: [
+          {
+            fase: "PEDIDOS",
+            dataModificacao: new Date().toISOString(),
+          },
+        ],
       },
     };
 
-    // Salvando na coleção de pedidos com setDoc
     await setDoc(novoPedidoRef, dadosDoPedidoParaSalvar);
 
     // 5. Mensagem para o Lojista

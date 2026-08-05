@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     // 🎯 Puxa o token, ambiente sandbox e transportadoras
     const TOKEN = dadosLojista?.sistema?.dsTokenMelhorEnvio || dadosLojista?.tokenMelhorEnvio;
     const CEP_ORIGEM = String(dadosLojista?.dsCepLoja || dadosLojista?.dadosLoja?.dsCepLoja || dadosLojista?.cep || "").replace(/\D/g, "");
-    const transportadorasPermitidas = dadosLojista?.sistema?.dstransportadoras || dadosLojista?.transportadoras || {};
+    const transportadorasPermitidas = dadosLojista?.sistema?.dsTransportadoras || dadosLojista?.transportadoras || {};
     const IsMelhorEnvioSandbox = dadosLojista?.melhorEnvioSandbox === true;
 
     const freteEscolhido = pedido.cliente?.freteSelecionado;

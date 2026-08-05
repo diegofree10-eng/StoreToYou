@@ -1,18 +1,18 @@
 'use client';
 import React, { useState, useMemo } from 'react';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import useSWR from 'swr';
 import { Pedido } from '@/types/pedido';
+import useSWR from 'swr';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
-interface TabCotarFreteProps {
+interface TabRetirarLocalProps {
     pedidos: Pedido[];
     lojistaIdApp: string;
     db: any;
     dadosLoja: any;
-    cotarFrete: (p: Pedido) => Promise<any[]>;
     setLocalPedidos: React.Dispatch<React.SetStateAction<Pedido[]>>;
     selecionados: string[];
     setSelecionados: React.Dispatch<React.SetStateAction<string[]>>;
+    mudarStatusDireto: (pedido: Pedido, novoStatus: string) => Promise<void>;
 }
 
 const formatarData = (dataStr: string | undefined): string => {
@@ -41,87 +41,58 @@ const fetchProduto = async (path: string, db: any) => {
 
 const obterSeloItem = (item: any, pedidoLogistica: any) => {
     const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
+    const isEntregaLocal = pedidoLogistica?.formaEnvio === 'entrega_local' || formaItem === 'entrega_local';
+    const isDigital = item.precisaFrete === false || formaItem === 'digital';
 
-    if (formaItem === 'retirada') return { texto: "Retirada", cor: "#f59e0b" };
-    if (formaItem === 'digital') return { texto: "Digital", cor: "#3b82f6" };
-    if (formaItem === 'entrega_local') return { texto: "Entrega Local", cor: "#8b5cf6" };
-
+    if (isEntregaLocal) return { texto: "Local", cor: "#8b5cf6" };
+    if (isDigital) return { texto: "Digital", cor: "#3b82f6" };
     return { texto: "Envio", cor: "#10b981" };
 };
 
-// 🛡️ Função auxiliar centralizada para validar se o pedido está REALMENTE pago
-const verificarSeEstaPago = (p: Pedido): boolean => {
-    if (!p) return false;
-
-    // Se explicitamente marcado como false em qualquer flag de pagamento, retorna falso na hora
-    if (p.pago === false) return false;
-    if ((p as any).statusPagamento === 'pendente' || (p as any).statusPagamento === 'cancelado') return false;
-
-    const pagoFlag = p.pago === true;
-    const prodPagoFlag = (p as any).StatusProducao?.isPago === true;
-    const statusPagamentoStr = String((p as any).statusPagamento || '').trim().toLowerCase();
-    const statusPagamentoPago = statusPagamentoStr === 'pago' || statusPagamentoStr === 'aprovado' || statusPagamentoStr === 'concluído';
-
-    return pagoFlag || prodPagoFlag || statusPagamentoPago;
-};
-
-export default function TabCotarFrete({
-    pedidos, lojistaIdApp, db, dadosLoja, cotarFrete, setLocalPedidos, selecionados = [], setSelecionados
-}: TabCotarFreteProps) {
-    const [cotandoMassa, setCotandoMassa] = useState(false);
+export default function TabRetirarLocal({
+    pedidos, lojistaIdApp, db, setLocalPedidos, selecionados = [], setSelecionados, mudarStatusDireto
+}: TabRetirarLocalProps) {
+    const [processandoMassa, setProcessandoMassa] = useState(false);
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
-    const [pedidoSelecionadoParaFrete, setPedidoSelecionadoParaFrete] = useState<Pedido | null>(null);
-    const [opcoesFreteCotadas, setOpcoesFreteCotadas] = useState<any[]>([]);
-    const [loadingFreteAdmin, setLoadingFreteAdmin] = useState(false);
-    const [erroFrete, setErroFrete] = useState<string | null>(null);
+    // Paginação
+    const [paginaAtual, setPaginaAtual] = useState(1);
+    const itensPorPagina = 30;
 
-    // 🛑 FILTRO BLINDADO E REATIVO
-    const pedidosParaCotar = useMemo(() => {
+    const pedidosEntregaLocal = useMemo(() => {
         return pedidos.filter(p => {
             if (!p) return false;
+            const statusGeral = String(p.status || '').trim().toLowerCase();
+            if (statusGeral === 'concluído' || statusGeral === 'enviado' || (p as any).enviado === true) return false;
 
-            // Se já gerou etiqueta ou foi concluído, nunca aparece aqui
-            if (p.etiquetaGerada || p.status === 'Concluído') return false;
+            // 🔒 Validação estrita: O pedido obrigatoriamente deve estar pago
+            const isPagoReal = p.pago === true || (p as any).StatusProducao?.isPago === true || (p as any).statusPagamento === 'pago';
+            if (!isPagoReal) return false;
 
-            // 1. Validação estrita de PAGAMENTO (Se desmarcou, cai fora imediatamente)
-            if (!verificarSeEstaPago(p)) return false;
-
-            // 2. Validação estrita de STATUS DE PRODUÇÃO (Deve estar explicitamente 'pronto' ou 'cotar')
-            const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
-            if (statusProd !== 'pronto' && statusProd !== 'cotar') return false;
-
-            // 3. Validação estrita de FORMA DE ENTREGA (Exclui retirada, digital e entrega local)
             const pedidoLogistica = (p as any).logistica || {};
-            const formaEntrega = String(pedidoLogistica.dsFormaEntrega || (p as any).dsFormaEntrega || '').trim().toLowerCase();
+            const formaEntrega = String(pedidoLogistica.formaEnvio || pedidoLogistica.dsFormaEntrega || '').toLowerCase();
+            const transportadoraId = String(pedidoLogistica.transportadoraId || '').toLowerCase();
 
-            const isRetirada = formaEntrega === 'retirada' || pedidoLogistica.isRetirada === true || p.retirada || p.retirarNaLoja;
-            const isDigital = formaEntrega === 'digital' || formaEntrega === 'email';
-            const isEntregaLocal = formaEntrega === 'entrega_local';
+            const isEntregaLocal =
+                formaEntrega === 'entrega_local' ||
+                transportadoraId === 'entrega_local' ||
+                p.entregaLocal === true ||
+                p.freteLocal === true;
 
-            if (isRetirada || isDigital || isEntregaLocal) return false;
-
-            const itens = Array.isArray(p.itens) ? p.itens : [];
-            const temItemFisico = itens.some((item: any) => item.precisaFrete !== false);
-            if (!temItemFisico) return false;
-
-            // 4. Se já possui transportadora real vinculada, sai desta aba
-            const transpFinanceiro = String(p.financeiro?.dsTransportadoraId || "").trim();
-            const transpLogistica = String(pedidoLogistica.dsTransportadoraId || "").trim();
-            const transpCotacao = String((p as any).Cotacao?.dsTransportadoraIdCotado || "").trim();
-
-            const temTransportadoraReal =
-                (transpFinanceiro !== "" && transpFinanceiro !== "null" && transpFinanceiro !== "undefined" && transpFinanceiro !== "0" && transpFinanceiro !== "frete_gratis_ativado") ||
-                (transpLogistica !== "" && transpLogistica !== "null" && transpLogistica !== "undefined" && transpLogistica !== "0" && transpLogistica !== "frete_gratis_ativado") ||
-                (transpCotacao !== "" && transpCotacao !== "null" && transpCotacao !== "undefined" && transpCotacao !== "0" && transpCotacao !== "frete_gratis_ativado");
-
-            if (temTransportadoraReal) return false;
+            if (!isEntregaLocal) return false;
 
             return true;
         });
     }, [pedidos]);
 
-    const idsVisiveisNestaAba = useMemo(() => pedidosParaCotar.map(p => p.id), [pedidosParaCotar]);
+    const pedidosPaginados = useMemo(() => {
+        const inicio = (paginaAtual - 1) * itensPorPagina;
+        return pedidosEntregaLocal.slice(inicio, inicio + itensPorPagina);
+    }, [pedidosEntregaLocal, paginaAtual]);
+
+    const totalPaginas = Math.ceil(pedidosEntregaLocal.length / itensPorPagina);
+
+    const idsVisiveisNestaAba = useMemo(() => pedidosEntregaLocal.map(p => p.id), [pedidosEntregaLocal]);
     const selecionadosNestaAbaCount = useMemo(() => {
         return (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id)).length;
     }, [selecionados, idsVisiveisNestaAba]);
@@ -137,148 +108,37 @@ export default function TabCotarFrete({
         alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
     };
 
-    const dispararCotacaoGeralOuSelecionados = async () => {
-        const alvos = selecionadosNestaAbaCount > 0
-            ? pedidosParaCotar.filter(p => (selecionados || []).includes(p.id))
-            : pedidosParaCotar;
+    const concluirEntregaLocalEmLote = async () => {
+        const selecionadosAtuais = (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id));
+        if (selecionadosAtuais.length === 0) return alert("Nenhum pedido selecionado para concluir a entrega local.");
+        if (!db || !lojistaIdApp) return;
 
-        if (alvos.length === 0) {
-            return alert("Nenhum pedido válido disponível ou selecionado para cotar.");
-        }
-
-        if (alvos.length === 1) {
-            await abrirJanelaCotacao(alvos[0]);
+        if (!confirm(`Deseja realmente marcar os ${selecionadosAtuais.length} pedidos selecionados como entregues/concluídos?`)) {
             return;
         }
 
-        setCotandoMassa(true);
-        let sucessos = 0;
-
-        for (const pedido of alvos) {
-            try {
-                const cepDestino = String(pedido.endereco?.dsCepCliente || (pedido.endereco as any)?.cep || "").trim();
-                if (!cepDestino || cepDestino.replace(/\D/g, "").length !== 8) continue;
-
-                const opcoes = await cotarFrete(pedido);
-                if (opcoes && opcoes.length > 0) {
-                    const maisBarata = opcoes.reduce((prev, curr) => (curr.price < prev.price) ? curr : prev);
-                    const nomeTransportadoraFormatado = `Logística: ${maisBarata.name}`;
-                    const valorFreteNum = Number(maisBarata.price || 0);
-                    const prazoEntregaNum = Number(maisBarata.delivery_time || maisBarata.prazo || 0);
-                    const transportadoraIdStr = String(maisBarata.id || "");
-
-                    await fetch(`/api/frete/selecionar`, {
-                        method: "POST",
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ lojistaId: lojistaIdApp, pedidoId: pedido.id, transportadoraId: maisBarata.id, nome: maisBarata.name })
-                    });
-
-                    if (db) {
-                        const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedido.id);
-                        await updateDoc(pedidoRef, {
-                            "financeiro.metodo": nomeTransportadoraFormatado,
-                            "financeiro.dsTransportadoraId": transportadoraIdStr,
-                            "logistica.dsTransportadoraId": transportadoraIdStr,
-                            "logistica.servico": maisBarata.name,
-                            "Cotacao.vlFreteCotado": valorFreteNum,
-                            "Cotacao.dsMetodoPagamentoCotado": maisBarata.name,
-                            "Cotacao.dsTransportadoraIdCotado": transportadoraIdStr,
-                            "Cotacao.prazoEntregaCotado": prazoEntregaNum,
-                            "StatusProducao.dsStatusProdução": "etiquetas"
-                        });
-                    }
-
-                    sucessos++;
-                    setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? {
-                        ...p,
-                        financeiro: { ...p.financeiro, metodo: nomeTransportadoraFormatado, dsTransportadoraId: transportadoraIdStr },
-                        logistica: { ...(p as any).logistica, dsTransportadoraId: transportadoraIdStr, servico: maisBarata.name },
-                        Cotacao: {
-                            ...(p as any).Cotacao,
-                            vlFreteCotado: valorFreteNum,
-                            dsMetodoPagamentoCotado: maisBarata.name,
-                            dsTransportadoraIdCotado: transportadoraIdStr,
-                            prazoEntregaCotado: prazoEntregaNum
-                        },
-                        StatusProducao: {
-                            ...(p as any).StatusProducao,
-                            dsStatusProdução: "etiquetas"
-                        }
-                    } : p));
-                }
-            } catch (e: any) {
-                console.error(`Erro ao cotar pedido ${pedido.id}:`, e?.message || e);
+        setProcessandoMassa(true);
+        try {
+            for (const idPedido of selecionadosAtuais) {
+                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", idPedido);
+                await updateDoc(pedidoRef, {
+                    status: 'Concluído',
+                    enviado: true
+                });
             }
-        }
 
-        setCotandoMassa(false);
-        setSelecionados(prev => prev.filter(id => !idsVisiveisNestaAba.includes(id)));
-        alert(`✅ Cotação em lote concluída! ${sucessos} pedidos foram precificados.`);
-    };
-
-    const abrirJanelaCotacao = async (pedido: Pedido) => {
-        const cepDestino = String(pedido.endereco?.dsCepCliente || (pedido.endereco as any)?.cep || "").trim();
-        if (!cepDestino || cepDestino.replace(/\D/g, "").length !== 8) {
-            alert(`⚠️ O CEP do cliente neste pedido ("${cepDestino || 'Vazio'}") é inválido ou não foi informado.`);
-            return;
-        }
-
-        setPedidoSelecionadoParaFrete(pedido);
-        setErroFrete(null);
-        setLoadingFreteAdmin(true);
-        try {
-            const opcoes = await cotarFrete(pedido);
-            if (!opcoes || opcoes.length === 0) setErroFrete("Nenhuma transportadora encontrada para este endereço.");
-            setOpcoesFreteCotadas(opcoes || []);
-        } catch (e: any) {
-            setErroFrete("Erro ao consultar frete: " + (e?.message || "Erro desconhecido"));
-        } finally {
-            setLoadingFreteAdmin(false);
-        }
-    };
-
-    const selecionarEtiquetaManual = async (opcaoFrete: any) => {
-        if (!db || !pedidoSelecionadoParaFrete || !lojistaIdApp) return;
-
-        try {
-            const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoSelecionadoParaFrete.id);
-            const nomeTransportadoraFormatado = `Logística: ${opcaoFrete.name}`;
-            const valorFreteNum = Number(opcaoFrete.price || 0);
-            const prazoEntregaNum = Number(opcaoFrete.delivery_time || opcaoFrete.prazo || 0);
-            const transportadoraIdStr = String(opcaoFrete.id || "");
-
-            await updateDoc(pedidoRef, {
-                "financeiro.metodo": nomeTransportadoraFormatado,
-                "financeiro.dsTransportadoraId": transportadoraIdStr,
-                "logistica.dsTransportadoraId": transportadoraIdStr,
-                "logistica.servico": opcaoFrete.name,
-                "Cotacao.vlFreteCotado": valorFreteNum,
-                "Cotacao.dsMetodoPagamentoCotado": opcaoFrete.name,
-                "Cotacao.dsTransportadoraIdCotado": transportadoraIdStr,
-                "Cotacao.prazoEntregaCotado": prazoEntregaNum,
-                "StatusProducao.dsStatusProdução": "etiquetas"
-            });
-
-            setLocalPedidos(prev => prev.map(p => p.id === pedidoSelecionadoParaFrete.id ? {
+            setLocalPedidos(prev => prev.map(p => selecionadosAtuais.includes(p.id) ? {
                 ...p,
-                financeiro: { ...p.financeiro, metodo: nomeTransportadoraFormatado, dsTransportadoraId: transportadoraIdStr },
-                logistica: { ...(p as any).logistica, dsTransportadoraId: transportadoraIdStr, servico: opcaoFrete.name },
-                Cotacao: {
-                    ...(p as any).Cotacao,
-                    vlFreteCotado: valorFreteNum,
-                    dsMetodoPagamentoCotado: opcaoFrete.name,
-                    dsTransportadoraIdCotado: transportadoraIdStr,
-                    prazoEntregaCotado: prazoEntregaNum
-                },
-                StatusProducao: {
-                    ...(p as any).StatusProducao,
-                    dsStatusProdução: "etiquetas"
-                }
+                status: 'Concluído',
+                enviado: true
             } : p));
 
-            setPedidoSelecionadoParaFrete(null);
+            setSelecionados(prev => prev.filter(id => !selecionadosAtuais.includes(id)));
+            alert("✅ Pedidos de entrega local concluídos com sucesso!");
         } catch (e: any) {
-            alert("Erro ao selecionar transportadora: " + e.message);
+            alert("Erro ao concluir pedidos em lote: " + e.message);
+        } finally {
+            setProcessandoMassa(false);
         }
     };
 
@@ -351,48 +211,31 @@ export default function TabCotarFrete({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
-                    <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        ⚡ Cotar Frete (Pedidos Prontos e Pagos)
-                    </h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
-                        Estes pedidos estão pagos, finalizados na produção (Pronto) e aguardam cotação de frete.
-                    </p>
+                    <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>🛵 Entrega Local (Pagos)</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Gerencie os pedidos pagos destinados à entrega local.</p>
                 </div>
 
-                <button
-                    onClick={dispararCotacaoGeralOuSelecionados}
-                    disabled={cotandoMassa || pedidosParaCotar.length === 0}
-                    style={{
-                        width: '190px',
-                        height: '34px',
-                        padding: '0 10px',
-                        backgroundColor: '#3b82f6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontWeight: 'bold',
-                        cursor: pedidosParaCotar.length === 0 ? 'not-allowed' : 'pointer',
-                        fontSize: '12px',
-                        opacity: pedidosParaCotar.length === 0 ? 0.6 : 1,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                    }}
-                >
-                    {cotandoMassa ? "⏳ Cotando..." : selecionadosNestaAbaCount > 0 ? `⚡ Cotar Selecionados (${selecionadosNestaAbaCount})` : "⚡ Cotar Frete em Lote"}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', minHeight: '40px' }}>
+                    {selecionadosNestaAbaCount > 0 ? (
+                        <div style={{ display: 'flex', gap: '10px', backgroundColor: '#eff6ff', padding: '8px 14px', borderRadius: '8px', border: '1px solid #bfdbfe', alignItems: 'center' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e40af' }}>{selecionadosNestaAbaCount} selecionados</span>
+                            <button onClick={concluirEntregaLocalEmLote} disabled={processandoMassa} style={{ padding: '8px 14px', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>
+                                {processandoMassa ? "⏳ Processando..." : "✅ Confirmar Entrega Local"}
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{ visibility: 'hidden', height: '40px' }} />
+                    )}
+                </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {pedidosParaCotar.length === 0 ? (
+                {pedidosEntregaLocal.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-                        Nenhum pedido pago e pronto aguardando cotação no momento. 🎉
+                        Nenhum pedido pago de entrega local pendente no momento. 🛵
                     </div>
                 ) : (
-                    pedidosParaCotar.map(pedido => {
+                    pedidosPaginados.map(pedido => {
                         const nomeCliente = typeof pedido.cliente === 'object' ? (pedido.cliente?.nmNomeCliente || pedido.cliente?.nome || "Cliente") : (pedido.cliente || "Cliente");
                         const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
                         const expandido = !!pedidosExpandidos[pedido.id];
@@ -400,16 +243,10 @@ export default function TabCotarFrete({
                         const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
-                        const cotacao = (pedido as any).Cotacao || {};
-                        const etiquetaData = (pedido as any).Etiqueta || {};
                         const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
-                        const formaEntrega = String(pedidoLogistica.dsFormaEntrega || (pedido as any).dsFormaEntrega || '').toLowerCase();
-                        const isRetirada = pedidoLogistica.isRetirada === true || formaEntrega === 'retirada' || pedido.retirada || pedido.retirarNaLoja;
-                        const isDigital = formaEntrega === 'digital';
-                        const precisaFrete = pedido.itens?.some((i: any) => i.precisaFrete !== false) && !isRetirada && !isDigital;
-
-                        const statusEtiquetaStr = String(etiquetaData.statusEtiqueta || pedido.statusEtiqueta || '').toLowerCase();
-                        const isPendenteSaldo = statusEtiquetaStr.includes('saldo') || statusEtiquetaStr.includes('pendente') || statusEtiquetaStr.includes('erro');
+                        
+                        // ✨ Variável isRetirada declarada corretamente aqui
+                        const isRetirada = pedidoLogistica.isRetirada || pedidoLogistica.dsFormaEntrega === 'retirada';
 
                         const temPersonalizacao = pedido.itens?.some(i => {
                             const resp = i.respostasFormatadas || i.personalizacao;
@@ -419,7 +256,7 @@ export default function TabCotarFrete({
                             return false;
                         });
 
-                        const isPagoReal = verificarSeEstaPago(pedido);
+                        const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).statusPagamento === 'pago';
                         const corBordaCard = isPagoReal ? '#2ecc71' : '#e74c3c';
 
                         const fin = pedido.financeiro || {};
@@ -427,7 +264,7 @@ export default function TabCotarFrete({
                         const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
                         const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
                         const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
-                        const cupomStr = fin.dsCupom ?? fin.cupom ?? null;
+                        const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
 
                         return (
                             <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${corBordaCard}` }}>
@@ -441,14 +278,7 @@ export default function TabCotarFrete({
                                             <input
                                                 type="checkbox"
                                                 checked={(selecionados || []).includes(pedido.id)}
-                                                onChange={() => {
-                                                    setSelecionados(prev => {
-                                                        const atuais = prev || [];
-                                                        return atuais.includes(pedido.id)
-                                                            ? atuais.filter(id => id !== pedido.id)
-                                                            : [...atuais, pedido.id];
-                                                    });
-                                                }}
+                                                onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
                                                 style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
                                             />
                                             <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
@@ -470,14 +300,7 @@ export default function TabCotarFrete({
                                                 <input
                                                     type="checkbox"
                                                     checked={(selecionados || []).includes(pedido.id)}
-                                                    onChange={() => {
-                                                        setSelecionados(prev => {
-                                                            const atuais = prev || [];
-                                                            return atuais.includes(pedido.id)
-                                                                ? atuais.filter(id => id !== pedido.id)
-                                                                : [...atuais, pedido.id];
-                                                        });
-                                                    }}
+                                                    onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
                                                     style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
                                                 />
                                                 <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
@@ -513,7 +336,6 @@ export default function TabCotarFrete({
                                 {expandido && (
                                     <div style={localStyles.conteudoExpandido}>
                                         <div className="grid-expandido" style={localStyles.gridExpandido}>
-                                            {/* BLOCO 1: PERSONALIZAÇÃO */}
                                             <div style={localStyles.caixaPersonalizacao}>
                                                 <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '4px', fontSize: '12px' }}>
                                                     ✨ Personalização:
@@ -558,43 +380,31 @@ export default function TabCotarFrete({
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 3: TRANSPORTADORA / LOGÍSTICA */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
                                                 <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
-                                                    <div><strong>Forma de Entrega:</strong> {formaEntrega || 'transportadora'}</div>
-                                                    <div><strong>Serviço:</strong> {pedidoLogistica.servico || cotacao.dsMetodoPagamentoCotado || "Pendente"}</div>
-                                                    <div><strong>ID Transportadora:</strong> {pedidoLogistica.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || "Pendente"}</div>
-                                                </div>
-                                                <div style={{ marginTop: '6px' }}>
-                                                    <button onClick={() => abrirJanelaCotacao(pedido)} style={{ width: '100%', padding: '5px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', border: 'none', background: '#3b82f6', color: '#fff', cursor: 'pointer' }}>
-                                                        ⚡ Cotar Frete
-                                                    </button>
+                                                    <div><strong>Forma:</strong> Entrega Local</div>
+                                                    <div><strong>Serviço:</strong> {pedidoLogistica.servico || "Entrega Local (Taxa Fixa)"}</div>
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 4: DADOS DA ETIQUETA */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🏷️ Etiqueta</div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
-                                                    <div style={{ fontSize: '10px', color: '#64748b' }}>
-                                                        Aguardando cotação
-                                                    </div>
+                                                <div style={{ fontSize: '10px', color: '#64748b', fontStyle: 'italic' }}>
+                                                    Pedido sem etiqueta de transportadora
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>💳 Pagamento</div>
                                                 <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
                                                     <div><strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
-                                                    <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
-                                                    {descontoVal > 0 && (
-                                                        <div style={{ color: '#16a34a' }}><strong>Desconto:</strong> -R$ {descontoVal.toFixed(2).replace('.', ',')}</div>
-                                                    )}
-                                                    {cupomStr && (
-                                                        <div><strong>Cupom:</strong> {cupomStr}</div>
-                                                    )}
+                                                    <div><strong>Frete (Local):</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
+                                                    <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
+                                                        <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+                                                    </div>
+                                                    <div><strong>Cupom:</strong> {cupomStr}</div>
+
                                                     <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
                                                         <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                     </div>
@@ -609,49 +419,11 @@ export default function TabCotarFrete({
                 )}
             </div>
 
-            {pedidoSelecionadoParaFrete && (
-                <div style={localStyles.modalOverlayCentroFix}>
-                    <div style={localStyles.modalContentCentroCard}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
-                            <div>
-                                <h3 style={{ margin: 0, color: '#1e293b', fontSize: '16px' }}>📦 Opções de Frete Disponíveis</h3>
-                                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>Selecione a transportadora ideal para o pedido</p>
-                            </div>
-                            <button onClick={() => setPedidoSelecionadoParaFrete(null)} style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer' }}>✕</button>
-                        </div>
-
-                        {loadingFreteAdmin ? (
-                            <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                                <p style={{ fontSize: '14px', fontWeight: 'bold' }}>⏳ Cotando melhores tarifas...</p>
-                            </div>
-                        ) : erroFrete ? (
-                            <div style={{ textAlign: 'center', padding: '20px', color: '#ef4444', fontSize: '13px' }}>{erroFrete}</div>
-                        ) : opcoesFreteCotadas.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '13px' }}>Nenhuma transportadora encontrada.</div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' }}>
-                                {opcoesFreteCotadas.map((opt) => (
-                                    <div
-                                        key={opt.id}
-                                        onClick={() => selecionarEtiquetaManual(opt)}
-                                        style={{ padding: '12px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: '#fff' }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            {opt.company?.picture && <img src={opt.company.picture} alt="" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />}
-                                            <div>
-                                                <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#1e293b' }}>{opt.name}</div>
-                                                <div style={{ fontSize: '11px', color: '#64748b' }}>Prazo: <b>{opt.delivery_time} dias úteis</b></div>
-                                            </div>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#059669' }}>R$ {Number(opt.price).toFixed(2).replace('.', ',')}</div>
-                                            <span style={{ fontSize: '10px', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>Selecionar</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+            {totalPaginas > 1 && (
+                <div style={styles.paginationContainer}>
+                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} style={styles.pageBtn}>Anterior</button>
+                    <span style={{ margin: '0 15px', fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>Página {paginaAtual} de {totalPaginas}</span>
+                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} style={styles.pageBtn}>Próxima</button>
                 </div>
             )}
         </div>
@@ -704,6 +476,11 @@ const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db }: any) 
     );
 });
 
+const styles: { [key: string]: React.CSSProperties } = {
+    paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
+    pageBtn: { padding: '8px 16px', cursor: 'pointer', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 'bold' }
+};
+
 const localStyles: { [key: string]: React.CSSProperties } = {
     cardContainer: { borderRadius: '8px', backgroundColor: '#fff', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
     cardHeaderLinha: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', minHeight: '45px', boxSizing: 'border-box' },
@@ -711,7 +488,5 @@ const localStyles: { [key: string]: React.CSSProperties } = {
     conteudoExpandido: { padding: '16px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' },
     gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' },
     caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '10px' },
-    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' },
-    modalOverlayCentroFix: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 },
-    modalContentCentroCard: { backgroundColor: '#fff', padding: '24px', borderRadius: '8px', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }
+    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' }
 };

@@ -1,7 +1,9 @@
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
+const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 
 admin.initializeApp();
+const db = getFirestore();
 
 // 1. Função: Calcular estatísticas
 exports.atualizarEstatisticas = functions
@@ -22,7 +24,6 @@ exports.atualizarEstatisticas = functions
     }
 
     if (newData && newData.status?.toLowerCase() === "concluído") {
-      const db = admin.firestore();
       const total = Number(
         newData.financeiro?.vlTotal ||
           newData.financeiro?.total ||
@@ -43,7 +44,7 @@ exports.atualizarEstatisticas = functions
           {
             faturamento: (stats.faturamento || 0) + total,
             totalPedidos: (stats.totalPedidos || 0) + 1,
-            ultimaAtualizacao: admin.firestore.FieldValue.serverTimestamp(),
+            ultimaAtualizacao: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
@@ -53,10 +54,9 @@ exports.atualizarEstatisticas = functions
 
 // 2. Função: Preparar estrutura para novo lojista
 exports.prepararNovoLojista = functions
-  .region("southamerica-east1")
+  .region("us-central1")
   .auth.user()
   .onCreate(async (user) => {
-    const db = admin.firestore();
     const lojistaId = user.uid;
 
     const estruturaLojista = {
@@ -72,7 +72,6 @@ exports.prepararNovoLojista = functions
         dsRole: "admin",
       },
       dadosLoja: {
-        //dsNomeLoja: "", a pagina de login quem cria ela no firebase
         dsRuaLoja: "",
         nrNumeroLoja: "",
         dsCepLoja: "",
@@ -80,19 +79,19 @@ exports.prepararNovoLojista = functions
         dsCidadeLoja: "",
         dsUfLoja: "",
         nrWhatssapLoja: "",
-        tsCriacaoLoja: admin.firestore.FieldValue.serverTimestamp(),
+        tsCriacaoLoja: FieldValue.serverTimestamp(),
         nrCnpjCpfLoja: "",
         dsStatusLoja: "ativo",
-        dsCicloLoja: "mensal", // Sugestão: inicialize como mensal
+        dsCicloLoja: "mensal",
         isAtivoLoja: "ativo",
-        dsPlanoLoja: "Bronze", // Salva o vencimento como Timestamp (Data atual + 30 dias)
-        tsVencimentoLoja: admin.firestore.Timestamp.fromDate(
+        dsPlanoLoja: "Bronze",
+        tsVencimentoLoja: Timestamp.fromDate(
           new Date(new Date().setMonth(new Date().getMonth() + 1)),
         ),
         dsLogoLoja: "",
         isLojaAberta: true,
-        dsSeguimentoLoja: "", //dsSlug: "",  a pagina de login quem cria ela no firebase
-        ultimoLogin: admin.firestore.FieldValue.serverTimestamp(),
+        dsSeguimentoLoja: "",
+        ultimoLogin: FieldValue.serverTimestamp(),
       },
       banners: {
         dsDesktop: [],
@@ -115,18 +114,21 @@ exports.prepararNovoLojista = functions
       sistema: {
         isFreteGratisAtivo: false,
         vlFreteGratisMinimo: 0,
+        isFreteLocal: false,
+        vlFreteLocal: 0,
         dsTokenMelhorEnvio: "",
-        dstransportadoras: {
+        dsTransportadoras: {
           correios: true,
           jadlog: true,
           azul: true,
           latam: true,
         },
-        nrDiasTesteOuro: "",
+        nrDiasTesteOuro: 0,
         dsPlanoTeste: "",
+        isTesteOuroAtivo: false,
+        tsVencimentoTeste: null,
       },
       cupons: {},
-
       financeiro: {
         vlLucroReal: 0,
         vlMetaFaturamentoMensal: 0,
@@ -135,30 +137,23 @@ exports.prepararNovoLojista = functions
       redesSociais: [],
     };
 
-    await db
-      .doc(`lojistas/${lojistaId}`)
-      .set(estruturaLojista, { merge: true });
-    await db
-      .collection(`lojistas/${lojistaId}/assinaturas`)
-      .doc("registro_inicial")
-      .set({
-        vlAssinaturaLojista: 0,
-        tsAssinaturaLojista: admin.firestore.FieldValue.serverTimestamp(),
-        dsStatusPagamentoLojista: "Ativação",
-        dsMesReferencia: "Cadastro Inicial",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+    await db.doc(`lojistas/${lojistaId}`).set(estruturaLojista, { merge: true });
+    await db.collection(`lojistas/${lojistaId}/assinaturas`).doc("registro_inicial").set({
+      vlAssinaturaLojista: 0,
+      tsAssinaturaLojista: FieldValue.serverTimestamp(),
+      dsStatusPagamentoLojista: "Ativação",
+      dsMesReferencia: "Cadastro Inicial",
+      createdAt: FieldValue.serverTimestamp(),
+    });
     await db.collection(`lojistas/${lojistaId}/mensagens`).add({
       titulo: "Bem-vindo!",
       texto: "...",
-      dataEnvio: admin.firestore.FieldValue.serverTimestamp(),
+      dataEnvio: FieldValue.serverTimestamp(),
       lida: false,
       prioridade: "alta",
       categoria: "sistema",
     });
-    await db
-      .doc(`lojistas/${lojistaId}/categorias/geral`)
-      .set({ nome: "Geral" });
+    await db.doc(`lojistas/${lojistaId}/categorias/geral`).set({ nome: "Geral" });
     return null;
   });
 
@@ -168,8 +163,7 @@ exports.reverterPlanosVencidos = functions
   .pubsub.schedule("0 3 * * *")
   .timeZone("America/Sao_Paulo")
   .onRun(async (context) => {
-    const db = admin.firestore();
-    const agora = admin.firestore.Timestamp.now();
+    const agora = Timestamp.now();
     const snapshot = await db
       .collection("lojistas")
       .where("sistema.isTesteOuroAtivo", "==", true)
@@ -180,7 +174,7 @@ exports.reverterPlanosVencidos = functions
     const promessas = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
-      const vencimento = data.sistema.tsVencimentoTeste;
+      const vencimento = data.sistema?.tsVencimentoTeste;
       if (vencimento && vencimento.toMillis() < agora.toMillis()) {
         promessas.push(
           doc.ref.update({
@@ -195,15 +189,14 @@ exports.reverterPlanosVencidos = functions
     return null;
   });
 
-  exports.verificarPagamentoLojistas = functions
+// 4. Função: Verificar pagamento de lojistas
+exports.verificarPagamentoLojistas = functions
   .region("southamerica-east1")
-  .pubsub.schedule("0 8 * * *") // Roda todo dia às 08:00
+  .pubsub.schedule("0 8 * * *")
   .timeZone("America/Sao_Paulo")
   .onRun(async (context) => {
-    const db = admin.firestore();
-    const agora = admin.firestore.Timestamp.now();
+    const agora = Timestamp.now();
     
-    // Busca lojistas que estão "ativo" e com vencimento menor que agora
     const snapshot = await db.collection("lojistas")
       .where("dadosLoja.dsStatusLoja", "==", "ativo")
       .where("dadosLoja.tsVencimentoLoja", "<", agora)

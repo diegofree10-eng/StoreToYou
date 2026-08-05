@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX } from "react-icons/fi";
+import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX, FiArchive } from "react-icons/fi";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot, getDoc, updateDoc } from "firebase/firestore";
@@ -15,6 +15,8 @@ interface SidebarProps {
 
 export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobile, onCloseMobile }: SidebarProps) {
   const [role, setRole] = useState<string | null>(null);
+  const [lojistaId, setLojistaId] = useState<string | null>(null);
+  const [novosPedidosCount, setNovosPedidosCount] = useState<number>(0);
   const [dadosLoja, setDadosLoja] = useState({
     nomeLoja: "Carregando...",
     logoUrl: null
@@ -22,6 +24,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
   const unsubRef = React.useRef<(() => void) | null>(null);
 
+  // 1. Autenticação e carregamento dos dados do lojista
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) return;
@@ -36,6 +39,8 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
         
         const lojaIdReal = userData.lojaId;
         if (!lojaIdReal) return;
+
+        setLojistaId(lojaIdReal);
 
         const docRef = doc(db, "lojistas", lojaIdReal);
 
@@ -80,10 +85,35 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
     };
   }, []);
 
+  // 2. Leitura leve do localStorage para sincronizar o contador em tempo real
+  useEffect(() => {
+    if (!lojistaId) return;
+
+    const lerContadorLocalStorage = () => {
+      const valorSalvo = localStorage.getItem(`contador_novos_pedidos_${lojistaId}`);
+      setNovosPedidosCount(valorSalvo ? Number(valorSalvo) : 0);
+    };
+
+    // Lê na montagem
+    lerContadorLocalStorage();
+
+    // Evento acionado quando outra aba/componente altera o localStorage
+    window.addEventListener('storage', lerContadorLocalStorage);
+    
+    // Intervalo de verificação leve para atualizar dentro da mesma aba sem reload
+    const interval = setInterval(lerContadorLocalStorage, 1000);
+
+    return () => {
+      window.removeEventListener('storage', lerContadorLocalStorage);
+      clearInterval(interval);
+    };
+  }, [lojistaId]);
+
   const menuItens = [
     { id: 'dash', label: 'Dashboard', icon: <FiPieChart /> },
     { id: 'produtos', label: 'Produtos', icon: <FiPackage /> },
-    { id: 'pedidos', label: 'Pedidos', icon: <FiShoppingCart /> },
+    { id: 'pedidos', label: 'Pedidos', icon: <FiShoppingCart />, badge: novosPedidosCount },
+    { id: 'estoque', label: 'Estoque', icon: <FiArchive /> },
     { id: 'config', label: 'Configurações', icon: <FiSettings /> },
   ];
 
@@ -125,8 +155,17 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
               background: telaAtiva === item.id ? '#334155' : 'transparent',
               color: telaAtiva === item.id ? '#fdb813' : '#94a3b8'
             }}>
-              {item.icon}
-              <span style={{ marginLeft: '12px' }}>{item.label}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {item.icon}
+                <span>{item.label}</span>
+              </span>
+
+              {/* Exibe o badge vermelho se houver pedidos novos */}
+              {item.id === 'pedidos' && (item.badge ?? 0) > 0 && (
+                <span style={styles.badgeNovo}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           ))}
 
@@ -135,11 +174,13 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
               ...styles.navBtn,
               marginTop: '10px',
               border: '1px solid #fdb813',
-              background: telaAtiva === 'gestao-geral' ? '#334155' : 'transparent',
+              background: telaAtiva === 'gestao-geral' ? '#455533' : 'transparent',
               color: '#fdb813'
             }}>
-              <FiShield />
-              <span style={{ marginLeft: '12px' }}>Gestão Geral</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <FiShield />
+                <span>Gestão Geral</span>
+              </span>
             </button>
           )}
         </nav>
@@ -204,6 +245,15 @@ const styles: { [key: string]: React.CSSProperties } = {
   logoPlaceholder: { fontSize: '36px', fontWeight: 'bold', color: '#fdb813' },
   storeName: { fontSize: '18px', color: '#fff', textAlign: 'center', fontWeight: '600' },
   nav: { flex: 1, padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto' },
-  navBtn: { display: 'flex', alignItems: 'center', padding: '12px 15px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', width: '100%', transition: 'all 0.2s', textAlign: 'left' },
+  navBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 15px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', width: '100%', transition: 'all 0.2s', textAlign: 'left' },
+  badgeNovo: {
+    backgroundColor: '#ef4444',
+    color: '#fff',
+    fontSize: '11px',
+    fontWeight: 'bold',
+    padding: '2px 7px',
+    borderRadius: '10px',
+    marginLeft: '8px'
+  },
   logoutBtn: { padding: '20px', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid #334155', width: '100%', fontWeight: 'bold', fontSize: '15px' }
 };
