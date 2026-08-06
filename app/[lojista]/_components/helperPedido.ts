@@ -157,6 +157,10 @@ export const executarFluxoPedido = async ({
           item.sku ||
           (item.variacaoSelecionada ? item.variacaoSelecionada.sku : "SEM-SKU"),
 
+        // ✨ Salvando o prazo de produção e o tipo rigoroso do produto no banco
+        nrDiasProducao: Number(item.nrDiasProducao || item.diasProducao || 0),
+        dsTipoProduto: String(item.dsTipoProduto || item.tipoProduto || "Fisico_Sem"),
+
         weight: Number(
           item.weight || item.peso || item.variacaoSelecionada?.peso || 0.3,
         ),

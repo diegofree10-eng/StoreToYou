@@ -2,8 +2,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { FiSettings, FiCamera, FiSliders, FiGrid } from "react-icons/fi";
+import { FiSettings, FiCamera, FiSliders, FiGrid, FiInfo } from "react-icons/fi";
 import { styles } from "../styles";
+import { formatarPeso, formatarMedida } from "@/utils/formatters"; // ✨ Importando as máscaras fluidas
 
 interface FormularioProdutoProps {
   nome: string;
@@ -39,10 +40,10 @@ interface FormularioProdutoProps {
   uploading: boolean;
   setTipoCropAtual: (v: "principal" | "variacao") => void;
   setArquivoParaCortar: (file: File | null) => void;
-  envioTransportadora?: boolean;
-  setEnvioTransportadora?: (v: boolean) => void;
-  permiteRetirada?: boolean;
-  setPermiteRetirada?: (v: boolean) => void;
+  tipoProduto?: string;
+  setTipoProduto?: (v: string) => void;
+  diasProducao?: string;
+  setDiasProducao?: (v: string) => void;
   peso?: string;
   setPeso?: (v: string) => void;
   comprimento?: string;
@@ -51,6 +52,8 @@ interface FormularioProdutoProps {
   setLargura?: (v: string) => void;
   altura?: string;
   setAltura?: (v: string) => void;
+  pesosDiferentesPorVariacao?: boolean;
+  setPesosDiferentesPorVariacao?: (v: boolean) => void;
 }
 
 export default function FormularioProduto({
@@ -76,12 +79,14 @@ export default function FormularioProduto({
   uploading,
   setTipoCropAtual,
   setArquivoParaCortar,
-  envioTransportadora = true, setEnvioTransportadora = () => {},
-  permiteRetirada = false, setPermiteRetirada = () => {},
+  tipoProduto = "Fisico_Sem", setTipoProduto = () => {},
+  diasProducao = "", setDiasProducao = () => {},
   peso = "", setPeso = () => {},
   comprimento = "", setComprimento = () => {},
   largura = "", setLargura = () => {},
-  altura = "", setAltura = () => {}
+  altura = "", setAltura = () => {},
+  pesosDiferentesPorVariacao = false,
+  setPesosDiferentesPorVariacao = () => {}
 }: FormularioProdutoProps) {
 
   const [indiceArrastado, setIndiceArrastado] = useState<number | null>(null);
@@ -120,7 +125,8 @@ export default function FormularioProduto({
     setFiles(novosFiles);
   };
 
-  const isProdutoDigital = !envioTransportadora && !permiteRetirada;
+  // 🚚 Precisa de frete apenas se NÃO for download digital e NEM produto digital personalizado
+  const precisaDeFrete = tipoProduto !== 'digital_download' && tipoProduto !== 'Digital_Personalizado';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -392,7 +398,7 @@ export default function FormularioProduto({
             }}
           >
             <FiGrid size={15} color="#2563eb" />
-            <span>{temVariaveisComPreco ? "Editar Grade" : "Variações"}</span>
+            <span>{temVariaveisComPreco ? "Editar Variações" : "Variações"}</span>
           </button>
 
           <button
@@ -422,7 +428,52 @@ export default function FormularioProduto({
         </div>
       </div>
 
-      {/* 3. VALORES E ESTOQUE */}
+      {/* 3. TIPO DE PRODUTO E PRAZO DE PRODUÇÃO */}
+      <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
+        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+          Tipo e Comportamento do Produto
+        </label>
+        
+        <select
+          style={{ ...styles.input, marginBottom: '10px' }}
+          value={tipoProduto}
+          onChange={e => {
+            const novoTipo = e.target.value;
+            setTipoProduto(novoTipo);
+            if (novoTipo === 'digital_download' || novoTipo === 'Digital_Personalizado') {
+              setPeso("");
+              setComprimento("");
+              setLargura("");
+              setAltura("");
+              setPesosDiferentesPorVariacao(false);
+            }
+          }}
+        >
+          <option value="Fisico_Sem">📦 Produtos Físicos / Sem Personalização</option>
+          <option value="Fisico_Personalizado">✨ Produtos Físicos / Com Personalização</option>
+          <option value="Digital_Personalizado">💻 Produtos Digitais / Com Personalização</option>
+          <option value="digital_download">📥 Arquivos Digitais / Download (Pronta Entrega)</option>
+        </select>
+
+        <div>
+          <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309', display: 'block', marginBottom: '4px' }}>
+            ⏱️ Dias necessários para produzir / preparar o produto:
+          </label>
+          <input
+            style={{ ...styles.input, marginBottom: 0, borderColor: '#f59e0b', background: '#fffbeb' }}
+            value={diasProducao}
+            onChange={e => {
+              const cleanValue = e.target.value.replace(/\D/g, "");
+              setDiasProducao(cleanValue);
+            }}
+            placeholder="Ex: 3 (dias úteis ou de preparo)"
+          />
+        </div>
+      </div>
+
+      <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
+
+      {/* 4. VALORES E ESTOQUE */}
       <div style={{ ...styles.boxGray, opacity: temVariaveisComPreco ? 0.6 : 1, marginBottom: '15px' }}>
         <label style={styles.miniLabel}>Valores e Estoque</label>
         <div style={{ display: 'flex', gap: '5px' }}>
@@ -455,74 +506,81 @@ export default function FormularioProduto({
 
       <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
 
-      {/* 4. CONFIGURAÇÕES DE LOGÍSTICA E FRETE */}
-      <div>
-        <h3 style={styles.sideTitle}>🚚 Configurações de Logística e Frete</h3>
-
-        <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '10px' }}>
-          <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '6px' }}>
-            Modalidades Disponíveis
-          </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#334155' }}>
+      {/* 5. CONFIGURAÇÕES DE LOGÍSTICA E FRETE (Exibe campos de peso ou aviso de produto sem frete) */}
+      {precisaDeFrete ? (
+        <div style={{ opacity: temVariaveisComPreco && !pesosDiferentesPorVariacao ? 0.6 : 1 }}>
+          {/* ✨ SELETOR DE PESOS E MEDIDAS POR VARIAÇÃO */}
+          <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '10px 12px', borderRadius: '8px', marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
               <input
                 type="checkbox"
-                checked={envioTransportadora}
-                onChange={e => setEnvioTransportadora(e.target.checked)}
+                checked={pesosDiferentesPorVariacao}
+                onChange={e => {
+                  const valor = e.target.checked;
+                  setPesosDiferentesPorVariacao(valor);
+                  if (valor) {
+                    setShowVarModal(true);
+                  }
+                }}
+                style={{ transform: 'scale(1.1)', cursor: 'pointer' }}
               />
-              Envio por Transportadora
-            </label>
-            <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#334155' }}>
-              <input
-                type="checkbox"
-                checked={permiteRetirada}
-                onChange={e => setPermiteRetirada(e.target.checked)}
-              />
-              Permitir Retirada na Loja
+              Pesos/dimensões diferentes por variação
             </label>
           </div>
 
-          {isProdutoDigital && (
-            <div style={{ marginTop: '8px', fontSize: '11px', color: '#d90618', fontWeight: 'bold', background: '#fef3c7', padding: '4px 8px', borderRadius: '4px' }}>
-              ℹ️ <b>Produto Digital</b>.
-            </div>
-          )}
+          <h3 style={styles.sideTitle}>🚚 Medidas para Cálculo de Frete (Melhor Envio)</h3>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', marginBottom: '10px', opacity: pesosDiferentesPorVariacao ? 0.4 : 1, pointerEvents: pesosDiferentesPorVariacao ? 'none' : 'auto' }}>
+            <input
+              disabled={pesosDiferentesPorVariacao}
+              style={{ ...styles.input, marginBottom: 0 }}
+              value={pesosDiferentesPorVariacao ? "Definido na Grade" : peso}
+              onChange={e => setPeso(formatarPeso(e.target.value))}
+              placeholder="Peso kg"
+            />
+            <input
+              disabled={pesosDiferentesPorVariacao}
+              style={{ ...styles.input, marginBottom: 0 }}
+              value={pesosDiferentesPorVariacao ? "Definido na Grade" : comprimento}
+              onChange={e => setComprimento(formatarMedida(e.target.value))}
+              placeholder="Comp cm"
+            />
+            <input
+              disabled={pesosDiferentesPorVariacao}
+              style={{ ...styles.input, marginBottom: 0 }}
+              value={pesosDiferentesPorVariacao ? "Definido na Grade" : largura}
+              onChange={e => setLargura(formatarMedida(e.target.value))}
+              placeholder="Larg cm"
+            />
+            <input
+              disabled={pesosDiferentesPorVariacao}
+              style={{ ...styles.input, marginBottom: 0 }}
+              value={pesosDiferentesPorVariacao ? "Definido na Grade" : altura}
+              onChange={e => setAltura(formatarMedida(e.target.value))}
+              placeholder="Alt cm"
+            />
+          </div>
         </div>
-
-        {envioTransportadora && (
-          <>
-            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px', display: 'block' }}>
-              Medidas para Cálculo (Melhor Envio) *
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', marginBottom: '10px' }}>
-              <input
-                style={{ ...styles.input, marginBottom: 0 }}
-                value={peso}
-                onChange={e => setPeso(e.target.value)}
-                placeholder="Peso kg"
-              />
-              <input
-                style={{ ...styles.input, marginBottom: 0 }}
-                value={comprimento}
-                onChange={e => setComprimento(e.target.value)}
-                placeholder="Comp cm"
-              />
-              <input
-                style={{ ...styles.input, marginBottom: 0 }}
-                value={largura}
-                onChange={e => setLargura(e.target.value)}
-                placeholder="Larg cm"
-              />
-              <input
-                style={{ ...styles.input, marginBottom: 0 }}
-                value={altura}
-                onChange={e => setAltura(e.target.value)}
-                placeholder="Alt cm"
-              />
-            </div>
-          </>
-        )}
-      </div>
+      ) : (
+        <div style={{ 
+          background: '#f0fdf4', 
+          border: '1px solid #bbf7d0', 
+          borderRadius: '8px', 
+          padding: '12px 15px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '10px',
+          marginBottom: '5px'
+        }}>
+          <FiInfo size={18} color="#16a34a" style={{ flexShrink: 0 }} />
+          <div>
+            <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', color: '#166534' }}>Produto sem frete / Envio Digital</h4>
+            <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#15803d' }}>
+              Este produto não requer cálculo de frete ou dimensões postais no carrinho.
+            </p>
+          </div>
+        </div>
+      )}
 
       <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
 
@@ -544,22 +602,33 @@ export default function FormularioProduto({
 
       <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
 
-      {/* 5. SKU (CÓDIGO) */}
-      <div>
+      {/* 6. SKU (CÓDIGO) — Desativado caso as variações tenham preço ativo */}
+      <div style={{ opacity: temVariaveisComPreco ? 0.6 : 1 }}>
         <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px', display: 'block' }}>
-          SKU (Código)
+          SKU (Código Base) {temVariaveisComPreco && "— Gerenciado na Grade"}
         </label>
         <div style={{ display: 'flex', gap: '5px' }}>
           <input
-            style={{ ...styles.input, marginBottom: 0 }}
-            value={sku}
+            disabled={temVariaveisComPreco}
+            style={{ ...styles.input, marginBottom: 0, backgroundColor: temVariaveisComPreco ? '#f1f5f9' : '#fff' }}
+            value={temVariaveisComPreco ? "Gerenciado na Grade de Variações" : sku}
             onChange={e => setSku(e.target.value.toUpperCase())}
             placeholder="Ex: CAM-AZU-G"
           />
           <button
             type="button"
+            disabled={temVariaveisComPreco}
             onClick={() => setIsModalSKUOpen(true)}
-            style={{ padding: '0 15px', background: '#334155', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
+            style={{ 
+              padding: '0 15px', 
+              background: temVariaveisComPreco ? '#cbd5e1' : '#334155', 
+              color: '#fff', 
+              border: 'none', 
+              borderRadius: '4px', 
+              cursor: temVariaveisComPreco ? 'not-allowed' : 'pointer', 
+              fontWeight: 'bold', 
+              fontSize: '12px' 
+            }}
           >
             Gen
           </button>

@@ -71,8 +71,8 @@ export default function CarrinhoIdentidadeVisual() {
     }, [cidadeLoja, endereco?.dsCidadeCliente]);
 
     const config = useMemo(() => ({
-        corPrimaria: ap?.dscorPrincipal || ap?.corPrincipal || "#6366f1",
-        corSecundaria: ap?.dscorSecundaria || ap?.corSecundaria || "#fdebec",
+        corPrimaria: ap?.dscorSecundaria || ap?.corSecundaria || "#6366f1",
+        corSecundaria: ap?.dscorPrincipal || ap?.corPrincipal || "#fdebec",
         corFundoSite: ap?.dscorFundo || ap?.corFundo || "#f8fafc",
         corTexto: ap?.dscorTextoCard || ap?.corTexto || "#1e293b",
         whatsapp: lojaObj?.nrWhatssapLoja || lojaObj?.whatsapp || ""
@@ -536,7 +536,10 @@ export default function CarrinhoIdentidadeVisual() {
                                 cpfValido={cpfValido}
                                 config={config}
                                 stylesInput={stylesInput}
-                                temItemDigital={temItemDigitalNoCarrinho}
+                                temItemDigital={safeCart.some((item: any) => {
+                                    const tipo = String(item.dsTipoProduto || item.tipoProduto || "").trim();
+                                    return tipo === "digital_download" || tipo === "Digital_Personalizado";
+                                })}
                             />
 
                             {/* 📱 BOTÃO MOBILE DE ESCOLHA DE FRETE */}

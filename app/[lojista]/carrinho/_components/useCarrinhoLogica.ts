@@ -1,3 +1,4 @@
+// app/[lojista]/_components/useCarrinhoLogica.tsx
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -29,8 +30,23 @@ export function useCarrinhoLogica(lojistaSlug: string, safeCart: any[], isItemDi
   const [payloadPixBruto, setPayloadPixBruto] = useState("");
   const [freteBackup, setFreteBackup] = useState<any>(null);
 
-  const temFrete = useMemo(() => safeCart.some(item => !isItemDigital(item)), [safeCart, isItemDigital]);
-  const temItemDigitalNoCarrinho = useMemo(() => safeCart.some(item => item.envioTransportadora === false && item.permiteRetirada === false), [safeCart]);
+  // ✨ Validação restrita: Apenas se o tipo for explicitamente digital (ignorando flags genéricas que afetam físicos)
+  const itemEhDigital = (item: any) => {
+    const tipo = String(item.dsTipoProduto || item.tipoProduto || "").trim();
+    return tipo === 'digital_download' || tipo === 'Digital_Personalizado';
+  };
+
+  // Se o carrinho contiver APENAS produtos digitais reais, o frete é totalmente desativado
+  const temItemDigitalNoCarrinho = useMemo(() => {
+    if (!Array.isArray(safeCart) || safeCart.length === 0) return false;
+    return safeCart.every(item => itemEhDigital(item));
+  }, [safeCart]);
+
+  // Se houver pelo menos um item que não seja digital, precisamos de frete obrigatório
+  const temFrete = useMemo(() => {
+    if (!Array.isArray(safeCart) || safeCart.length === 0) return false;
+    return safeCart.some(item => !itemEhDigital(item));
+  }, [safeCart]);
 
   const isLojaAberta = useMemo(() => {
     const lojaAtivaObj = dadosLoja;
@@ -72,3 +88,34 @@ export function useCarrinhoLogica(lojistaSlug: string, safeCart: any[], isItemDi
     validarCPFReal, cpfValido, aplicarMascara
   };
 }
+
+/**
+ * ==============================================================================
+ * 🧠 RESUMO DA LÓGICA DO CARRINHO (useCarrinhoLogica.tsx)
+ * ==============================================================================
+ * 
+ * Este Hook personalizado gerencia todo o estado central e o fluxo de dados da 
+ * página de carrinho e checkout da loja, atuando em quatro pilares principais:
+ * 
+ * 1. DADOS E IDENTIDADE DO LOJISTA:
+ *    - Carrega e armazena os dados da loja no Firestore com base no 'lojistaSlug'.
+ *    - Monitora o status de funcionamento da loja através da flag 'isLojaAberta'.
+ * 
+ * 2. CADASTRO E PERSISTÊNCIA DO CLIENTE:
+ *    - Gerencia as informações do cliente (nome, CPF com validação real, telefone, 
+ *      e-mail) e o endereço de entrega com máscaras de formatação.
+ *    - Sincroniza e recupera automaticamente os dados preenchidos no 'localStorage' 
+ *      do navegador para evitar que o usuário perca informações se recarregar a página.
+ * 
+ * 3. VALIDAÇÃO INTELIGENTE DE FRETE (FÍSICO VS. DIGITAL):
+ *    - Classifica cada item do carrinho ('itemEhDigital') verificando seu 'tipoProduto' 
+ *      (como arquivos digitais ou produtos personalizados sem envio físico).
+ *    - Define 'temFrete': Se o carrinho contiver apenas itens digitais, o frete é 
+ *      totalmente desativado ocultando os blocos de endereço; se houver itens físicos, 
+ *      o motor de cálculo de entrega é acionado.
+ * 
+ * 4. PAGAMENTOS E CUPONS:
+ *    - Controla a aplicação de cupons de desconto, gere os estados de carregamento 
+ *      do frete, opções de entrega e o payload/QR Code para pagamentos via Pix.
+ * ==============================================================================
+ */

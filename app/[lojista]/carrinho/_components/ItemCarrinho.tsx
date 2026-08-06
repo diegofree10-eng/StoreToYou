@@ -71,7 +71,7 @@ export default function ItemCarrinho({
                     <b style={{ color: corTexto, fontSize: '13px', wordBreak: 'break-word' }}>{item.nome || item.title}</b>
                     {isDigital && <span style={{ fontSize: '9px', padding: '2px 5px', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1' }}>Digital</span>}
                   </div>
-                  <span style={{ color: corPrimaria, fontSize: '14px', fontWeight: 'bold' }}>R$ {Number(item.preco || item.price || 0).toFixed(2).replace('.', ',')}</span>
+                  <span style={{ color: corPrimaria, fontSize: '19px', fontWeight: 'bold' }}>R$ {Number(item.preco || item.price || 0).toFixed(2).replace('.', ',')}</span>
 
                   <div style={{ marginTop: '4px' }}>
                     {item.variacao && item.variacao !== "Padrão" && (

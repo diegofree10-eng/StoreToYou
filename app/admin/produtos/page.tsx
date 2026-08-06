@@ -12,7 +12,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { FiChevronLeft, FiChevronRight, FiMenu, FiX, FiPlus } from "react-icons/fi";
 
 import FormularioProduto from "./_components/FormularioProduto";
-//import SecaoLogistica from "./_components/SecaoLogistica";
 import ListaProdutos from "./_components/ListaProdutos";
 import { duplicarProduto } from "@/utils/duplicarProduto";
 
@@ -30,6 +29,14 @@ const PALAVRAS_PROIBIDAS = [
     "undefined", "api", "vendas", "financeiro", "ajuda", "config",
     "sistema", "login", "auth", "teste", "gerente", "houseconviteria", "chefe"
 ];
+
+// ✨ Função auxiliar para converter o valor formatado da tela ("1,50") para número decimal real (1.5) para o Firebase
+const converterParaNumeroBanco = (valor: any): number => {
+    if (!valor) return 0;
+    const limpo = valor.toString().replace(/\./g, "").replace(",", ".");
+    const numero = parseFloat(limpo);
+    return isNaN(numero) ? 0 : numero;
+};
 
 export default function CadastroProdutos() {
     const [uid, setUid] = useState<string | null>(null);
@@ -59,8 +66,11 @@ export default function CadastroProdutos() {
     const [estoqueMinimo, setEstoqueMinimo] = useState("");
     const [ativo, setAtivo] = useState(true);
 
-    const [envioTransportadora, setEnvioTransportadora] = useState(true);
-    const [permiteRetirada, setPermiteRetirada] = useState(false);
+    const [dsTipoProduto, setDsTipoProduto] = useState("Fisico_Sem");
+    const [nrDiasProducao, setNrDiasProducao] = useState("");
+
+    // ✨ Novo estado para pesos e medidas por variação
+    const [pesosDiferentesPorVariacao, setPesosDiferentesPorVariacao] = useState(false);
 
     const [peso, setPeso] = useState("");
     const [comprimento, setComprimento] = useState("");
@@ -260,10 +270,24 @@ export default function CadastroProdutos() {
             alert("Adicione pelo menos uma foto ao produto.");
             return false;
         }
-        if (envioTransportadora) {
-            if (!peso || parseFloat(peso) <= 0 || !comprimento || parseFloat(comprimento) <= 0 || !largura || parseFloat(largura) <= 0 || !altura || parseFloat(altura) <= 0) {
-                alert("Preencha todas as Medidas para Cálculo (Peso, Comprimento, Largura e Altura) corretamente.");
-                return false;
+
+        // ✨ Validação de frete restrita apenas a produtos que exigem frete
+        const precisaFreteValidacao = dsTipoProduto !== 'digital_download' && dsTipoProduto !== 'Digital_Personalizado';
+        if (precisaFreteValidacao) {
+            if (pesosDiferentesPorVariacao) {
+                const combos = gerarCombinacoes();
+                for (const c of combos) {
+                    const item = tabelaPrecos[c.key];
+                    if (!item?.peso || !item?.comprimento || !item?.largura || !item?.altura) {
+                        alert(`Por favor, preencha o peso e todas as dimensões da variação: ${c.v1} ${c.v2 ? `/ ${c.v2}` : ""}`);
+                        return false;
+                    }
+                }
+            } else {
+                if (!peso || converterParaNumeroBanco(peso) <= 0 || !comprimento || converterParaNumeroBanco(comprimento) <= 0 || !largura || converterParaNumeroBanco(largura) <= 0 || !altura || converterParaNumeroBanco(altura) <= 0) {
+                    alert("Preencha todas as Medidas para Cálculo (Peso, Comprimento, Largura e Altura) corretamente.");
+                    return false;
+                }
             }
         }
         return true;
@@ -308,20 +332,31 @@ export default function CadastroProdutos() {
             const precosValidos = Object.values(novaTabelaPrecos).map((v: any) => parseFloat(v.preco)).filter(p => p > 0);
             const precoFinal = precosValidos.length > 0 ? Math.min(...precosValidos).toFixed(2) : precoBasico;
 
+            // ✨ Regra exata de necessidade de frete (false para digital_download e Digital_Personalizado)
+            const isPrecisaFrete = dsTipoProduto !== 'digital_download' && dsTipoProduto !== 'Digital_Personalizado';
+
             const dados: any = {
                 lojistaId: uid, nome, sku, descricao, categoria, subcategoria,
-                precoBasico: precoFinal, custoUnitario, estoque, 
-                estoqueMinimo: estoqueMinimo ? Number(estoqueMinimo) : 3, 
+                precoBasico: precoFinal, custoUnitario, estoque,
+                estoqueMinimo: estoqueMinimo ? Number(estoqueMinimo) : 3,
                 ativo,
-                envioTransportadora, permiteRetirada, precisaFrete: envioTransportadora,
-                peso: envioTransportadora ? peso : null,
-                comprimento: envioTransportadora ? comprimento : null,
-                largura: envioTransportadora ? largura : null,
-                altura: envioTransportadora ? altura : null,
+                dsTipoProduto: dsTipoProduto || "Fisico_Sem",
+                nrDiasProducao: nrDiasProducao ? Number(nrDiasProducao) : 0,
+                pesosDiferentesPorVariacao,
+                precisaFrete: isPrecisaFrete,
+
+                // ✨ Conversão de pesos e medidas do produto principal para o Firebase
+                peso: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(peso) : null),
+                comprimento: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(comprimento) : null),
+                largura: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(largura) : null),
+                altura: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(altura) : null),
+
                 imagens: novasImagens,
                 capa: novasImagens[0] || "",
                 temVariacoes: temVariaveisComPreco,
                 nomeVar1, nomeVar2, requisitos,
+
+                // ✨ Conversão de pesos e medidas nas variações para o Firebase
                 variacoes: temVariaveisComPreco ? combos.map(c => ({
                     nome: c.v2 ? `${c.v1} / ${c.v2}` : c.v1,
                     v1: c.v1, v2: c.v2,
@@ -329,8 +364,13 @@ export default function CadastroProdutos() {
                     preco: novaTabelaPrecos[c.key]?.preco || precoBasico,
                     custo: novaTabelaPrecos[c.key]?.custo || custoUnitario,
                     estoque: novaTabelaPrecos[c.key]?.estoque || "",
-                    foto: novaTabelaPrecos[c.key]?.foto || ""
+                    foto: novaTabelaPrecos[c.key]?.foto || "",
+                    peso: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.peso) : null,
+                    comprimento: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.comprimento) : null,
+                    largura: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.largura) : null,
+                    altura: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.altura) : null
                 })) : [],
+
                 updatedAt: Date.now()
             };
 
@@ -351,7 +391,9 @@ export default function CadastroProdutos() {
     const limparForm = () => {
         setNome(""); setSku(""); setDescricao(""); setCategoria(""); setSubcategoria(""); setPrecoBasico(""); setCustoUnitario("");
         setEstoque(""); setEstoqueMinimo("");
-        setPeso(""); setComprimento(""); setLargura(""); setAltura(""); setImagens([]); setEditId(null); setFiles([]); setEnvioTransportadora(true); setPermiteRetirada(false);
+        setDsTipoProduto("Fisico_Sem"); setNrDiasProducao("");
+        setPesosDiferentesPorVariacao(false);
+        setPeso(""); setComprimento(""); setLargura(""); setAltura(""); setImagens([]); setEditId(null); setFiles([]);
         setOpcoesVar1([]); setOpcoesVar2([]); setNomeVar1(""); setNomeVar2(""); setTabelaPrecos({});
         setRequisitos({ pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
         setProdutoIdAtual(null);
@@ -364,10 +406,14 @@ export default function CadastroProdutos() {
         setCustoUnitario(p.custoUnitario || "");
         setEstoque(p.estoque || "");
         setEstoqueMinimo(p.estoqueMinimo !== undefined && p.estoqueMinimo !== null ? String(p.estoqueMinimo) : "");
-        setEnvioTransportadora(p.envioTransportadora ?? true); setPermiteRetirada(p.permiteRetirada ?? false);
+        setDsTipoProduto(p.dsTipoProduto || (p.precisaFrete === false ? "digital_download" : "Fisico_Sem"));
+        setNrDiasProducao(p.nrDiasProducao !== undefined && p.nrDiasProducao !== null ? String(p.nrDiasProducao) : "");
+        setPesosDiferentesPorVariacao(p.pesosDiferentesPorVariacao ?? false);
         setImagens(p.imagens || []); setDescricao(p.descricao || "");
-        setPeso(p.peso || ""); setComprimento(p.comprimento || "");
-        setLargura(p.largura || ""); setAltura(p.altura || "");
+        setPeso(p.peso !== undefined && p.peso !== null ? String(p.peso) : "");
+        setComprimento(p.comprimento !== undefined && p.comprimento !== null ? String(p.comprimento) : "");
+        setLargura(p.largura !== undefined && p.largura !== null ? String(p.largura) : "");
+        setAltura(p.altura !== undefined && p.altura !== null ? String(p.altura) : "");
         setRequisitos(p.requisitos || { pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
         if (p.variacoes) {
             setNomeVar1(p.nomeVar1 || ""); setNomeVar2(p.nomeVar2 || "");
@@ -379,7 +425,11 @@ export default function CadastroProdutos() {
                     custo: v.custo,
                     estoque: v.estoque || "",
                     foto: v.foto || "",
-                    sku: v.sku || ""
+                    sku: v.sku || "",
+                    peso: v.peso !== undefined && v.peso !== null ? String(v.peso) : "",
+                    comprimento: v.comprimento !== undefined && v.comprimento !== null ? String(v.comprimento) : "",
+                    largura: v.largura !== undefined && v.largura !== null ? String(v.largura) : "",
+                    altura: v.altura !== undefined && v.altura !== null ? String(v.altura) : ""
                 };
             });
             setTabelaPrecos(tab);
@@ -393,11 +443,14 @@ export default function CadastroProdutos() {
         duplicarProduto(p, {
             setEditId, setProdutoIdAtual, setNome, setSku, setDescricao, setCategoria,
             setSubcategoria, setPrecoBasico, setCustoUnitario, setEstoque, setEstoqueMinimo, setAtivo,
-            setEnvioTransportadora, setPermiteRetirada, setPeso, setComprimento,
+            setEnvioTransportadora: () => { }, setPermiteRetirada: () => { }, setPeso, setComprimento,
             setLargura, setAltura, setImagens, setFiles, setRequisitos, setNomeVar1,
             setNomeVar2, setTabelaPrecos, setOpcoesVar1, setOpcoesVar2,
             isMobile: false, setIsOpenRight: () => { }
         });
+        setDsTipoProduto(p.dsTipoProduto || "Fisico_Sem");
+        setNrDiasProducao(p.nrDiasProducao ? String(p.nrDiasProducao) : "");
+        setPesosDiferentesPorVariacao(p.pesosDiferentesPorVariacao ?? false);
         setIsPainelAberto(true);
     };
 
@@ -459,6 +512,9 @@ export default function CadastroProdutos() {
                     onSave={(novaTabela: any) => setTabelaPrecos(novaTabela)}
                     gerarCombinacoes={gerarCombinacoes}
                     sugerirSkus={sugerirSkus}
+                    pesosDiferentesPorVariacao={pesosDiferentesPorVariacao}
+                    setPesosDiferentesPorVariacao={setPesosDiferentesPorVariacao}
+                    lojistaId={uid || ""}
                 />
 
                 <EtiquetaModal isOpen={listaParaImprimir.length > 0} listaProdutos={listaParaImprimir} onClose={() => setListaParaImprimir([])} />
@@ -466,10 +522,9 @@ export default function CadastroProdutos() {
                 {isModalSKUOpen && <ModalGeradorSKU lojistaId={uid || ""} onClose={() => setIsModalSKUOpen(false)} onSave={(codigo: string) => { setSku(codigo); setIsModalSKUOpen(false); }} />}
             </div>
 
-            {/* TELA PRINCIPAL (LISTAGEM OCUPANDO 100% DA LARGURA ÚTIL) */}
+            {/* TELA PRINCIPAL */}
             <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: '100vh', padding: '15px', boxSizing: 'border-box' }}>
 
-                {/* CABEÇALHO SUPERIOR COM BOTÃO DE NOVO PRODUTO DESTACADO */}
                 <div className="mobile-header-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                     <div>
                         <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>📦 Gerenciamento de Produtos</h2>
@@ -487,7 +542,6 @@ export default function CadastroProdutos() {
                     </button>
                 </div>
 
-                {/* LISTAGEM DE PRODUTOS */}
                 <div style={{ flex: 1, background: '#fff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <ListaProdutos
                         produtos={produtos}
@@ -504,7 +558,6 @@ export default function CadastroProdutos() {
                         onDuplicar={handleDuplicar}
                     />
 
-                    {/* PAGINAÇÃO */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: '1px solid #e2e8f0', marginTop: '15px' }}>
                         <div style={{ width: '60px' }}></div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
@@ -527,7 +580,7 @@ export default function CadastroProdutos() {
                 </div>
             </div>
 
-            {/* PAINEL / TELA DESLIZANTE LATERAL (DRAWER EM TELA CHEIA AO LADO DA SIDEBAR) */}
+            {/* PAINEL / TELA DESLIZANTE LATERAL */}
             {isPainelAberto && (
                 <div
                     onClick={() => setIsPainelAberto(false)}
@@ -539,7 +592,7 @@ export default function CadastroProdutos() {
                 position: 'fixed',
                 top: 0,
                 right: 0,
-                width: '650px', // Painel largo e super confortável
+                width: '650px',
                 maxWidth: '90vw',
                 height: '100vh',
                 background: '#fff',
@@ -551,7 +604,6 @@ export default function CadastroProdutos() {
                 transition: 'transform 0.3s ease-in-out',
                 transform: isPainelAberto ? 'translateX(0)' : 'translateX(100%)'
             }}>
-                {/* CABEÇALHO DO PAINEL */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 25px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
                     <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>
                         {editId ? "📝 Editar Produto" : "📦 Cadastrar Novo Produto"}
@@ -561,7 +613,6 @@ export default function CadastroProdutos() {
                     </button>
                 </div>
 
-                {/* CORPO DO FORMULÁRIO COM ROLAGEM */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <FormularioProduto
                         nome={nome} setNome={setNome}
@@ -586,18 +637,17 @@ export default function CadastroProdutos() {
                         uploading={uploading}
                         setTipoCropAtual={setTipoCropAtual}
                         setArquivoParaCortar={setArquivoParaCortar}
-                        // Passando os estados de logística diretamente para o FormularioProduto
-                        envioTransportadora={envioTransportadora} setEnvioTransportadora={setEnvioTransportadora}
-                        permiteRetirada={permiteRetirada} setPermiteRetirada={setPermiteRetirada}
+                        tipoProduto={dsTipoProduto} setTipoProduto={setDsTipoProduto}
+                        diasProducao={nrDiasProducao} setDiasProducao={setNrDiasProducao}
                         peso={peso} setPeso={setPeso}
                         comprimento={comprimento} setComprimento={setComprimento}
                         largura={largura} setLargura={setLargura}
                         altura={altura} setAltura={setAltura}
+                        pesosDiferentesPorVariacao={pesosDiferentesPorVariacao}
+                        setPesosDiferentesPorVariacao={setPesosDiferentesPorVariacao}
                     />
-                    {/* <SecaoLogistica /> foi completamente removido daqui para acabar com a duplicação */}
                 </div>
 
-                {/* RODAPÉ FIXO COM AÇÕES */}
                 <div style={{ padding: '15px 25px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', gap: '15px' }}>
                     <button type="button" onClick={salvar} style={{ ...styles.btnSave, flex: 2, padding: '12px', fontSize: '14px', borderRadius: '8px' }}>
                         {loading ? "Aguarde..." : editId ? "Atualizar Produto" : "Salvar Produto"}

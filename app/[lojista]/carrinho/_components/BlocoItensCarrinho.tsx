@@ -89,7 +89,13 @@ export default function BlocoItensCarrinho({
                 const qtd = Number(item.qty || 1);
                 const requisitosProduto = requisitosDoBanco[item.id] || [];
                 const temRequisitos = Array.isArray(requisitosProduto) && requisitosProduto.length > 0;
-                const isDigital = item.envioTransportadora === false && item.permiteRetirada === false;
+                
+                // ✨ Validação exata conforme solicitado
+                const tipoProduto = String(item.dsTipoProduto || item.tipoProduto || "").trim();
+                const isDigital = tipoProduto === "digital_download" || tipoProduto === "Digital_Personalizado";
+
+                // ✨ Captura o prazo de produção do item
+                const diasProducao = Number(item.nrDiasProducao || item.diasProducao || item.dsDiasProducao || 0);
 
                 return (
                   <div key={chaveUnica} style={{ display: 'flex', flexDirection: 'column', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
@@ -107,7 +113,7 @@ export default function BlocoItensCarrinho({
                         <h5 style={{ margin: '0 0 4px 0', fontSize: '13px', fontWeight: 'bold', color: config.corTexto, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.dsNomeProduto || item.nome || "Produto"}
                         </h5>
-                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: config.corPrimaria, marginBottom: '2px' }}>
+                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: config.TextoCard, marginBottom: '2px' }}>
                           R$ {precoUnit.toFixed(2).replace('.', ',')}
                         </span>
                         <span style={{ display: 'block', fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -115,6 +121,13 @@ export default function BlocoItensCarrinho({
                           {item.selectedCor ? ` • Cor: ${item.selectedCor}` : ""}
                           {item.selectedTamanho ? ` • Tam: ${item.selectedTamanho}` : ""}
                         </span>
+
+                        {/* ✨ Exibição dos Dias de Produção */}
+                        {diasProducao > 0 && (
+                          <span style={{ display: 'block', fontSize: '11px', color: '#b45309', fontWeight: '600', marginTop: '2px' }}>
+                            ⏱️ Prazo de produção: {diasProducao} {diasProducao === 1 ? 'dia útil' : 'dias úteis'}
+                          </span>
+                        )}
 
                         {isDigital && (
                           <span style={{ 

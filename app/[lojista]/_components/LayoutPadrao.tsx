@@ -13,6 +13,90 @@ interface LayoutSitePadraoProps {
     categorias?: any[];
 }
 
+// ✨ Subcomponente isolado para gerenciar o estado da subcategoria corretamente
+function ItemSubcategoria({ sub, catNome, config, irParaCategoria }: any) {
+    const [subHover, setSubHover] = useState(false);
+
+    return (
+        <div
+            onMouseEnter={() => setSubHover(true)}
+            onMouseLeave={() => setSubHover(false)}
+            onClick={() => irParaCategoria(catNome, sub)}
+            style={{
+                padding: '8px 12px 8px 24px',
+                fontSize: '12px',
+                fontWeight: 'normal',
+                color: subHover ? config.corPrimaria : config.corTextoCard,
+                opacity: subHover ? 1 : 0.85,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'color 0.2s'
+            }}
+        >
+            <FiCornerDownRight size={12} color={subHover ? config.corPrimaria : config.corTextoCard} style={{ opacity: 0.6 }} />
+            <span>{sub}</span>
+        </div>
+    );
+}
+
+// ✨ Subcomponente para gerenciar o item principal da sidebar
+function ItemCategoriaSidebar({ cat, config, irParaCategoria, toggleCategoria, estaExpandida, temSubs }: any) {
+    const [isHovered, setIsHovered] = useState(false);
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', borderRadius: '6px', backgroundColor: isHovered ? '#f1f5f9' : '#f8fafc', overflow: 'hidden', flexShrink: 0, transition: 'background-color 0.2s' }}>
+            <div
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                onClick={() => {
+                    if (temSubs) {
+                        toggleCategoria(cat.id);
+                    } else {
+                        irParaCategoria(cat.nome);
+                    }
+                }}
+                style={{
+                    padding: '10px 12px',
+                    fontSize: '13px',
+                    color: isHovered ? config.corPrimaria : config.corTextoCard,
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontWeight: 'normal'
+                }}
+            >
+                <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {cat.nome}
+                </span>
+                {temSubs && (
+                    <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '2px', display: 'flex', alignItems: 'center', color: isHovered ? config.corPrimaria : config.corTextoCard }}>
+                        <FiChevronDown size={14} style={{ transform: estaExpandida ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                    </span>
+                )}
+            </div>
+
+            {/* Subcategorias no Desktop */}
+            {temSubs && estaExpandida && (
+                <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', paddingBottom: '4px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                    {cat.subcategorias.map((sub: string, index: number) => (
+                        <ItemSubcategoria
+                            key={index}
+                            sub={sub}
+                            catNome={cat.nome}
+                            config={config}
+                            irParaCategoria={irParaCategoria}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: LayoutSitePadraoProps) {
     const params = useParams();
     const router = useRouter();
@@ -70,8 +154,8 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
     }).filter((r: any) => Boolean(r.icon) && Boolean(r.url));
 
     const config = {
-        corPrimaria: ap?.dscorPrincipal || "#6366f1",
-        corSecundaria: ap?.dscorSecundaria || "#fdf5eb",
+        corPrimaria: ap?.dscorSecundaria || "#6366f1",
+        corSecundaria: ap?.dscorPrincipal || "#fdf5eb",
         corFundoSite: ap?.dscorFundo || "#f8fafc",
         corTextoCard: ap?.dscorTextoCard || "#1e293b",
     };
@@ -183,43 +267,15 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                                         const estaExpandida = catExpandida[cat.id];
 
                                         return (
-                                            <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', borderRadius: '6px', backgroundColor: '#f8fafc', overflow: 'hidden', flexShrink: 0 }}>
-                                                <div
-                                                    onClick={() => {
-                                                        if (temSubs) {
-                                                            toggleCategoria(cat.id);
-                                                        } else {
-                                                            irParaCategoria(cat.nome);
-                                                        }
-                                                    }}
-                                                    style={{ padding: '10px 12px', fontSize: '13px', color: config.corTextoCard, cursor: 'pointer', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: temSubs ? 'bold' : 'normal' }}
-                                                >
-                                                    <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                        {cat.nome}
-                                                    </span>
-                                                    {temSubs && (
-                                                        <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '2px', display: 'flex', alignItems: 'center' }}>
-                                                            <FiChevronDown size={14} style={{ transform: estaExpandida ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                {/* Subcategorias no Desktop */}
-                                                {temSubs && estaExpandida && (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', paddingBottom: '4px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                                                        {cat.subcategorias.map((sub: string, index: number) => (
-                                                            <div
-                                                                key={index}
-                                                                onClick={() => irParaCategoria(cat.nome, sub)}
-                                                                style={{ padding: '8px 12px 8px 24px', fontSize: '12px', color: config.corTextoCard, opacity: 0.85, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                                            >
-                                                                <FiCornerDownRight size={12} color={config.corTextoCard} style={{ opacity: 0.6 }} />
-                                                                <span>{sub}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
+                                            <ItemCategoriaSidebar
+                                                key={cat.id}
+                                                cat={cat}
+                                                config={config}
+                                                irParaCategoria={irParaCategoria}
+                                                toggleCategoria={toggleCategoria}
+                                                estaExpandida={estaExpandida}
+                                                temSubs={temSubs}
+                                            />
                                         );
                                     })
                                 ) : (
@@ -320,10 +376,13 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                             {categorias.map((cat: any) => {
                                 const temSubs = cat.subcategorias && cat.subcategorias.length > 0;
                                 const estaExpandida = catExpandida[cat.id];
+                                const [mobileHover, setMobileHover] = useState(false);
 
                                 return (
-                                    <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', borderRadius: '8px', backgroundColor: '#f8fafc', overflow: 'hidden', flexShrink: 0 }}>
+                                    <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', borderRadius: '8px', backgroundColor: mobileHover ? '#f1f5f9' : '#f8fafc', overflow: 'hidden', flexShrink: 0, transition: 'background-color 0.2s' }}>
                                         <div
+                                            onMouseEnter={() => setMobileHover(true)}
+                                            onMouseLeave={() => setMobileHover(false)}
                                             onClick={() => {
                                                 if (temSubs) {
                                                     toggleCategoria(cat.id);
@@ -331,13 +390,23 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                                                     irParaCategoria(cat.nome);
                                                 }
                                             }}
-                                            style={{ padding: '12px', fontSize: '13px', fontWeight: 'bold', color: config.corTextoCard, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                                            style={{
+                                                padding: '12px',
+                                                fontSize: '13px',
+                                                fontWeight: 'normal',
+                                                color: mobileHover ? config.corPrimaria : config.corTextoCard,
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                transition: 'color 0.2s'
+                                            }}
                                         >
                                             <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1 }}>
                                                 {cat.nome}
                                             </span>
                                             {temSubs && (
-                                                <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '4px', display: 'flex', alignItems: 'center' }}>
+                                                <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '4px', display: 'flex', alignItems: 'center', color: mobileHover ? config.corPrimaria : config.corTextoCard }}>
                                                     <FiChevronDown size={14} style={{ transform: estaExpandida ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                                                 </span>
                                             )}
@@ -347,14 +416,13 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                                         {temSubs && estaExpandida && (
                                             <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#edf2f7', paddingBottom: '6px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
                                                 {cat.subcategorias.map((sub: string, index: number) => (
-                                                    <div
+                                                    <ItemSubcategoria
                                                         key={index}
-                                                        onClick={() => irParaCategoria(cat.nome, sub)}
-                                                        style={{ padding: '10px 12px 10px 24px', fontSize: '12px', fontWeight: 'normal', color: config.corTextoCard, opacity: 0.9, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                                                    >
-                                                        <FiCornerDownRight size={12} color={config.corTextoCard} style={{ opacity: 0.6 }} />
-                                                        <span>{sub}</span>
-                                                    </div>
+                                                        sub={sub}
+                                                        catNome={cat.nome}
+                                                        config={config}
+                                                        irParaCategoria={irParaCategoria}
+                                                    />
                                                 ))}
                                             </div>
                                         )}

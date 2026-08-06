@@ -82,6 +82,8 @@ function normalizeCartItem(item: any) {
     envioTransportadora: !!item?.envioTransportadora,
     permiteRetirada: !!item?.permiteRetirada,
     peso: item?.peso ?? item?.weight ?? 0.2,
+    // ✨ Garantindo que o prazo de produção do Firebase venha integrado no item do carrinho
+    nrDiasProducao: safeNumber(item?.nrDiasProducao ?? item?.diasProducao ?? item?.dsDiasProducao, 0),
   };
   return { ...normalized, cartItemKey: item.cartItemKey || buildCartItemKey(normalized) };
 }

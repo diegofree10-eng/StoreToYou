@@ -63,12 +63,12 @@ export default function HomeLoja() {
         {/* Beneficios */}
         <div className="beneficios-grid" style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', boxSizing: 'border-box' }}>
           {[
-            { icon: <FiTruck size={20} color={config.corPrimaria} />, title: "Frete para todo o Brasil", desc: "Entrega garantida" },
-            { icon: <FiShield size={20} color={config.corPrimaria} />, title: "Compra 100% segura", desc: "Ambiente protegido" },
-            { icon: <FiSmile size={20} color={config.corPrimaria} />, title: "Satisfação garantida", desc: "Qualidade comprovada" },
-            { icon: <FiGrid size={20} color={config.corPrimaria} />, title: "Parcele em até 12x", desc: "No cartão de crédito" }
+            { icon: <FiTruck size={20} color={config.corSecundaria} />, title: "Frete para todo o Brasil", desc: "Entrega garantida" },
+            { icon: <FiShield size={20} color={config.corSecundaria} />, title: "Compra 100% segura", desc: "Ambiente protegido" },
+            { icon: <FiSmile size={20} color={config.corSecundaria} />, title: "Satisfação garantida", desc: "Qualidade comprovada" },
+            { icon: <FiGrid size={20} color={config.corSecundaria} />, title: "Parcele em até 12x", desc: "No cartão de crédito" }
           ].map((b, i) => (
-            <div key={i} style={{ backgroundColor: config.corSecundaria, padding: '15px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.02)', border: '1px solid #f1f5f9', boxSizing: 'border-box' }}>
+            <div key={i} style={{ backgroundColor: config.corPrimaria, padding: '15px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.02)', border: '1px solid #f1f5f9', boxSizing: 'border-box' }}>
               <div>{b.icon}</div>
               <div>
                 <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', color: config.corTextoCard }}>{b.title}</h4>
@@ -91,14 +91,73 @@ export default function HomeLoja() {
                   key={prod.id}
                   onClick={() => router.push(`/${slug}/produto/${prod.id}`)}
                   className="card-produto-efeito"
-                  style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', cursor: 'pointer', position: 'relative', boxSizing: 'border-box', border: '1px solid #f1f5f9' }}
+                  style={{
+                    backgroundColor: '#fff',
+                    borderRadius: '12px',
+                    padding: '10px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    boxSizing: 'border-box',
+                    border: '1px solid #f1f5f9',
+                    height: '100%'
+                  }}
                 >
-                  <div style={{ width: '100%', aspectRatio: '1/1', backgroundColor: '#f1f5f9', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
-                    <img src={prod.capa || "https://via.placeholder.com/400"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={prod.nome} />
+                  {/* 🔥 A MUDANÇA ESTÁ AQUI: contain + background-color */}
+                  <div style={{
+                    width: '100%',
+                    aspectRatio: '1/1', // Mantém o formato quadrado da imagem
+                    backgroundColor: '#ffffff', // Fundo branco para não aparecer cinza
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <img
+                      src={prod.capa || "https://via.placeholder.com/400"}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain' // 👈 ISSO GARANTE QUE A FOTO INTEIRA APAREÇA SEM CORTES
+                      }}
+                      alt={prod.nome}
+                    />
                   </div>
-                  <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: config.corTextoCard, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nome}</h4>
-                  <p style={{ fontSize: '15px', fontWeight: '900', color: config.corPrimaria, margin: '0 0 10px' }}>R$ {prod.precoBasico || "0,00"}</p>
-                  <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corPrimaria : '#94a3b8', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <h4 style={{
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      color: config.corTextoCard,
+                      margin: '0 0 4px',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}>
+                      {prod.nome}
+                    </h4>
+                    <p style={{ fontSize: '15px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 10px' }}>
+                      R$ {prod.precoBasico || "0,00"}
+                    </p>
+                  </div>
+
+                  <button style={{
+                    width: '100%',
+                    backgroundColor: isLojaAberta ? config.corSecundaria : '#94a3b8',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    marginTop: 'auto'
+                  }}>
                     {isLojaAberta ? "Ver Detalhes" : "Apenas Vitrine"}
                   </button>
                 </div>

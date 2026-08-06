@@ -1,3 +1,4 @@
+// app/admin/configuracoes/_components/SistemaTab.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -16,6 +17,7 @@ export default function SistemaTab({
   const [mostrarAjudaFreteGratis, setMostrarAjudaFreteGratis] = useState(false);
   const [mostrarAjudaTransp, setMostrarAjudaTransp] = useState(false);
   const [mostrarAjudaLocal, setMostrarAjudaLocal] = useState(false);
+  const [mostrarAjudaRetirada, setMostrarAjudaRetirada] = useState(false);
   const [mostrarAjudaStatusLoja, setMostrarAjudaStatusLoja] = useState(false);
 
   return (
@@ -116,54 +118,75 @@ export default function SistemaTab({
           placeholder={masterLiberou("temLogistica") ? "Cole seu token aqui..." : "Bloqueado"}
         />
 
-        {/* TRANSPORTADORAS ATIVAS */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', marginBottom: '4px' }}>
-          <label style={{ ...styles.label, marginBottom: 0 }}>Transportadoras Ativas</label>
-          <button
-            type="button"
-            onClick={() => setMostrarAjudaTransp(!mostrarAjudaTransp)}
-            style={styles.btnInfo}
-            title="Clique para mais informações"
-          >
-            ℹ️
-          </button>
-        </div>
-
-        {mostrarAjudaTransp && (
-          <div style={styles.tooltipBox}>
-            💡 Selecione quais transportadoras integradas via Melhor Envio serão disponibilizadas para cotação na sua loja.
+        {/* TRANSPORTADORAS ATIVAS (MASTER SWITCH) */}
+        <div style={{
+          marginTop: '15px',
+          background: !masterLiberou("temLogistica") ? '#fafafa' : config.sistema.isTransportadoraAtivo ? '#f0f9ff' : '#f8fafc',
+          padding: '15px',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Ativar Cotação por Transportadoras</span>
+              <button
+                type="button"
+                onClick={() => setMostrarAjudaTransp(!mostrarAjudaTransp)}
+                style={styles.btnInfo}
+                title="Clique para mais informações"
+              >
+                ℹ️
+              </button>
+            </div>
+            <input
+              type="checkbox"
+              disabled={!masterLiberou("temLogistica")}
+              checked={!!config.sistema.isTransportadoraAtivo}
+              onChange={e => setConfig({ ...config, sistema: { ...config.sistema, isTransportadoraAtivo: e.target.checked } })}
+            />
           </div>
-        )}
 
-        <div style={styles.gridTransp}>
-          {["azul", "correios", "jadlog", "latam"].map(t => (
-            <label
-              key={t}
-              style={{ ...styles.transpItem, cursor: masterLiberou("temLogistica") ? 'pointer' : 'not-allowed' }}
-            >
-              <input
-                type="checkbox"
-                disabled={!masterLiberou("temLogistica")}
-                checked={masterLiberou("temLogistica") ? !!(config.sistema.dsTransportadoras?.[t]) : false}
-                onChange={() => {
-                  const transportadorasAtuais = config.sistema.dsTransportadoras || {};
-                  const novas = {
-                    ...transportadorasAtuais,
-                    [t]: !transportadorasAtuais[t]
-                  };
+          {mostrarAjudaTransp && (
+            <div style={styles.tooltipBox}>
+              💡 Ative para cotar fretes integrados via Melhor Envio e escolha abaixo quais transportadoras estarão disponíveis para os clientes.
+            </div>
+          )}
 
-                  setConfig({
-                    ...config,
-                    sistema: {
-                      ...config.sistema,
-                      dsTransportadoras: novas
-                    }
-                  });
-                }}
-              />
-              <span style={{ textTransform: 'capitalize' }}>{t}</span>
-            </label>
-          ))}
+          {config.sistema.isTransportadoraAtivo && (
+            <div style={{ marginTop: '12px' }}>
+              <label style={{ ...styles.label, marginBottom: '6px' }}>Selecione as Transportadoras Disponíveis</label>
+              <div style={styles.gridTransp}>
+                {["azul", "correios", "jadlog", "latam"].map(t => (
+                  <label
+                    key={t}
+                    style={{ ...styles.transpItem, cursor: masterLiberou("temLogistica") ? 'pointer' : 'not-allowed' }}
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={!masterLiberou("temLogistica")}
+                      checked={masterLiberou("temLogistica") ? !!(config.sistema.dsTransportadoras?.[t]) : false}
+                      onChange={() => {
+                        const transportadorasAtuais = config.sistema.dsTransportadoras || {};
+                        const novas = {
+                          ...transportadorasAtuais,
+                          [t]: !transportadorasAtuais[t]
+                        };
+
+                        setConfig({
+                          ...config,
+                          sistema: {
+                            ...config.sistema,
+                            dsTransportadoras: novas
+                          }
+                        });
+                      }}
+                    />
+                    <span style={{ textTransform: 'capitalize' }}>{t}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ENTREGA LOCAL */}
@@ -210,6 +233,41 @@ export default function SistemaTab({
                 onChange={e => setConfig({ ...config, sistema: { ...config.sistema, vlFreteLocal: aplicarMascara(e.target.value, 'dinheiro') } })}
                 placeholder="Ex: 10,00"
               />
+            </div>
+          )}
+        </div>
+
+        {/* RETIRADA NA LOJA */}
+        <div style={{
+          marginTop: '15px',
+          background: !masterLiberou("temLogistica") ? '#fafafa' : config.sistema.isRetiradaLoja ? '#f0f9ff' : '#f8fafc',
+          padding: '15px',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Retirada na Loja (Gratuita)</span>
+              <button
+                type="button"
+                onClick={() => setMostrarAjudaRetirada(!mostrarAjudaRetirada)}
+                style={styles.btnInfo}
+                title="Clique para mais informações"
+              >
+                ℹ️
+              </button>
+            </div>
+            <input
+              type="checkbox"
+              disabled={!masterLiberou("temLogistica")}
+              checked={!!config.sistema.isRetiradaLoja}
+              onChange={e => setConfig({ ...config, sistema: { ...config.sistema, isRetiradaLoja: e.target.checked } })}
+            />
+          </div>
+
+          {mostrarAjudaRetirada && (
+            <div style={styles.tooltipBox}>
+              💡 Permite que o cliente escolha retirar o pedido diretamente no seu endereço físico sem cobrança de taxa de frete.
             </div>
           )}
         </div>
@@ -267,7 +325,7 @@ const styles: any = {
   input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', background: '#fff' },
   btnCupom: { width: '100%', padding: '15px', background: '#f5f3ff', color: '#8b5cf6', border: '1px solid #ddd6fe', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
   btnDisabledTab: { width: '100%', padding: '15px', background: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '12px', fontWeight: 'bold', cursor: 'not-allowed' },
-  gridTransp: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '10px' },
+  gridTransp: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' },
   transpItem: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' },
   lockNotice: { padding: '12px', background: '#fff1f2', color: '#be123c', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #fecdd3', marginTop: '10px' },
   btnToggleToken: { background: 'none', border: 'none', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', padding: 0 },

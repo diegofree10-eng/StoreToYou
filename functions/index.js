@@ -116,7 +116,9 @@ exports.prepararNovoLojista = functions
         vlFreteGratisMinimo: 0,
         isFreteLocal: false,
         vlFreteLocal: 0,
+        isRetiradaLoja: false,
         dsTokenMelhorEnvio: "",
+        isTransportadoraAtivo: false,
         dsTransportadoras: {
           correios: true,
           jadlog: true,

@@ -58,7 +58,7 @@ export default function BlocoResumoPedido({
           </div>
           <div style={{ borderTop: '1px solid #e2e8f0', margin: '4px 0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '15px' }}>
             <b>Total:</b>
-            <b style={{ color: config.corPrimaria }}>R$ {Number(totalGeral || 0).toFixed(2).replace('.', ',')}</b>
+            <b style={{ color: config.corTexto }}>R$ {Number(totalGeral || 0).toFixed(2).replace('.', ',')}</b>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
@@ -78,5 +78,6 @@ export default function BlocoResumoPedido({
     </>
   );
 }
+
 //Um painel financeiro compacto que detalha subtotal, valor do frete, descontos de cupons aplicados,
 // o valor total geral e um input integrado para ativação de vales-desconto.

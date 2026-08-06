@@ -27,76 +27,8 @@ export default function ModalFreteMobile({
 }: ModalFreteMobileProps) {
   if (!aberto) return null;
 
-  let listaParaExibir: any[] = [];
-
-  if (temFreteGratisCampanha) {
-    listaParaExibir = [
-      {
-        id: "frete_gratis_ativado",
-        name: "Frete Grátis Promocional",
-        price: 0,
-        delivery_time: 5
-      }
-    ];
-    
-    // Se for da mesma cidade, adicionamos também as opções locais com preço zero
-    if (isMesmaCidade) {
-      listaParaExibir.push(
-        {
-          id: "retirada",
-          name: "Retirada na Loja",
-          price: 0,
-          delivery_time: 0
-        },
-        {
-          id: "entrega_local",
-          name: "Entrega Local",
-          price: 0,
-          delivery_time: 1
-        }
-      );
-    }
-  } else {
-    listaParaExibir = opcoesFrete ? [...opcoesFrete] : [];
-
-    const temRetiradaOuLocal = listaParaExibir.some(f => {
-      const id = String(f.id || "").toLowerCase();
-      const name = String(f.name || "").toLowerCase();
-      return id.includes("retirada") || id.includes("entrega_local") || name.includes("retirada") || name.includes("entrega local");
-    });
-
-    // Se for da mesma cidade e a API não retornou, injetamos as opções locais padrão
-    if (!temRetiradaOuLocal && clienteCep?.replace(/\D/g, "").length === 8) {
-      if (isMesmaCidade) {
-        listaParaExibir.push(
-          {
-            id: "retirada",
-            name: "Retirada na Loja",
-            price: 0,
-            delivery_time: 0
-          },
-          {
-            id: "entrega_local",
-            name: "Entrega Local",
-            price: 15.00,
-            delivery_time: 1
-          }
-        );
-      }
-    }
-  }
-
-  // 🛑 REGRA DE FILTRAGEM RIGOROSA: Se NÃO for da mesma cidade, remove totalmente a Retirada
-  listaParaExibir = listaParaExibir.filter(f => {
-    const id = String(f.id || "").toLowerCase();
-    const name = String(f.name || "").toLowerCase();
-    const ehRetirada = id.includes("retirada") || name.includes("retirada");
-
-    if (!isMesmaCidade && ehRetirada) {
-      return false;
-    }
-    return true;
-  });
+  // ✨ Agora exibe estritamente o que a API calculou, sem injeções duplicadas ou valores fixos locais
+  let listaParaExibir = opcoesFrete ? [...opcoesFrete] : [];
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', boxSizing: 'border-box' }}>

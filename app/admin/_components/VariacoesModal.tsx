@@ -1,3 +1,4 @@
+// app/admin/_components/VariacoesModal.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -6,6 +7,8 @@ import { shopeeStyles, styles } from "../produtos/styles";
 import { storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
 import ImageCropperModal from "@/utils/ImageCropperModalProduto";
+import ModalGeradorSkuVariacoes from "@/app/admin/_components/ModalGeradorSkuVariaçoes";
+import { formatarPeso, formatarMedida } from "@/utils/formatters"; // ✨ Importando as funções de formatação
 
 // Formatação fluida tipo caixa eletrônico (0,01 -> 0,12 -> 1,23)
 const formatarCaixaEletronico = (texto: string) => {
@@ -13,6 +16,28 @@ const formatarCaixaEletronico = (texto: string) => {
   if (!apenasDigitos) return "";
   const numero = (parseInt(apenasDigitos, 10) / 100).toFixed(2);
   return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+};
+
+/**
+ * Função inteligente para gerar sufixos para nomes compostos (ex: "Bandeirinha PARABENS" -> "BAN-PARA")
+ */
+const gerarSufixoInteligente = (texto: string) => {
+  if (!texto) return "";
+  
+  const palavras = texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase()
+    .split(/\s+/);
+
+  if (palavras.length === 1) {
+    return palavras[0].substring(0, 4);
+  } else {
+    const p1 = palavras[0].substring(0, 3);
+    const p2 = palavras[1].substring(0, 4);
+    return `${p1}-${p2}`;
+  }
 };
 
 interface VariacoesModalProps {
@@ -31,11 +56,16 @@ interface VariacoesModalProps {
   onCancel: () => void;
   gerarCombinacoes: () => any[];
   sugerirSkus: (tabela: any, setTabela: any) => void;
+  pesosDiferentesPorVariacao?: boolean;
+  setPesosDiferentesPorVariacao?: (val: boolean) => void;
+  lojistaId?: string;
 }
 
 export default function VariacoesModal({
   showVarModal, setShowVarModal, nomeVar1, setNomeVar1, opcoesVar1, setOpcoesVar1,
-  nomeVar2, setNomeVar2, opcoesVar2, setOpcoesVar2, tabelaPrecos, onSave, gerarCombinacoes, sugerirSkus,
+  nomeVar2, setNomeVar2, opcoesVar2, setOpcoesVar2, tabelaPrecos, onSave, gerarCombinacoes,
+  pesosDiferentesPorVariacao = false, setPesosDiferentesPorVariacao = () => {},
+  lojistaId
 }: VariacoesModalProps) {
 
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -45,7 +75,8 @@ export default function VariacoesModal({
   const [draftTabela, setDraftTabela] = useState(tabelaPrecos);
   const [showVar2, setShowVar2] = useState(nomeVar2 !== "" || opcoesVar2.length > 0);
 
-  // Estados para controlar o CROPPER nas variações
+  const [showModalGeradorSkuVar, setShowModalGeradorSkuVar] = useState(false);
+
   const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
   const [combsParaAtualizar, setCombsParaAtualizar] = useState<any[]>([]);
 
@@ -92,11 +123,12 @@ export default function VariacoesModal({
       <div style={{
         ...shopeeStyles.modal,
         width: isMobile ? '95%' : shopeeStyles.modal.width,
-        maxWidth: isMobile ? '100%' : '950px',
+        maxWidth: isMobile ? '100%' : (pesosDiferentesPorVariacao ? '1200px' : '950px'),
         maxHeight: isMobile ? '90vh' : '95vh',
         boxSizing: 'border-box',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        transition: 'max-width 0.3s ease'
       }}>
         {/* Cabeçalho */}
         <div style={{ ...shopeeStyles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -105,7 +137,7 @@ export default function VariacoesModal({
             {temVariaçõesVisiveis && (
               <button
                 type="button"
-                onClick={() => sugerirSkus(draftTabela, setDraftTabela)}
+                onClick={() => setShowModalGeradorSkuVar(true)}
                 style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
               >
                 ⚡ Gerar SKUs
@@ -157,6 +189,19 @@ export default function VariacoesModal({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* SELETOR DE PESOS E MEDIDAS */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={pesosDiferentesPorVariacao}
+                onChange={e => setPesosDiferentesPorVariacao(e.target.checked)}
+                style={{ transform: 'scale(1.1)', cursor: 'pointer' }}
+              />
+              Pesos/dimensões diferentes por variação (Para cálculo de frete específico)
+            </label>
           </div>
 
           {/* PAINEL DE AÇÃO EM MASSA */}
@@ -223,6 +268,10 @@ export default function VariacoesModal({
                     const valorEstoque = draftTabela[c.key]?.estoque || "";
                     const valorSku = draftTabela[c.key]?.sku || "";
                     const temFoto = !!draftTabela[c.key]?.foto;
+                    const valorPeso = draftTabela[c.key]?.peso || "";
+                    const valorComprimento = draftTabela[c.key]?.comprimento || "";
+                    const valorLargura = draftTabela[c.key]?.largura || "";
+                    const valorAltura = draftTabela[c.key]?.altura || "";
 
                     return (
                       <div key={`${c.key}-${idx}`} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -302,6 +351,49 @@ export default function VariacoesModal({
                               />
                             </div>
                           </div>
+
+                          {pesosDiferentesPorVariacao && (
+                            <div style={{ background: '#fff', padding: '8px', borderRadius: '6px', border: '1px dashed #cbd5e1', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div>
+                                <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Peso (kg)</label>
+                                <input 
+                                  style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                  value={valorPeso} 
+                                  onChange={e => handleDraftInput(c.key, "peso", formatarPeso(e.target.value))} 
+                                  placeholder="0.00" 
+                                />
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
+                                <div>
+                                  <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Comp (cm)</label>
+                                  <input 
+                                    style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                    value={valorComprimento} 
+                                    onChange={e => handleDraftInput(c.key, "comprimento", formatarMedida(e.target.value))} 
+                                    placeholder="0" 
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Larg (cm)</label>
+                                  <input 
+                                    style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                    value={valorLargura} 
+                                    onChange={e => handleDraftInput(c.key, "largura", formatarMedida(e.target.value))} 
+                                    placeholder="0" 
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Alt (cm)</label>
+                                  <input 
+                                    style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                    value={valorAltura} 
+                                    onChange={e => handleDraftInput(c.key, "altura", formatarMedida(e.target.value))} 
+                                    placeholder="0" 
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -323,6 +415,12 @@ export default function VariacoesModal({
                     <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Preço</th>
                     <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Custo</th>
                     <th style={{ ...shopeeStyles.th, textAlign: 'center', width: '90px' }}>Estoque</th>
+                    {pesosDiferentesPorVariacao && (
+                      <>
+                        <th style={{ ...shopeeStyles.th, textAlign: 'center', width: '90px' }}>Peso (kg)</th>
+                        <th style={{ ...shopeeStyles.th, textAlign: 'center', width: '220px' }}>Dimensões (CxLxA cm)</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -335,6 +433,11 @@ export default function VariacoesModal({
                       const valorEstoque = draftTabela[c.key]?.estoque || "";
                       const valorSku = draftTabela[c.key]?.sku || "";
                       const temFoto = !!draftTabela[c.key]?.foto;
+                      const valorPeso = draftTabela[c.key]?.peso || "";
+                      const valorComprimento = draftTabela[c.key]?.comprimento || "";
+                      const valorLargura = draftTabela[c.key]?.largura || "";
+                      const valorAltura = draftTabela[c.key]?.altura || "";
+
                       return (
                         <tr key={`${c.key}-${idx}`}>
                           {idx === 0 && (
@@ -412,6 +515,43 @@ export default function VariacoesModal({
                               placeholder="0"
                             />
                           </td>
+
+                          {pesosDiferentesPorVariacao && (
+                            <>
+                              <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
+                                <input
+                                  style={{ ...shopeeStyles.tableInput, width: '70px', textAlign: 'center' }}
+                                  value={valorPeso}
+                                  onChange={e => handleDraftInput(c.key, "peso", formatarPeso(e.target.value))}
+                                  placeholder="0.00"
+                                />
+                              </td>
+                              <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
+                                  <input
+                                    style={{ ...shopeeStyles.tableInput, width: '55px', textAlign: 'center' }}
+                                    value={valorComprimento}
+                                    onChange={e => handleDraftInput(c.key, "comprimento", formatarMedida(e.target.value))}
+                                    placeholder="Comp"
+                                  />
+                                  <span>x</span>
+                                  <input
+                                    style={{ ...shopeeStyles.tableInput, width: '55px', textAlign: 'center' }}
+                                    value={valorLargura}
+                                    onChange={e => handleDraftInput(c.key, "largura", formatarMedida(e.target.value))}
+                                    placeholder="Larg"
+                                  />
+                                  <span>x</span>
+                                  <input
+                                    style={{ ...shopeeStyles.tableInput, width: '55px', textAlign: 'center' }}
+                                    value={valorAltura}
+                                    onChange={e => handleDraftInput(c.key, "altura", formatarMedida(e.target.value))}
+                                    placeholder="Alt"
+                                  />
+                                </div>
+                              </td>
+                            </>
+                          )}
                         </tr>
                       );
                     });
@@ -461,6 +601,29 @@ export default function VariacoesModal({
             };
           }}
           onCancel={() => setArquivoParaCortar(null)}
+        />
+      )}
+
+      {/* CHAMADA DO MODAL DEDICADO DE SKU PARA VARIAÇÕES (Com suporte a nomes compostos) */}
+      {showModalGeradorSkuVar && (
+        <ModalGeradorSkuVariacoes
+          lojistaId={lojistaId}
+          onClose={() => setShowModalGeradorSkuVar(false)}
+          onSave={(skuBaseGerado: string) => {
+            const novaTabela = { ...draftTabela };
+            combinacoesValidas.forEach((c) => {
+              const sufixo1 = gerarSufixoInteligente(c.v1);
+              const sufixo2 = c.v2 ? `-${gerarSufixoInteligente(c.v2)}` : "";
+              const skuFinal = `${skuBaseGerado}-${sufixo1}${sufixo2}`.toUpperCase();
+
+              novaTabela[c.key] = {
+                ...novaTabela[c.key],
+                sku: skuFinal
+              };
+            });
+            setDraftTabela(novaTabela);
+            setShowModalGeradorSkuVar(false);
+          }}
         />
       )}
     </div>

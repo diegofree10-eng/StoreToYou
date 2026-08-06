@@ -23,8 +23,8 @@ export default function PagBusca() {
 
   const ap = dadosLoja?.aparencia || {};
   const config = {
-    corPrimaria: ap?.dscorPrincipal || "#6366f1",
-    corSecundaria: ap?.dscorSecundaria || "#fdf5eb",
+    corPrimaria: ap?.dscorSecundaria || "#6366f1",
+    corSecundaria: ap?.dscorPrincipal || "#fdf5eb",
     corTextoCard: ap?.dscorTextoCard || "#1e293b",
   };
 
@@ -51,17 +51,14 @@ export default function PagBusca() {
 
             const filtrados = todosProdutos.filter((p: any) => {
               const nomeProd = (p.nome || p.dsNomeProduto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-              const palavrasNome = nomeProd.split(/\s+/);
+              
+              // ✨ Nova lógica flexível: 
+              // O produto é retornado se o título contiver QUALQUER uma das palavras digitadas 
+              // (ou se contiver o termo completo digitado)
+              const contemTermoCompleto = nomeProd.includes(termoLimpo);
+              const contemAlgumaPalavra = palavrasChave.some(palavra => nomeProd.includes(palavra));
 
-              // Se o termo for curto (ex: 1 ou 2 letras), exige que alguma palavra do título comece exatamente com o termo
-              if (termoLimpo.length <= 2) {
-                return palavrasNome.some((w: string) => w.startsWith(termoLimpo));
-              }
-
-              // Para termos maiores, exige que todas as palavras digitadas estejam presentes no título do produto
-              return palavrasChave.every(palavraBusca => {
-                return palavrasNome.some((w: string) => w.startsWith(palavraBusca) || w.includes(palavraBusca));
-              });
+              return contemTermoCompleto || contemAlgumaPalavra;
             });
 
             setProdutosResultado(filtrados);
@@ -126,7 +123,7 @@ export default function PagBusca() {
                     <img src={prod.capa || "https://via.placeholder.com/400"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={prod.nome} />
                   </div>
                   <h4 style={{ fontSize: '11px', fontWeight: 'bold', color: config.corTextoCard, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nome}</h4>
-                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corPrimaria, margin: '0 0 6px' }}>R$ {prod.precoBasico || "0,00"}</p>
+                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 6px' }}>R$ {prod.precoBasico || "0,00"}</p>
                   <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corPrimaria : '#94a3b8', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
                     {isLojaAberta ? "Ver Detalhes" : "Apenas Vitrine"}
                   </button>

@@ -47,6 +47,26 @@ export const aplicarMascara = (valor: string, tipo: string): string => {
 };
 
 /**
+ * Formata o peso no padrão fluido de caixa eletrônico (ex: 1 -> 0,01 | 150 -> 1,50)
+ */
+export const formatarPeso = (valor: string): string => {
+  const apenasDigitos = valor.replace(/\D/g, "");
+  if (!apenasDigitos) return "";
+  const numero = (parseInt(apenasDigitos, 10) / 100).toFixed(2);
+  return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+};
+
+/**
+ * Formata as dimensões (Comprimento, Largura, Altura) permitindo apenas números inteiros em centímetros
+ */
+export const formatarMedida = (valor: string): string => {
+  const apenasDigitos = valor.replace(/\D/g, "");
+  if (!apenasDigitos) return "";
+  const numero = (parseInt(apenasDigitos, 10) / 100).toFixed(2);
+  return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+};
+
+/**
  * Valida se um CPF é real utilizando o algoritmo oficial dos dígitos verificadores.
  */
 export const validarCPFReal = (cpf: string): boolean => {
@@ -114,3 +134,18 @@ export const tratarLinkRede = (plataforma: string, url: string): string => {
  // 'tel' (Formata para (00) 00000-0000 ou telefones fixos):
  // cep' (Formata para 00000-000): 'cnpj' (Formata para 00.000.000/0000-00):
  //'dinheiro' (Formata para valores monetários como 1.500,50):
+ // pesos e medidas () 1. formatarPeso (Para Quilogramas - KG)
+//O peso precisa aceitar frações (ex: 0,500 kg ou 1,25 kg) mas não pode permitir textos aleatórios.
+
+//Limpeza de caracteres: O comando valor.replace(/[^\d.,]/g, "") remove tudo o que não for número, ponto ou vírgula.
+
+//Padronização decimal: O .replace(",", ".") converte qualquer vírgula digitada automaticamente em ponto, garantindo o padrão decimal aceito pelo sistema.
+
+//Segurança contra múltiplos pontos: O código valida se existe mais de um ponto decimal na string. Caso o usuário digite algo como 1.2.3, a função impede e mantém apenas o primeiro ponto válido, evitando bugs de conversão numérica (parseFloat).
+
+//2. formatarMedida (Para Comprimento, Largura e Altura em cm)
+//Dimensões em centímetros na maioria das plataformas de frete trabalham estritamente com números inteiros (sem casas decimais).
+
+//Foco em números inteiros: O comando valor.replace(/\D/g, "") utiliza uma expressão regular para varrer o texto e apagar absolutamente tudo que não seja um dígito numérico de 0 a 9.
+
+//Resultado: Se o usuário tentar digitar letras, pontos ou vírgulas (ex: 12,5 cm), o sistema rejeita instantaneamente esses caracteres extras, permitindo apenas números inteiros limpos (ex: 12).

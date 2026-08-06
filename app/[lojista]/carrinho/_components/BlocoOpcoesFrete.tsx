@@ -37,39 +37,12 @@ export default function BlocoOpcoesFrete({
     });
   }
 
-  const temRetiradaOuLocal = listaParaExibir.some(f => {
-    const id = String(f.id || "").toLowerCase();
-    const name = String(f.name || "").toLowerCase();
-    return id.includes("retirada") || id.includes("entrega_local") || name.includes("retirada") || name.includes("entrega local");
-  });
-
-  // Se for da mesma cidade e a API não retornou, injetamos as opções locais padrão
-  if (!temRetiradaOuLocal && clienteCep?.replace(/\D/g, "").length === 8 && !loadingFrete) {
-    if (isMesmaCidade) {
-      listaParaExibir.push(
-        {
-          id: "retirada",
-          name: "Retirada na Loja",
-          price: 0,
-          delivery_time: 0
-        },
-        {
-          id: "entrega_local",
-          name: "Entrega Local",
-          price: 15.00,
-          delivery_time: 1
-        }
-      );
-    }
-  }
-
-  // 🛑 REGRA DE FILTRAGEM RIGOROSA DE CIDADE
+  // 🛑 REGRA DE FILTRAGEM RIGOROSA DE CIDADE (Esconde Retirada se não for da mesma cidade)
   listaParaExibir = listaParaExibir.filter(f => {
     const id = String(f.id || "").toLowerCase();
     const name = String(f.name || "").toLowerCase();
     const ehRetirada = id.includes("retirada") || name.includes("retirada");
 
-    // Se NÃO for da mesma cidade, esconde totalmente a Retirada na Loja
     if (!isMesmaCidade && ehRetirada) {
       return false;
     }
@@ -85,7 +58,6 @@ export default function BlocoOpcoesFrete({
         
         <div style={{ 
           display: 'grid', 
-          // 📏 Alterado para cards mais compactos (largura mínima menor, permitindo que fiquem lado a lado sem esticar demais)
           gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', 
           gap: '12px' 
         }}>
@@ -95,7 +67,7 @@ export default function BlocoOpcoesFrete({
               const prazoDias = f.delivery_time || f.custom_delivery_time;
               const textoPrazo = idStr === "frete_gratis_ativado" 
                 ? "Entrega Promocional Grátis" 
-                : (prazoDias && Number(prazoDias) > 0 ? `Entre em até ${prazoDias} dia(s) úteis` : (f.id === "retirada" ? "Disponível na loja" : null));
+                : (prazoDias && Number(prazoDias) > 0 ? `Entre em até ${prazoDias} dia(s) úteis` : (f.id === "retirada" || f.id === "retirar_loja" ? "Disponível na loja" : null));
               const estaSelecionado = freteSel?.id === f.id;
 
               const isEntregaOuLocal = idStr.includes("entrega_local") || String(f.name || "").toLowerCase().includes("entrega local");
@@ -125,7 +97,7 @@ export default function BlocoOpcoesFrete({
                     color: estaSelecionado ? '#ffffff' : config.corTexto,
                     cursor: 'pointer',
                     boxSizing: 'border-box',
-                    maxWidth: '100%',     // Impede que ultrapasse o bloco
+                    maxWidth: '100%',
                     textAlign: 'left',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
                     transition: 'all 0.2s ease'
@@ -142,7 +114,7 @@ export default function BlocoOpcoesFrete({
                     )}
                   </div>
                   <b style={{ fontSize: '13px', fontWeight: '800', color: estaSelecionado ? '#ffffff' : '#0f172a', flexShrink: 0, marginLeft: '8px' }}>
-                    {precoFinal === 0 ? "Grátis" : "R$ " + Number(precoFinal).toFixed(2).replace('.', ',')}
+                    {Number(precoFinal) === 0 ? "Grátis" : "R$ " + Number(precoFinal).toFixed(2).replace('.', ',')}
                   </b>
                 </button>
               );

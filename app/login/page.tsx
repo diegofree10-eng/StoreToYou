@@ -1,3 +1,4 @@
+// app/auth/page.tsx (ou o caminho exato do seu arquivo de login)
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
@@ -8,8 +9,9 @@ import {
     sendPasswordResetEmail,
     signOut
 } from "firebase/auth";
-import { doc, setDoc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { sincronizarNovosCamposLojista, obterModeloPadrao } from "@/utils/atualizarNovosCampos";
 
 const PALAVRAS_PROIBIDAS = ["admin", "master", "suporte", "root", "config", "sistema", "teste"];
 
@@ -61,6 +63,9 @@ export default function AuthPage() {
                     return;
                 }
 
+                // ✨ Atualiza automaticamente contas antigas com os novos campos do index ao logar
+                await sincronizarNovosCamposLojista(userCredential.user.uid, lojaDoc.data());
+
                 await setDoc(lojaRef, { ultimoLogin: serverTimestamp() }, { merge: true });
                 router.push("/admin");
 
@@ -92,12 +97,13 @@ export default function AuthPage() {
                     criadoEm: Date.now()
                 }, { merge: true });
 
-                // Salva apenas o básico. O restante (sistema, aparencia, etc) a Cloud Function completa via merge.
+                // Salva o cadastro novo já com a estrutura padrão completa do index
                 await setDoc(doc(db, "lojistas", user.uid), {
                     uid: user.uid,
                     email: email,
                     dataCadastro: Date.now(),
                     ultimoLogin: serverTimestamp(),
+                    sistema: obterModeloPadrao(), // ✨ Garantido com todos os campos novos para novas contas
                     dadosLoja: {
                         dsNomeLoja: nomeLimpo,
                         dsSlug: slugGerado,

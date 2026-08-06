@@ -126,8 +126,8 @@ export default function PagCategoria() {
                     <img src={prod.capa || "https://via.placeholder.com/400"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={prod.nome} />
                   </div>
                   <h4 style={{ fontSize: '11px', fontWeight: 'bold', color: config.corTextoCard, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nome}</h4>
-                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corPrimaria, margin: '0 0 6px' }}>R$ {prod.precoBasico || "0,00"}</p>
-                  <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corPrimaria : '#94a3b8', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
+                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 6px' }}>R$ {prod.precoBasico || "0,00"}</p>
+                  <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corSecundaria : '#94a3b8', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
                     {isLojaAberta ? "Ver Detalhes" : "Apenas Vitrine"}
                   </button>
                 </div>

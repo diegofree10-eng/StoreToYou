@@ -29,11 +29,15 @@ export default function ProdutoAgrupadoPage() {
   const [motivoDenuncia, setMotivoDenuncia] = useState("");
   const [enviandoDenuncia, setEnviandoDenuncia] = useState(false);
 
+  // ✨ Estados para o efeito de Lupa / Zoom
+  const [zoomStyle, setZoomStyle] = useState<React.CSSProperties>({ display: 'none' });
+  const [isZoomActive, setIsZoomActive] = useState(false);
+
   const aparencia = dadosLoja?.aparencia || {};
 
   const config = {
-    corDestaque: aparencia?.dscorPrincipal || "#6366f1",
-    corSecundaria: aparencia?.dscorSecundaria || "#fdf5eb",
+    corDestaque: aparencia?.dscorSecundaria || "#6366f1",
+    corSecundaria: aparencia?.dscorPrincipal || "#fdf5eb",
     corFundoSite: aparencia?.dscorFundo || "#f8fafc",
     corTextoDestaque: aparencia?.dscorTextoCard || "#1e293b",
     corSucesso: "#25D366"
@@ -195,6 +199,9 @@ export default function ProdutoAgrupadoPage() {
 
     const cartItemKey = `${produtoId}_${v1Selecionada || "padrao"}_${v2Selecionada || "padrao"}`;
     const skuParaSalvar = variacaoFinal ? variacaoFinal.sku : (produto.sku || "SEM-SKU");
+    const diasProdFinal = Number(variacaoFinal?.nrDiasProducao || produto.nrDiasProducao || 0);
+    const tipoProdutoFinal = String(produto.dsTipoProduto || produto.tipoProduto || "Fisico_Sem");
+
     const novoItem = {
       cartItemKey,
       id: produtoId,
@@ -213,7 +220,9 @@ export default function ProdutoAgrupadoPage() {
       permiteRetirada: !!produto.permiteRetirada,
       envioTransportadora: !!produto.envioTransportadora,
       precisaFrete: !!produto.precisaFrete,
-      peso: produto.peso || 0.3
+      peso: produto.peso || 0.3,
+      nrDiasProducao: diasProdFinal,
+      dsTipoProduto: tipoProdutoFinal
     };
 
     const idx = dadosExistentes.items.findIndex((i: any) => i.cartItemKey === cartItemKey);
@@ -232,6 +241,28 @@ export default function ProdutoAgrupadoPage() {
     alert("Produto adicionado ao carrinho!");
     atualizarContadorCarrinho();
   };
+
+  // ✨ Funções de Manipulação da Lupa / Zoom
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+
+    setZoomStyle({
+      display: 'block',
+      backgroundImage: `url(${imgAtiva || produto.capa})`,
+      backgroundPosition: `${x}% ${y}%`,
+      backgroundSize: '250%',
+    });
+  };
+
+  const handleMouseEnter = () => setIsZoomActive(true);
+  const handleMouseLeave = () => {
+    setIsZoomActive(false);
+    setZoomStyle({ display: 'none' });
+  };
+
+  const diasProducaoExibicao = Number(variacaoFinal?.nrDiasProducao || produto?.nrDiasProducao || 0);
 
   if (loading) return <div style={styles.center}>Carregando...</div>;
   if (!produto) return <div style={styles.center}>Produto não encontrado.</div>;
@@ -253,7 +284,7 @@ export default function ProdutoAgrupadoPage() {
                   onClick={() => setImgAtiva(img)}
                   style={{
                     width: '100%',
-                    height: '70px', // Deixamos a altura fixa proporcional para garantir o quadrado perfeito
+                    height: '70px',
                     minHeight: '70px',
                     borderRadius: '8px',
                     overflow: 'hidden',
@@ -269,10 +300,59 @@ export default function ProdutoAgrupadoPage() {
               ))}
             </div>
 
+            {/* 2. Card Principal com Imagem e Efeito de Lupa */}
+            <div 
+              className="card-principal-foto" 
+              onMouseMove={handleMouseMove}
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+              style={{ 
+                width: '400px', 
+                minWidth: '400px', 
+                maxWidth: '400px', 
+                height: '400px', 
+                maxHeight: '400px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                boxSizing: 'border-box', 
+                flexShrink: 0, 
+                overflow: 'hidden', 
+                backgroundColor: '#ffffff', 
+                borderRadius: '12px', 
+                border: '1px solid #f1f5f9', 
+                boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
+                padding: '10px',
+                position: 'relative',
+                cursor: 'crosshair'
+              }}
+            >
+              <img 
+                src={imgAtiva || produto.capa} 
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: '100%', 
+                  width: 'auto', 
+                  height: 'auto', 
+                  objectFit: 'contain', 
+                  display: 'block',
+                  opacity: isZoomActive ? 0 : 1 
+                }} 
+                alt={produto.nome} 
+              />
 
-            {/* 2. Card Principal com Imagem */}
-            <div className="card-principal-foto" style={{ width: '400px', minWidth: '400px', maxWidth: '400px', height: '400px', maxHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', flexShrink: 0, overflow: 'hidden', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', padding: '10px' }}>
-              <img src={imgAtiva || produto.capa} style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }} alt={produto.nome} />
+              {/* ✨ Camada da Lupa / Zoom */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                backgroundRepeat: 'no-repeat',
+                pointerEvents: 'none',
+                borderRadius: '12px',
+                ...zoomStyle
+              }} />
             </div>
 
           </div>
@@ -283,9 +363,15 @@ export default function ProdutoAgrupadoPage() {
             {/* Sub-main Superior: Informações e Variações */}
             <div style={{ flex: 1, backgroundColor: '#fff', borderRadius: '12px', padding: '18px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: config.corTextoDestaque, margin: 0, lineHeight: '1.2' }}>{produto.nome}</h1>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: config.corDestaque, margin: 0 }}>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: config.corTextoDestaque, margin: 0 }}>
                 R$ {variacaoFinal ? variacaoFinal.preco : (produto.precoBasico || "0,00")}
               </div>
+
+              {diasProducaoExibicao > 0 && (
+                <div style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', backgroundColor: '#fffbeb', padding: '6px 10px', borderRadius: '6px', border: '1px solid #fef3c7' }}>
+                  ⏱️ Prazo de produção: {diasProducaoExibicao} {diasProducaoExibicao === 1 ? 'dia útil' : 'dias úteis'}
+                </div>
+              )}
 
               {produto.nomeVar1 && (
                 <div>
@@ -299,7 +385,6 @@ export default function ProdutoAgrupadoPage() {
                           key={i}
                           onClick={() => {
                             setV1Selecionada(valor);
-                            console.log("DADOS DA VARIAÇÃO CLICADA:", item); // <--- Agora vai aparecer com certeza!
                             const fotoDesejada = item.foto || item.imagem || item.url || item.fotoCapa;
                             if (fotoDesejada) setImgAtiva(fotoDesejada);
                           }}
@@ -423,6 +508,7 @@ export default function ProdutoAgrupadoPage() {
             max-height: 350px !important;
             background-color: #f8fafc !important;
             order: 1 !important;
+            cursor: default !important;
           }
           .minicards-container {
             width: 100% !important;
@@ -433,7 +519,7 @@ export default function ProdutoAgrupadoPage() {
             gap: 10px !important;
             overflow-x: auto !important;
             margin: 0 auto !important;
-            order: 2 !important; /* Mini cards ficam logo abaixo da foto */
+            order: 2 !important;
           }
           .minicards-container > div {
             width: 60px !important;
@@ -444,7 +530,7 @@ export default function ProdutoAgrupadoPage() {
             min-width: 100% !important;
             height: auto !important;
             max-height: none !important;
-            order: 3 !important; /* Quadro de variações e botão vêm por último */
+            order: 3 !important;
           }
         }
       `}</style>
