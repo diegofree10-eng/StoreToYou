@@ -13,7 +13,7 @@ interface LayoutSitePadraoProps {
     categorias?: any[];
 }
 
-// ✨ Subcomponente isolado para gerenciar o estado da subcategoria corretamente
+// ✨ Subcomponente isolado com cores e efeitos padronizados para as subcategorias
 function ItemSubcategoria({ sub, catNome, config, irParaCategoria }: any) {
     const [subHover, setSubHover] = useState(false);
 
@@ -27,12 +27,13 @@ function ItemSubcategoria({ sub, catNome, config, irParaCategoria }: any) {
                 fontSize: '12px',
                 fontWeight: 'normal',
                 color: subHover ? config.corPrimaria : config.corTextoCard,
+                backgroundColor: subHover ? '#f1f5f9' : 'transparent',
                 opacity: subHover ? 1 : 0.85,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                transition: 'color 0.2s'
+                transition: 'all 0.2s ease'
             }}
         >
             <FiCornerDownRight size={12} color={subHover ? config.corPrimaria : config.corTextoCard} style={{ opacity: 0.6 }} />
@@ -41,7 +42,63 @@ function ItemSubcategoria({ sub, catNome, config, irParaCategoria }: any) {
     );
 }
 
-// ✨ Subcomponente para gerenciar o item principal da sidebar
+// ✨ Subcomponente para gerenciar o item individual de categoria no menu mobile (mesmo padrão da sidebar)
+function ItemCategoriaMobile({ cat, config, irParaCategoria, toggleCategoria, estaExpandida, temSubs }: any) {
+    const [mobileHover, setMobileHover] = useState(false);
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', borderRadius: '8px', backgroundColor: mobileHover ? '#f1f5f9' : '#f8fafc', overflow: 'hidden', flexShrink: 0, transition: 'background-color 0.2s' }}>
+            <div
+                onMouseEnter={() => setMobileHover(true)}
+                onMouseLeave={() => setMobileHover(false)}
+                onClick={() => {
+                    if (temSubs) {
+                        toggleCategoria(cat.id);
+                    } else {
+                        irParaCategoria(cat.nome);
+                    }
+                }}
+                style={{
+                    padding: '12px',
+                    fontSize: '13px',
+                    fontWeight: 'normal',
+                    color: mobileHover ? config.corPrimaria : config.corTextoCard,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'color 0.2s'
+                }}
+            >
+                <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1 }}>
+                    {cat.nome}
+                </span>
+                {temSubs && (
+                    <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '4px', display: 'flex', alignItems: 'center', color: mobileHover ? config.corPrimaria : config.corTextoCard }}>
+                        <FiChevronDown size={14} style={{ transform: estaExpandida ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                    </span>
+                )}
+            </div>
+
+            {/* Subcategorias no Mobile */}
+            {temSubs && estaExpandida && (
+                <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#edf2f7', paddingBottom: '6px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                    {cat.subcategorias.map((sub: string, index: number) => (
+                        <ItemSubcategoria
+                            key={index}
+                            sub={sub}
+                            catNome={cat.nome}
+                            config={config}
+                            irParaCategoria={irParaCategoria}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ✨ Subcomponente para gerenciar o item principal da sidebar com o efeito hover idêntico
 function ItemCategoriaSidebar({ cat, config, irParaCategoria, toggleCategoria, estaExpandida, temSubs }: any) {
     const [isHovered, setIsHovered] = useState(false);
 
@@ -66,7 +123,8 @@ function ItemCategoriaSidebar({ cat, config, irParaCategoria, toggleCategoria, e
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    fontWeight: 'normal'
+                    fontWeight: 'normal',
+                    transition: 'color 0.2s'
                 }}
             >
                 <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -376,57 +434,17 @@ export default function LayoutPadrao({ children, bannerTopo, categorias = [] }: 
                             {categorias.map((cat: any) => {
                                 const temSubs = cat.subcategorias && cat.subcategorias.length > 0;
                                 const estaExpandida = catExpandida[cat.id];
-                                const [mobileHover, setMobileHover] = useState(false);
 
                                 return (
-                                    <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', borderRadius: '8px', backgroundColor: mobileHover ? '#f1f5f9' : '#f8fafc', overflow: 'hidden', flexShrink: 0, transition: 'background-color 0.2s' }}>
-                                        <div
-                                            onMouseEnter={() => setMobileHover(true)}
-                                            onMouseLeave={() => setMobileHover(false)}
-                                            onClick={() => {
-                                                if (temSubs) {
-                                                    toggleCategoria(cat.id);
-                                                } else {
-                                                    irParaCategoria(cat.nome);
-                                                }
-                                            }}
-                                            style={{
-                                                padding: '12px',
-                                                fontSize: '13px',
-                                                fontWeight: 'normal',
-                                                color: mobileHover ? config.corPrimaria : config.corTextoCard,
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'space-between',
-                                                transition: 'color 0.2s'
-                                            }}
-                                        >
-                                            <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1 }}>
-                                                {cat.nome}
-                                            </span>
-                                            {temSubs && (
-                                                <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '4px', display: 'flex', alignItems: 'center', color: mobileHover ? config.corPrimaria : config.corTextoCard }}>
-                                                    <FiChevronDown size={14} style={{ transform: estaExpandida ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* Subcategorias no Mobile */}
-                                        {temSubs && estaExpandida && (
-                                            <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#edf2f7', paddingBottom: '6px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                                                {cat.subcategorias.map((sub: string, index: number) => (
-                                                    <ItemSubcategoria
-                                                        key={index}
-                                                        sub={sub}
-                                                        catNome={cat.nome}
-                                                        config={config}
-                                                        irParaCategoria={irParaCategoria}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <ItemCategoriaMobile
+                                        key={cat.id}
+                                        cat={cat}
+                                        config={config}
+                                        irParaCategoria={irParaCategoria}
+                                        toggleCategoria={toggleCategoria}
+                                        estaExpandida={estaExpandida}
+                                        temSubs={temSubs}
+                                    />
                                 );
                             })}
                         </div>
