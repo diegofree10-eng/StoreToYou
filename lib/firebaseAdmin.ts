@@ -1,34 +1,31 @@
 import { initializeApp, cert, getApps, getApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-const serviceAccountRaw = process.env.FIREBASE_ADMIN_SDK_JSON;
-
 let app;
 
 if (!getApps().length) {
-  if (serviceAccountRaw) {
-    try {
-      const serviceAccount = JSON.parse(serviceAccountRaw);
-      // Corrige quebras de linha na chave privada se vierem escapadas
-      if (serviceAccount.private_key) {
-        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-      }
+  // Usando as variáveis exatas que já estão cadastradas na sua Vercel
+  const projectId = process.env.ID_DO_PROJETO_ADMIN_DO_FIREBASE || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
-      app = initializeApp({
-        credential: cert(serviceAccount)
-      });
-    } catch (error) {
-      console.error("Erro ao fazer parse do JSON do Firebase Admin:", error);
-    }
+  if (projectId && clientEmail && privateKey) {
+    app = initializeApp({
+      credential: cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+    });
   } else {
-    console.error("ERRO CRÍTICO: A variável FIREBASE_ADMIN_SDK_JSON não está configurada no ambiente!");
+    console.error("ERRO CRÍTICO: As credenciais do Firebase Admin não estão completas nas variáveis de ambiente.");
   }
 } else {
   app = getApp();
 }
 
 if (!app) {
-  throw new Error("Firebase Admin não pôde ser inicializado por falta de credenciais.");
+  throw new Error("Firebase Admin não pôde ser inicializado.");
 }
 
 export const dbAdmin = getFirestore(app);
