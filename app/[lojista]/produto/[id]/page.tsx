@@ -29,9 +29,14 @@ export default function ProdutoAgrupadoPage() {
   const [motivoDenuncia, setMotivoDenuncia] = useState("");
   const [enviandoDenuncia, setEnviandoDenuncia] = useState(false);
 
-  // ✨ Estados para o efeito de Lupa / Zoom
-  const [zoomStyle, setZoomStyle] = useState<React.CSSProperties>({ display: 'none' });
-  const [isZoomActive, setIsZoomActive] = useState(false);
+  // ✨ Estados para o Zoom estilo Mercado Livre (Lente + Painel Lateral)
+  const [isZooming, setIsZooming] = useState(false);
+  const [lensStyle, setLensStyle] = useState<React.CSSProperties>({ display: 'none' });
+  const [zoomResultStyle, setZoomResultStyle] = useState<React.CSSProperties>({ display: 'none' });
+  
+  // ✨ Estados para o Modal Lightbox de tela cheia e Zoom de Inspeção
+  const [showLightbox, setShowLightbox] = useState(false);
+  const [isFullZoom, setIsFullZoom] = useState(false);
 
   const aparencia = dadosLoja?.aparencia || {};
 
@@ -242,24 +247,47 @@ export default function ProdutoAgrupadoPage() {
     atualizarContadorCarrinho();
   };
 
-  // ✨ Funções de Manipulação da Lupa / Zoom
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - left) / width) * 100;
-    const y = ((e.clientY - top) / height) * 100;
+    const container = e.currentTarget;
+    const { left, top, width, height } = container.getBoundingClientRect();
+    
+    let x = e.clientX - left;
+    let y = e.clientY - top;
 
-    setZoomStyle({
+    const lensSize = 130; 
+
+    let posX = x - lensSize / 2;
+    let posY = y - lensSize / 2;
+
+    if (posX < 0) posX = 0;
+    if (posX > width - lensSize) posX = width - lensSize;
+    if (posY < 0) posY = 0;
+    if (posY > height - lensSize) posY = height - lensSize;
+
+    setLensStyle({
+      display: 'block',
+      left: `${posX}px`,
+      top: `${posY}px`,
+      width: `${lensSize}px`,
+      height: `${lensSize}px`,
+    });
+
+    const bgX = (x / width) * 100;
+    const bgY = (y / height) * 100;
+
+    setZoomResultStyle({
       display: 'block',
       backgroundImage: `url(${imgAtiva || produto.capa})`,
-      backgroundPosition: `${x}% ${y}%`,
-      backgroundSize: '250%',
+      backgroundPosition: `${bgX}% ${bgY}%`,
+      backgroundSize: `${width * 2.5}px ${height * 2.5}px`,
     });
   };
 
-  const handleMouseEnter = () => setIsZoomActive(true);
+  const handleMouseEnter = () => setIsZooming(true);
   const handleMouseLeave = () => {
-    setIsZoomActive(false);
-    setZoomStyle({ display: 'none' });
+    setIsZooming(false);
+    setLensStyle({ display: 'none' });
+    setZoomResultStyle({ display: 'none' });
   };
 
   const diasProducaoExibicao = Number(variacaoFinal?.nrDiasProducao || produto?.nrDiasProducao || 0);
@@ -271,12 +299,10 @@ export default function ProdutoAgrupadoPage() {
     <LayoutPadrao
       categorias={categoriasState}
       bannerTopo={
-        <div className="banner-topo-produto" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', height: '400px', maxHeight: '400px', boxSizing: 'border-box' }}>
+        <div className="banner-topo-produto" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', height: '400px', maxHeight: '400px', boxSizing: 'border-box', position: 'relative' }}>
 
-          {/* Bloco Esquerdo: Minicards + Card Principal */}
-          <div className="bloco-galeria-produto" style={{ display: 'flex', gap: '100px', height: '400px', alignItems: 'center', marginLeft: '15px' }}>
+          <div className="bloco-galeria-produto" style={{ display: 'flex', gap: '20px', height: '400px', alignItems: 'center', marginLeft: '15px' }}>
 
-            {/* 1. Minicards na Vertical */}
             <div className="minicards-container" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '12px', width: '70px', height: '400px', flexShrink: 0 }}>
               {imagensGaleria.slice(0, 4).map((img: string, idx: number) => (
                 <div
@@ -300,12 +326,12 @@ export default function ProdutoAgrupadoPage() {
               ))}
             </div>
 
-            {/* 2. Card Principal com Imagem e Efeito de Lupa */}
             <div 
               className="card-principal-foto" 
               onMouseMove={handleMouseMove}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
+              onClick={() => setShowLightbox(true)}
               style={{ 
                 width: '400px', 
                 minWidth: '400px', 
@@ -324,7 +350,7 @@ export default function ProdutoAgrupadoPage() {
                 boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
                 padding: '10px',
                 position: 'relative',
-                cursor: 'crosshair'
+                cursor: 'zoom-in'
               }}
             >
               <img 
@@ -335,32 +361,43 @@ export default function ProdutoAgrupadoPage() {
                   width: 'auto', 
                   height: 'auto', 
                   objectFit: 'contain', 
-                  display: 'block',
-                  opacity: isZoomActive ? 0 : 1 
+                  display: 'block' 
                 }} 
                 alt={produto.nome} 
               />
 
-              {/* ✨ Camada da Lupa / Zoom */}
               <div style={{
                 position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                backgroundRepeat: 'no-repeat',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                border: '1px solid rgba(0, 0, 0, 0.3)',
                 pointerEvents: 'none',
-                borderRadius: '12px',
-                ...zoomStyle
+                cursor: 'none',
+                display: 'none',
+                ...lensStyle
               }} />
             </div>
 
+            <div style={{
+              position: 'absolute',
+              left: '515px',
+              top: '0px',
+              width: '420px',
+              height: '400px',
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+              zIndex: 50,
+              backgroundRepeat: 'no-repeat',
+              pointerEvents: 'none',
+              display: isZooming ? 'block' : 'none',
+              ...zoomResultStyle
+            }} />
+
           </div>
 
-          {/* 3. Quadro de Variações da Direita */}
           <div className="quadro-variacoes-produto" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '400px', maxHeight: '400px', width: '300px', minWidth: '300px', boxSizing: 'border-box', gap: '10px' }}>
 
-            {/* Sub-main Superior: Informações e Variações */}
             <div style={{ flex: 1, backgroundColor: '#fff', borderRadius: '12px', padding: '18px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: config.corTextoDestaque, margin: 0, lineHeight: '1.2' }}>{produto.nome}</h1>
               <div style={{ fontSize: '24px', fontWeight: '800', color: config.corTextoDestaque, margin: 0 }}>
@@ -429,7 +466,6 @@ export default function ProdutoAgrupadoPage() {
               )}
             </div>
 
-            {/* Sub-main Inferior: Botão de Ação Isolado */}
             <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', boxSizing: 'border-box', flexShrink: 0 }}>
               <button
                 disabled={!podeAdicionar || !isLojaAberta}
@@ -483,6 +519,70 @@ export default function ProdutoAgrupadoPage() {
         </div>
       </div>
 
+      {/* ✨ Modal Lightbox de Tela Cheia com Zoom de Inspeção (Clique para ampliar/reduzir) */}
+      {showLightbox && (
+        <div 
+          onClick={() => {
+            setIsFullZoom(false);
+            setShowLightbox(false);
+          }} 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'zoom-out',
+            overflow: isFullZoom ? 'auto' : 'hidden'
+          }}
+        >
+          <button 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              setIsFullZoom(false);
+              setShowLightbox(false); 
+            }} 
+            style={{
+              position: 'fixed',
+              top: '20px',
+              right: '30px',
+              background: 'none',
+              border: 'none',
+              color: '#fff',
+              fontSize: '32px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              zIndex: 10000
+            }}
+          >
+            ✕
+          </button>
+
+          <img 
+            src={imgAtiva || produto.capa} 
+            alt="Zoom Tela Cheia" 
+            onClick={(e) => {
+              e.stopPropagation(); 
+              setIsFullZoom(!isFullZoom); 
+            }}
+            style={{
+              maxWidth: isFullZoom ? 'none' : '90vw',
+              maxHeight: isFullZoom ? 'none' : '90vh',
+              width: isFullZoom ? 'auto' : 'contain',
+              objectFit: 'contain',
+              borderRadius: '4px',
+              cursor: isFullZoom ? 'zoom-out' : 'zoom-in',
+              transition: 'transform 0.3s ease',
+              backgroundColor: '#fff',
+              padding: '10px',
+              margin: isFullZoom ? 'auto' : undefined
+            }}
+          />
+        </div>
+      )}
+
       <style jsx>{`
         @media (max-width: 1024px) {
           .banner-topo-produto {
@@ -508,7 +608,7 @@ export default function ProdutoAgrupadoPage() {
             max-height: 350px !important;
             background-color: #f8fafc !important;
             order: 1 !important;
-            cursor: default !important;
+            cursor: pointer !important;
           }
           .minicards-container {
             width: 100% !important;
