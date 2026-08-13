@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Pedido } from '@/types/pedido';
 import useSWR from 'swr';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -13,6 +13,7 @@ interface TabDigitalProps {
     selecionados: string[];
     setSelecionados: React.Dispatch<React.SetStateAction<string[]>>;
     mudarStatusDireto: (pedido: Pedido, novoStatus: string) => Promise<void>;
+    registrarFuncaoConcluirDigital?: (fn: () => void) => void;
 }
 
 const formatarData = (dataStr: string | undefined): string => {
@@ -40,24 +41,110 @@ const fetchProduto = async (path: string, db: any) => {
 };
 
 const obterSeloItem = (item: any, pedidoLogistica: any) => {
-    const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
-    const isRetirada = pedidoLogistica?.isRetirada === true || formaItem === 'retirada';
-    const isDigital = item.precisaFrete === false || formaItem === 'digital';
+    const tipoProduto = String(item.dsTipoProduto || item.tipoProduto || '').trim().toLowerCase();
 
-    if (isRetirada) return { texto: "Retirada", cor: "#f59e0b" };
-    if (isDigital) return { texto: "Digital", cor: "#3b82f6" };
+    if (tipoProduto === 'digital_download' || tipoProduto === 'digital_personalizado' || tipoProduto === 'digital' || item.precisaFrete === false) {
+        return { texto: "Digital", cor: "#3b82f6" };
+    }
+
+    const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
+
+    if (formaItem === 'retirada') return { texto: "Retirada", cor: "#f59e0b" };
+    if (formaItem === 'entrega_local') return { texto: "Entrega Local", cor: "#8b5cf6" };
+
     return { texto: "Envio", cor: "#10b981" };
 };
 
+const gerarLinkWhatsApp = (pedido: Pedido) => {
+    const clienteObj = typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : ({} as any);
+    const telefoneBruto = clienteObj.dsTelefoneCliente || clienteObj.telefone || clienteObj.whatsapp || clienteObj.celular || (pedido as any).telefone || "";
+
+    if (!telefoneBruto) return "";
+
+    const apenasNumeros = String(telefoneBruto).replace(/\D/g, '');
+    if (!apenasNumeros) return "";
+
+    const telefoneFinal = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
+    const nomeCliente = clienteObj.nmNomeCliente || clienteObj.nome || "Cliente";
+    const numPed = pedido.numeroPedido !== undefined && pedido.numeroPedido !== null ? pedido.numeroPedido : (pedido.numero || pedido.id?.slice(-4));
+
+    const mensagem = encodeURIComponent(`Olá ${nomeCliente}, tudo bem? Estou entrando em contato referente ao seu pedido digital #${numPed}.`);
+    return `https://wa.me/${telefoneFinal}?text=${mensagem}`;
+};
+
+const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db, pedido, isFirstItem }: any) => {
+    const idProd = item.idProduto || item.id;
+    const { data: produtoData } = useSWR(
+        idProd && lojistaId ? `lojistas/${lojistaId}/produtos/${idProd}` : null,
+        (key) => fetchProduto(key, db),
+        { revalidateOnFocus: false }
+    );
+
+    const selo = obterSeloItem(item, pedidoLogistica);
+    const qtd = item.quantidade || item.qty || 1;
+
+    const fotoUrl = useMemo(() => {
+        const fotoDireta = extrairFotoDoItem(item);
+        if (fotoDireta) return fotoDireta;
+        if (produtoData) {
+            if (item.variacao && Array.isArray(produtoData.variacoes)) {
+                const match = produtoData.variacoes.find((v: any) => v.nome === item.variacao);
+                if (match?.foto) return match.foto;
+            }
+            return produtoData.capa || "";
+        }
+        return "";
+    }, [item, produtoData]);
+
+    const linkWhats = gerarLinkWhatsApp(pedido);
+
+    return (
+        <div style={{ ...localStyles.itemLinhaResumida, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <img src={fotoUrl || "https://placehold.co/40x40?text=Prod"} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', backgroundColor: selo.cor, color: '#fff' }}>
+                            {selo.texto}
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
+                            {qtd}x {item.nome || item.title}
+                        </span>
+                    </div>
+                    {item.variacao && (
+                        <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '2px' }}>
+                            Variação: {item.variacao}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {isFirstItem && linkWhats && (
+                <a
+                    href={linkWhats}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Chamar cliente no WhatsApp"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#25D366', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', textDecoration: 'none', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.1)', marginLeft: '12px' }}
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                    </svg>
+                </a>
+            )}
+        </div>
+    );
+});
+
 export default function TabDigital({
-    pedidos, lojistaIdApp, db, setLocalPedidos, selecionados = [], setSelecionados, mudarStatusDireto
+    pedidos, lojistaIdApp, db, setLocalPedidos, selecionados = [], setSelecionados, mudarStatusDireto, registrarFuncaoConcluirDigital
 }: TabDigitalProps) {
     const [processandoMassa, setProcessandoMassa] = useState(false);
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
-    // Paginação
     const [paginaAtual, setPaginaAtual] = useState(1);
-    const itensPorPagina = 30;
+    const [itensPorPagina, setItensPorPagina] = useState(20);
 
     const pedidosDigitais = useMemo(() => {
         return pedidos.filter(p => {
@@ -65,35 +152,44 @@ export default function TabDigital({
             const statusGeral = String(p.status || '').trim().toLowerCase();
             if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusGeral === 'enviado' || (p as any).enviado === true) return false;
 
-            // Garante que o pedido é realmente pago (mesma validação do GestaoPedidos)
             const statusProdObj = (p as any).StatusProducao || {};
             const isPago = Boolean(statusProdObj.isPago !== undefined ? statusProdObj.isPago : p.pago);
-            if (!isPago) return false; // Se não estiver pago, não entra na aba digital
+            if (!isPago) return false;
 
             const pedidoLogistica = (p as any).logistica || {};
             const formaEntrega = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
-            const temItemDigital = Array.isArray(p.itens) && p.itens.some((i: any) => i.precisaFrete === false);
 
+            const temItemFisico = Array.isArray(p.itens) && p.itens.some((i: any) => {
+                const tipo = String(i.dsTipoProduto || i.tipoProduto || '').toLowerCase();
+                const tipoEhDigital = tipo.includes('digital');
+                return !tipoEhDigital && i.precisaFrete !== false;
+            });
+
+            const formaEntregaEhFisica = formaEntrega === 'retirada' || formaEntrega === 'entrega_local' || formaEntrega === 'envio' || formaEntrega === 'transportadora';
+
+            if (temItemFisico || formaEntregaEhFisica) return false;
+
+            const temItemDigital = Array.isArray(p.itens) && p.itens.some((i: any) => i.precisaFrete === false || String(i.dsTipoProduto || '').toLowerCase().includes('digital'));
             const isDigital = formaEntrega === 'digital' || temItemDigital;
 
-            if (!isDigital) return false;
-
-            return true;
+            return isDigital;
         });
     }, [pedidos]);
+
+    const totalPaginas = Math.ceil(pedidosDigitais.length / itensPorPagina) || 1;
+
+    useEffect(() => {
+        if (paginaAtual > totalPaginas) {
+            setPaginaAtual(totalPaginas);
+        }
+    }, [totalPaginas, paginaAtual]);
 
     const pedidosPaginados = useMemo(() => {
         const inicio = (paginaAtual - 1) * itensPorPagina;
         return pedidosDigitais.slice(inicio, inicio + itensPorPagina);
-    }, [pedidosDigitais, paginaAtual]);
+    }, [pedidosDigitais, paginaAtual, itensPorPagina]);
 
-    const totalPaginas = Math.ceil(pedidosDigitais.length / itensPorPagina);
-
-    // Contagem restrita estritamente aos pedidos visíveis nesta aba
     const idsVisiveisNestaAba = useMemo(() => pedidosDigitais.map(p => p.id), [pedidosDigitais]);
-    const selecionadosNestaAbaCount = useMemo(() => {
-        return (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id)).length;
-    }, [selecionados, idsVisiveisNestaAba]);
 
     const toggleExpandir = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
@@ -140,10 +236,15 @@ export default function TabDigital({
         }
     };
 
+    useEffect(() => {
+        if (registrarFuncaoConcluirDigital) {
+            registrarFuncaoConcluirDigital(concluirDigitalEmLote);
+        }
+    }, [selecionados, pedidosDigitais, processandoMassa]);
+
     return (
         <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
             <style jsx>{`
-                /* Estilos aplicados EXCLUSIVAMENTE em telas mobile (max-width: 768px) */
                 @media (max-width: 768px) {
                     .card-header-linha {
                         flex-direction: column !important;
@@ -194,7 +295,6 @@ export default function TabDigital({
                     }
                 }
 
-                /* Estilos aplicados EXCLUSIVAMENTE em telas PC (min-width: 769px) */
                 @media (min-width: 769px) {
                     .mobile-bloco-organizado {
                         display: none !important;
@@ -215,17 +315,17 @@ export default function TabDigital({
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Gerencie os produtos digitais ou de entrega por e-mail vendidos na loja.</p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', minHeight: '40px' }}>
-                    {selecionadosNestaAbaCount > 0 ? (
-                        <div style={{ display: 'flex', gap: '10px', backgroundColor: '#eff6ff', padding: '8px 14px', borderRadius: '8px', border: '1px solid #bfdbfe', alignItems: 'center' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e40af' }}>{selecionadosNestaAbaCount} selecionados</span>
-                            <button onClick={concluirDigitalEmLote} disabled={processandoMassa} style={{ padding: '8px 14px', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>
-                                {processandoMassa ? "⏳ Processando..." : "✅ Concluir Envio"}
-                            </button>
-                        </div>
-                    ) : (
-                        <div style={{ visibility: 'hidden', height: '40px' }} />
-                    )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: 'bold', marginLeft: 'auto' }}>
+                    <span>Mostrar:</span>
+                    <select
+                        value={itensPorPagina}
+                        onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
+                        style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                        <option value={20}>20</option>
+                        <option value={40}>40</option>
+                        <option value={60}>60</option>
+                    </select>
                 </div>
             </div>
 
@@ -243,6 +343,7 @@ export default function TabDigital({
                         const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
+                        const cotacao = (pedido as any).Cotacao || {};
                         const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
 
                         const temPersonalizacao = pedido.itens?.some(i => {
@@ -262,8 +363,6 @@ export default function TabDigital({
                         const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
                         const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
                         const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
-                        const formaPgtoStr = fin.metodo ?? fin.formaPagamento ?? fin.dsFormaPagamento ?? "-";
-                        const statusPgtoStr = fin.status ?? fin.statusPagamento ?? (isPagoReal ? "Pago" : "Pendente");
 
                         return (
                             <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${corBordaCard}` }}>
@@ -272,7 +371,6 @@ export default function TabDigital({
                                     className="card-header-linha"
                                     style={localStyles.cardHeaderLinha}
                                 >
-                                    {/* ESTRUTURA ORIGINAL PARA PC */}
                                     <div className="pc-bloco-linha-unica">
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
                                             <input
@@ -294,7 +392,6 @@ export default function TabDigital({
                                         </div>
                                     </div>
 
-                                    {/* ESTRUTURA ORGANIZADA EXCLUSIVA PARA MOBILE */}
                                     <div className="mobile-bloco-organizado" style={{ display: 'none' }}>
                                         <div className="mobile-linha-topo">
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
@@ -330,15 +427,25 @@ export default function TabDigital({
 
                                 <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {pedido.itens?.map((item: any, idx: number) => (
-                                        <ItemResumido key={idx} item={item} lojistaId={lojistaIdApp} pedidoLogistica={pedidoLogistica} db={db} />
+                                        <ItemResumido
+                                            key={idx}
+                                            item={item}
+                                            lojistaId={lojistaIdApp}
+                                            pedidoLogistica={pedidoLogistica}
+                                            db={db}
+                                            pedido={pedido}
+                                            isFirstItem={idx === 0}
+                                        />
                                     ))}
                                 </div>
 
                                 {expandido && (
                                     <div style={localStyles.conteudoExpandido}>
                                         <div className="grid-expandido" style={localStyles.gridExpandido}>
+
+                                            {/* BLOCO 1: PERSONALIZAÇÃO */}
                                             <div style={localStyles.caixaPersonalizacao}>
-                                                <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
+                                                <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '4px', fontSize: '12px' }}>
                                                     ✨ Personalização:
                                                 </div>
                                                 {temPersonalizacao ? (
@@ -346,7 +453,7 @@ export default function TabDigital({
                                                         const resp = item.respostasFormatadas || item.personalizacao;
                                                         if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
                                                         return (
-                                                            <div key={idx} style={{ fontSize: '12px', color: '#78350f', lineHeight: '1.4', marginBottom: '4px' }}>
+                                                            <div key={idx} style={{ fontSize: '11px', color: '#78350f', lineHeight: '1.3', marginBottom: '4px' }}>
                                                                 {typeof resp === 'object' ? (
                                                                     Object.entries(resp).map(([k, v]) => (
                                                                         <div key={k}>{k}: <strong>{String(v)}</strong></div>
@@ -358,43 +465,42 @@ export default function TabDigital({
                                                         );
                                                     })
                                                 ) : (
-                                                    <div style={{ fontSize: '12px', color: '#92400e', fontStyle: 'italic' }}>Este pedido não tem personalização.</div>
+                                                    <div style={{ fontSize: '11px', color: '#92400e', fontStyle: 'italic' }}>Sem personalização.</div>
                                                 )}
                                             </div>
 
+                                            {/* BLOCO 2: ENDEREÇO */}
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>📍 Endereço de Entrega</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                                                    {endereco.dsRuaCliente || endereco.rua ? (
-                                                        <>
-                                                            {endereco.dsRuaCliente || endereco.rua}, {endereco.dsNumeroCliente || endereco.numero}
-                                                            <br />
-                                                            {endereco.dsBairroCliente || endereco.bairro} - {endereco.dsCidadeCliente || endereco.cidade}/{endereco.dsUfCliente || endereco.uf}
-                                                            <br />
-                                                            CEP: {endereco.dsCepCliente || endereco.cep}
-                                                        </>
-                                                    ) : (
-                                                        <span style={{ fontStyle: 'italic', color: '#64748b' }}>Não cadastrado (Produto Digital)</span>
-                                                    )}
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>📍 Endereço</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
+                                                    <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
+                                                    <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
+                                                    <strong>Cidade:</strong> {endereco.dsCidadeCliente || endereco.cidade || '-'}&nbsp;&nbsp;<strong>UF:</strong> {endereco.dsUfCliente || endereco.uf || '-'}<br />
+                                                    <strong>CEP:</strong> {endereco.dsCepCliente || endereco.cep || '-'}
                                                 </div>
                                             </div>
 
+                                            {/* BLOCO 3: LOGÍSTICA */}
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🚚 Transportadora / Logística</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                                                    <div><strong>Forma:</strong> Digital</div>
-                                                    <div><strong>Status:</strong> Envio por E-mail</div>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <div><strong>Forma de Entrega:</strong> {pedidoLogistica.dsFormaEntrega || 'Digital'}</div>
+                                                    <div><strong>Método de Pagamento:</strong> {fin.dsMetodoPagamento || fin.metodo || 'PIX'}</div>
+                                                    <div><strong>Transportadora ID:</strong> {fin.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || '-'}</div>
+                                                    <div><strong>Serviço:</strong> {pedido?.logistica?.dsServico || 'Digital'}</div>
                                                 </div>
                                             </div>
 
+                                            {/* BLOCO 4: ETIQUETA (Ajustado para Pedido Digital) */}
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🏷️ Dados da Etiqueta</div>
-                                                <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic' }}>
-                                                    Pedido sem etiqueta
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🏷️ Etiqueta</div>
+                                                <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic', padding: '4px 0' }}>
+                                                    Pedido digital, não possui etiqueta de envio.
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO COMPLETO */}
+                                            {/* BLOCO 5: PAGAMENTO */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                 <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
@@ -410,6 +516,7 @@ export default function TabDigital({
                                                     </div>
                                                 </div>
                                             </div>
+
                                         </div>
                                     </div>
                                 )}
@@ -430,52 +537,6 @@ export default function TabDigital({
     );
 }
 
-const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db }: any) => {
-    const idProd = item.idProduto || item.id;
-    const { data: produtoData } = useSWR(
-        idProd && lojistaId ? `lojistas/${lojistaId}/produtos/${idProd}` : null,
-        (key) => fetchProduto(key, db),
-        { revalidateOnFocus: false }
-    );
-
-    const selo = obterSeloItem(item, pedidoLogistica);
-    const qtd = item.quantidade || item.qty || 1;
-
-    const fotoUrl = useMemo(() => {
-        const fotoDireta = extrairFotoDoItem(item);
-        if (fotoDireta) return fotoDireta;
-        if (produtoData) {
-            if (item.variacao && Array.isArray(produtoData.variacoes)) {
-                const match = produtoData.variacoes.find((v: any) => v.nome === item.variacao);
-                if (match?.foto) return match.foto;
-            }
-            return produtoData.capa || "";
-        }
-        return "";
-    }, [item, produtoData]);
-
-    return (
-        <div style={localStyles.itemLinhaResumida}>
-            <img src={fotoUrl || "https://placehold.co/40x40?text=Prod"} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', backgroundColor: selo.cor, color: '#fff' }}>
-                        {selo.texto}
-                    </span>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
-                        {qtd}x {item.nome || item.title}
-                    </span>
-                </div>
-                {item.variacao && (
-                    <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '2px' }}>
-                        Variação: {item.variacao}
-                    </span>
-                )}
-            </div>
-        </div>
-    );
-});
-
 const styles: { [key: string]: React.CSSProperties } = {
     paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
     pageBtn: { padding: '8px 16px', cursor: 'pointer', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 'bold' }
@@ -487,6 +548,6 @@ const localStyles: { [key: string]: React.CSSProperties } = {
     itemLinhaResumida: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 8px', backgroundColor: '#fdfdfd', borderRadius: '6px', border: '1px solid #f1f5f9' },
     conteudoExpandido: { padding: '16px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' },
     gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' },
-    caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px' },
-    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }
+    caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '10px' },
+    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' }
 };

@@ -115,7 +115,8 @@ export default function CarrinhoIdentidadeVisual() {
         if (!temFrete) return subComDesconto;
         const freteGratisAplicado = freteGratisConfig.ativo && freteGratisConfig.atingido;
         const ehRetirada = freteSel?.id === "retirar_loja" || freteSel?.formaEnvio === "retirada";
-        const valorDoFrete = (freteGratisAplicado || ehRetirada) ? 0 : Number(freteSel?.price || 0);
+        const ehEntregaLocalGratis = freteSel?.id === "entrega_local" && freteGratisAplicado;
+        const valorDoFrete = (freteGratisAplicado || ehRetirada || ehEntregaLocalGratis) ? 0 : Number(freteSel?.price || 0);
         return subComDesconto + valorDoFrete;
     }, [valorSubTotalComDesconto, freteSel, temFrete, freteGratisConfig]);
 
@@ -150,7 +151,7 @@ export default function CarrinhoIdentidadeVisual() {
         const resultado = cliente.nmNomeCliente.trim().length > 3 &&
             validarCPFReal(cliente.dsCpfCliente) &&
             cliente.dsTelefoneCliente.replace(/\D/g, "").length >= 10 &&
-            validacaoEntrega &&
+            validacaoEntrega && // Corrigido erro de ReferenceError
             validacaoEmailDigital &&
             safeCart.length > 0;
 
@@ -277,13 +278,41 @@ export default function CarrinhoIdentidadeVisual() {
                 let listaCalculada = Array.isArray(listaBruta) ? listaBruta.filter((f: any) => !f.error) : [];
 
                 if (freteGratisConfig.atingido) {
-                    const opcaoGratuita = { id: "frete_gratis_ativado", name: "Frete Grátis Promocional", price: 0 };
-                    setOpcoesFrete([opcaoGratuita]);
-                    setFreteSel(null);
+                    // 🎯 REGRA LIMPA DE FRETE GRÁTIS: Converte tudo em no máximo 3 cards estruturados
+                    const novasOpcoes: any[] = [];
+
+                    // 1. Unifica as transportadoras em apenas 1 card de "Frete Grátis Promocional"
+                    const temTransportadora = listaCalculada.some(f => f.id !== "retirar_loja" && f.id !== "entrega_local");
+                    if (temTransportadora || listaCalculada.length === 0) {
+                        novasOpcoes.push({
+                            id: "frete_gratis_ativado",
+                            name: "Frete Grátis Promocional",
+                            price: 0
+                        });
+                    }
+
+                    // 2. Mantém o card de "Retirar na Loja" se ativo na API
+                    const opRetirada = listaCalculada.find(f => f.id === "retirar_loja");
+                    if (opRetirada) {
+                        novasOpcoes.push(opRetirada);
+                    }
+
+                    // 3. Mantém o card de "Entrega Local (Frete Grátis)" se ativo na API
+                    const opLocal = listaCalculada.find(f => f.id === "entrega_local");
+                    if (opLocal) {
+                        novasOpcoes.push({
+                            ...opLocal,
+                            price: 0,
+                            name: "Entrega Local (Frete Grátis)"
+                        });
+                    }
+
+                    setOpcoesFrete(novasOpcoes);
                 } else {
                     setOpcoesFrete(listaCalculada);
-                    setFreteSel(null);
                 }
+
+                setFreteSel(null);
                 setLoadingFrete(false);
             } catch (err) {
                 console.error("Erro no frete:", err);
@@ -378,7 +407,6 @@ export default function CarrinhoIdentidadeVisual() {
         }
 
         try {
-            // Mapeamento rigoroso conforme solicitado
             let dsFormaEntrega = 'transportadora';
 
             if (!temFrete) {
@@ -403,7 +431,7 @@ export default function CarrinhoIdentidadeVisual() {
                 isRetirada: dsFormaEntrega === 'retirada',
                 dsServico: freteSel?.name || (temFrete ? "N/A" : "Entrega Digital"),
                 dsTransportadoraId: dsFormaEntrega === 'transportadora' ? (freteSel?.id || null) : (dsFormaEntrega === 'entrega_local' ? 'entrega_local' : null),
-                vlFrete: Number(freteSel?.price || 0),
+                vlFrete: (freteGratisConfig?.atingido && (freteSel?.id === 'entrega_local' || dsFormaEntrega === 'transportadora')) ? 0 : Number(freteSel?.price || 0),
                 vlPrazo: Number(freteSel?.delivery_time || freteSel?.prazo || 0),
                 isFreteGratis: freteGratisConfig?.atingido || false
             };

@@ -73,7 +73,7 @@ export default function PagamentosTab({
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* MERCADO PAGO - Só aparece se estiver liberado no plano */}
+        {/* MERCADO PAGO - Oculto se não estiver liberado no plano */}
         {masterLiberouMeioPagamento("mercado_pago") && (
           <div style={{
             background: config.pagamentos.dsMercadoPago?.ativo ? '#f0f9ff' : '#f8fafc',
@@ -128,7 +128,7 @@ export default function PagamentosTab({
           </div>
         )}
 
-        {/* PAGSEGURO - Só aparece se estiver liberado no plano */}
+        {/* PAGSEGURO - Oculto se não estiver liberado no plano */}
         {masterLiberouMeioPagamento("pagseguro") && (
           <div style={{
             background: config.pagamentos.dsPagSeguro?.ativo ? '#fdf8f5' : '#f8fafc',

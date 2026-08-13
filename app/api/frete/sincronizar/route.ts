@@ -34,17 +34,17 @@ export async function POST(request: Request) {
 
     const pedidosRef = db.collection("lojistas").doc(lojistaId).collection("pedidos");
     
-    // Busca pedidos que já tiveram a etiqueta gerada mas ainda estão pendentes
+    // 🎯 Busca ampliada para incluir pendências de saldo e erros, permitindo recuperar pedidos travados
     const snapshot = await pedidosRef
       .where("etiquetaGerada", "==", true)
-      .where("statusEtiqueta", "in", ["pendente", "gerada"])
+      .where("statusEtiqueta", "in", ["pendente", "gerada", "pendente_saldo", "erro"])
       .get();
     
     let atualizados = 0;
 
     for (const pDoc of snapshot.docs) {
       const pedido = pDoc.data();
-      const shipmentId = pedido.idEtiquetaMelhorEnvio || pedido.protocoloMelhorEnvio; 
+      const shipmentId = pedido.idEtiquetaMelhorEnvio || pedido.protocoloMelhorEnvio || pedido.Etiqueta?.IdEtiqueta; 
 
       if (!shipmentId) {
         console.warn(`[SYNC] Pedido ${pDoc.id} não possui idEtiquetaMelhorEnvio.`);
@@ -73,9 +73,15 @@ export async function POST(request: Request) {
         const ordemDetalhe = Array.isArray(orderData) ? orderData[0] : (orderData.data?.[0] || orderData);
 
         if (ordemDetalhe && (ordemDetalhe.status === 'paid' || ordemDetalhe.status === 'released' || ordemDetalhe.status === 'processing')) {
+          const novaUrl = ordemDetalhe.url || ordemDetalhe.checkout?.url_print || pedido.urlEtiqueta || "";
+          
           await pDoc.ref.update({
             statusEtiqueta: 'paga',
-            urlEtiqueta: ordemDetalhe.url || ordemDetalhe.checkout?.url_print || pedido.urlEtiqueta || "",
+            "Etiqueta.statusEtiqueta": 'paga',
+            "Etiqueta.isEtiquetaGerada": true,
+            "Etiqueta.mensagemErro": null,
+            urlEtiqueta: novaUrl,
+            "Etiqueta.urlEtiqueta": novaUrl,
             dataGeracaoEtiqueta: new Date().toISOString()
           });
           atualizados++;

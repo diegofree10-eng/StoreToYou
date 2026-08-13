@@ -1,18 +1,16 @@
 'use client';
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useFrete } from "@/hooks/useFrete";
-import ModalProcessamento from './ModalProcessamento';
+import { useGerenciarPedido } from "@/hooks/useGerenciarPedido";
+import BarraDeAcoes from './_tabsGestaoPedidos/BarraAcoesTabEtiquetas';
 
-// Importação da tipagem centralizada unificada
-import { Pedido, ItemPedido, Financeiro, Logistica, Endereco, Cliente } from '@/types/pedido';
+import { Pedido } from '@/types/pedido';
+import { descobrirAbaDoPedido } from '@/utils/classificarPedido';
+import { doc, onSnapshot } from 'firebase/firestore';
 
-// Importação de todas as abas correspondentes
 import TabTodosPedidos from './_tabsGestaoPedidos/TabTodosPedidos';
 import TabCotarFrete from './_tabsGestaoPedidos/TabCotarFrete';
 import TabEmitirEtiquetas from './_tabsGestaoPedidos/TabEmitirEtiquetas';
-import TabSeparacaoImpressao from './_tabsGestaoPedidos/TabSeparacaoImpressao';
-import TabProntoPedidos from './_tabsGestaoPedidos/TabProntoPedidos';
 import TabPedidosEnviados from './_tabsGestaoPedidos/TabPedidosEnviados';
 import TabPedidosConcluidos from './_tabsGestaoPedidos/TabPedidosConcluidos';
 import TabRetiradaLoja from './_tabsGestaoPedidos/TabRetiradaLoja';
@@ -23,6 +21,9 @@ export interface DadosLoja {
     CEP?: string;
     cep?: string;
     cidade?: string;
+    sistema?: {
+        isAutomacaoCompletaMelhorEnvio?: boolean;
+    };
 }
 
 export interface GestaoPedidosProps {
@@ -33,138 +34,65 @@ export interface GestaoPedidosProps {
     dadosLoja?: DadosLoja;
 }
 
-// 🎯 Função auxiliar estrita: quando pago e pronto, se for "entrega_local", vai para Entrega Local
-const descobrirAbaDoPedido = (p: Pedido): { idAba: string; nomeAba: string } => {
-    if (!p) return { idAba: 'pedidos', nomeAba: 'Pedidos' };
-
-    const statusGeral = String(p.status || '').trim().toLowerCase();
-    
-    // 1. Concluídos
-    if (statusGeral === 'concluído' || statusGeral === 'concluido') {
-        return { idAba: 'concluidos', nomeAba: 'Concluídos' };
-    }
-
-    // 2. Enviados
-    const isEnviado = 
-        statusGeral === 'enviado' || 
-        statusGeral === 'postado' ||
-        (p as any).enviado === true || 
-        (p as any).statusEnvio === 'enviado' ||
-        Boolean(p.codigoRastreio || (p as any).rastreio || (p as any).logistica?.codigoRastreio);
-
-    if (isEnviado) {
-        return { idAba: 'enviados', nomeAba: 'Enviados' };
-    }
-
-    const statusProdObj = (p as any).StatusProducao || {};
-    const statusProdAtual = String(statusProdObj.dsStatusProdução || p.statusProducao || '').toLowerCase();
-    const isPago = Boolean(statusProdObj.isPago !== undefined ? statusProdObj.isPago : p.pago);
-
-    // 3. Pedidos (Não pagos e não prontos)
-    if (!isPago && statusProdAtual !== 'pronto') {
-        return { idAba: 'pedidos', nomeAba: 'Pedidos' };
-    }
-
-    // 4. Pendente (Pago mas aguardando)
-    if (statusProdAtual === 'pendente' && isPago) {
-        return { idAba: 'pendente', nomeAba: 'Pendente' };
-    }
-
-    // 5. Produção
-    if (statusProdAtual === 'produção' && isPago) {
-        return { idAba: 'producao', nomeAba: 'Produção' };
-    }
-
-    // 6. Pronto (Pago e com status de produção pronto)
-    if (statusProdAtual === 'pronto' && isPago) {
-        const pedidoLogistica = (p as any).logistica || {};
-        const formaEntregaLogistica = String(pedidoLogistica.dsFormaEntrega || '').trim().toLowerCase();
-        const transportadoraIdLogistica = String(pedidoLogistica.dsTransportadoraId || '').trim().toLowerCase();
-        
-        const isRetirada = pedidoLogistica.isRetirada === true || formaEntregaLogistica === 'retirada' || transportadoraIdLogistica === 'retirada' || p.retirada || p.retirarNaLoja;
-        if (isRetirada) return { idAba: 'retirada', nomeAba: 'Retirada' };
-
-        // 🎯 REGRA EXATA SOLICITADA: Pago + Pronto + logistica.dsFormaEntrega === "entrega_local"
-        const isEntregaLocal = 
-            formaEntregaLogistica === 'entrega_local' || 
-            formaEntregaLogistica === 'entregalocal' || 
-            formaEntregaLogistica === 'motoboy' || 
-            transportadoraIdLogistica === 'entrega_local' ||
-            transportadoraIdLogistica === 'entregalocal' ||
-            (p as any).entregaLocal === true;
-
-        if (isEntregaLocal) return { idAba: 'entregalocal', nomeAba: 'Entrega Local' };
-
-        const isDigital = formaEntregaLogistica === 'digital' || p.itens?.some((i: any) => i.precisaFrete === false);
-        if (isDigital) return { idAba: 'digital', nomeAba: 'Digital' };
-
-        if (!p.etiquetaGerada) {
-            const transpFinanceiro = String(p.financeiro?.dsTransportadoraId || "").trim().toLowerCase();
-            const transpCotacao = String((p as any).Cotacao?.dsTransportadoraIdCotado || "").trim().toLowerCase();
-
-            const temFreteGratis = 
-                transpFinanceiro === "frete_gratis_ativado" || 
-                transportadoraIdLogistica === "frete_gratis_ativado" || 
-                transpCotacao === "frete_gratis_ativado" ||
-                pedidoLogistica.isFreteGratis === true ||
-                p.financeiro?.freteGratis === true;
-
-            const itens = Array.isArray(p.itens) ? p.itens : [];
-            const temItemFisico = itens.some((item: any) => item.precisaFrete !== false);
-
-            if (temItemFisico && !temFreteGratis) {
-                const temTransportadoraReal =
-                    (transpFinanceiro !== "" && transpFinanceiro !== "null" && transpFinanceiro !== "undefined" && transpFinanceiro !== "0") ||
-                    (transportadoraIdLogistica !== "" && transportadoraIdLogistica !== "null" && transportadoraIdLogistica !== "undefined" && transportadoraIdLogistica !== "0") ||
-                    (transpCotacao !== "" && transpCotacao !== "null" && transpCotacao !== "undefined" && transpCotacao !== "0");
-
-                if (!temTransportadoraReal) {
-                    return { idAba: 'cotar', nomeAba: 'Cotar Frete' };
-                }
-            }
-        }
-        return { idAba: 'etiquetas', nomeAba: 'Etiquetas' };
-    }
-
-    // Tratamento para pedidos sem status pronto mas que possuem forma explícita de entrega local
-    const pedidoLogistica = (p as any).logistica || {};
-    const formaEntregaLogistica = String(pedidoLogistica.dsFormaEntrega || '').trim().toLowerCase();
-    const transportadoraIdLogistica = String(pedidoLogistica.dsTransportadoraId || '').trim().toLowerCase();
-    
-    const isRetirada = pedidoLogistica.isRetirada === true || formaEntregaLogistica === 'retirada' || transportadoraIdLogistica === 'retirada' || p.retirada || p.retirarNaLoja;
-    if (isRetirada) return { idAba: 'retirada', nomeAba: 'Retirada' };
-
-    const isEntregaLocal = 
-        formaEntregaLogistica === 'entrega_local' || 
-        formaEntregaLogistica === 'entregalocal' || 
-        formaEntregaLogistica === 'motoboy' || 
-        transportadoraIdLogistica === 'entrega_local' ||
-        transportadoraIdLogistica === 'entregalocal' ||
-        (p as any).entregaLocal === true;
-
-    if (isEntregaLocal) return { idAba: 'entregalocal', nomeAba: 'Entrega Local' };
-
-    const isDigital = formaEntregaLogistica === 'digital' || p.itens?.some((i: any) => i.precisaFrete === false);
-    if (isDigital) return { idAba: 'digital', nomeAba: 'Digital' };
-
-    return { idAba: 'pedidos', nomeAba: 'Pedidos' };
-};
-
 export default function GestaoPedidos({
-    pedidos = [], loading = false, lojistaIdApp, db, dadosLoja
+    pedidos = [], loading = false, lojistaIdApp, db, dadosLoja: dadosLojaIniciais
 }: GestaoPedidosProps) {
 
     const [abaAtiva, setAbaAtiva] = useState<string>('pedidos');
-
     const [selecionados, setSelecionados] = useState<string[]>([]);
+
     const [busca, setBusca] = useState("");
-    const [termoBuscaAtivo, setTermoBuscaAtivo] = useState(""); 
+    const [debouncedBusca, setDebouncedBusca] = useState("");
+
+    const [termoBuscaAtivo, setTermoBuscaAtivo] = useState("");
     const [filtroLogistica, setFiltroLogistica] = useState("todos");
     const [ordenacao, setOrdenacao] = useState("recentes");
-    const [processandoMassaStatus, setProcessandoMassaStatus] = useState(false);
+
+    const funcaoCotarRef = useRef<() => void>(() => {});
+    const funcaoConcluirRetiradaRef = useRef<() => void>(() => {});
+    const funcaoConcluirEntregaLocalRef = useRef<() => void>(() => {});
+    const funcaoConcluirDigitalRef = useRef<() => void>(() => {});
+    const funcaoConfirmarRecebimentoRef = useRef<() => void>(() => {});
+
+    useEffect(() => {
+        const handler = setTimeout(() => setDebouncedBusca(busca), 300);
+        return () => clearTimeout(handler);
+    }, [busca]);
+
+    const [dadosLoja, setDadosLoja] = useState<DadosLoja | undefined>(dadosLojaIniciais);
+    useEffect(() => {
+        setDadosLoja(dadosLojaIniciais);
+    }, [dadosLojaIniciais]);
+
+    useEffect(() => {
+        if (!db || !lojistaIdApp) return;
+
+        const docRef = doc(db, 'lojistas', lojistaIdApp);
+        const unsubscribe = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const dadosAtualizados = docSnap.data() as DadosLoja;
+                setDadosLoja(dadosAtualizados);
+            }
+        }, (error) => {
+            console.error("Erro ao escutar atualizações da loja:", error);
+        });
+
+        return () => unsubscribe();
+    }, [db, lojistaIdApp]);
+
+    const isAutomacaoHabilitada = useMemo(() =>
+        Boolean(dadosLoja?.sistema?.isAutomacaoCompletaMelhorEnvio),
+        [dadosLoja?.sistema?.isAutomacaoCompletaMelhorEnvio]
+    );
 
     const [localPedidos, setLocalPedidos] = useState<Pedido[]>(pedidos);
     useEffect(() => { setLocalPedidos(pedidos); }, [pedidos]);
+
+    const { alterarStatusPedido, excluirPedidoComEstorno } = useGerenciarPedido({
+        db,
+        lojistaIdApp,
+        setLocalPedidos
+    });
 
     const [idsConhecidos, setIdsConhecidos] = useState<string[]>(() => {
         if (typeof window === 'undefined') return [];
@@ -172,12 +100,26 @@ export default function GestaoPedidos({
         return salvo ? JSON.parse(salvo) : [];
     });
 
+    // 🛡️ Função centralizada e segura para classificar a aba real de cada pedido
+    const obterAbaDoPedidoEfetiva = useCallback((p: Pedido): string => {
+        if (!p) return 'pedidos';
+        const statusGeral = String(p.status || '').trim().toLowerCase();
+        const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
+        const isConcluidoFlag = (p as any).enviado === true && statusGeral === 'concluído';
+
+        if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusProd === 'concluído' || statusProd === 'concluido' || isConcluidoFlag) {
+            return 'concluidos';
+        }
+
+        return descobrirAbaDoPedido(p).idAba;
+    }, []);
+
     const lidarComCliqueAbaPedidos = () => {
         setAbaAtiva('pedidos');
         setTermoBuscaAtivo("");
-        
+
         if (localPedidos.length > 0) {
-            const idsAtuaisDaAba = localPedidos.filter(p => descobrirAbaDoPedido(p).idAba === 'pedidos').map(p => p.id);
+            const idsAtuaisDaAba = localPedidos.filter(p => obterAbaDoPedidoEfetiva(p) === 'pedidos').map(p => p.id);
             setIdsConhecidos(idsAtuaisDaAba);
             localStorage.setItem(`ids_conhecidos_pedidos_${lojistaIdApp}`, JSON.stringify(idsAtuaisDaAba));
         }
@@ -188,69 +130,27 @@ export default function GestaoPedidos({
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
-                setBusca(""); 
+                setBusca("");
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const [modalProgresso, setModalProgresso] = useState<{
-        aberto: boolean;
-        titulo: string;
-        itens: { id: string; numero: string; status: 'processando' | 'sucesso' | 'erro'; mensagem?: string }[];
-    }>({ aberto: false, titulo: "", itens: [] });
-
     const [pedidoParaDeletar, setPedidoParaDeletar] = useState<Pedido | null>(null);
     const [confirmacaoTexto, setConfirmacaoTexto] = useState("");
 
-    const [textoDigitadoMassa, setTextoDigitadoMassa] = useState("");
-    const [modalExclusaoMassaAberto, setModalExclusaoMassaAberto] = useState(false);
-
     const { cotarFrete } = useFrete(lojistaIdApp, dadosLoja);
-
-    const estornarEstoqueDoPedido = async (pedido: Pedido) => {
-        if (!pedido || !Array.isArray(pedido.itens) || pedido.itens.length === 0) return;
-
-        for (const item of pedido.itens) {
-            const produtoId = item.idProduto || item.id;
-            if (!produtoId) continue;
-
-            const prodRef = doc(db, "lojistas", lojistaIdApp, "produtos", produtoId);
-            const prodSnap = await getDoc(prodRef);
-
-            if (!prodSnap.exists()) continue;
-            const dadosProd = prodSnap.data();
-            const qtdEstornar = Number(item.qty || item.quantidade || 1);
-            const nomeVar = item.variacao || (item as any).nomeVariacao;
-
-            if (nomeVar && nomeVar !== "Produto Único" && Array.isArray(dadosProd.variacoes)) {
-                const novasVariacoes = dadosProd.variacoes.map((v: any) => {
-                    if (v.nome === nomeVar) {
-                        const estoqueAtual = Number(v.estoque || 0);
-                        const novoEstoque = estoqueAtual + qtdEstornar;
-                        return { ...v, estoque: String(novoEstoque) };
-                    }
-                    return v;
-                });
-                await updateDoc(prodRef, { variacoes: novasVariacoes });
-            } else {
-                const estoqueAtual = Number(dadosProd.estoque || 0);
-                const novoEstoque = estoqueAtual + qtdEstornar;
-                await updateDoc(prodRef, { estoque: String(novoEstoque) });
-            }
-        }
-    };
 
     const novosPedidosCount = useMemo(() => {
         const pedidosNaAbaPedidos = localPedidos.filter(p => {
             if (!p) return false;
-            return descobrirAbaDoPedido(p).idAba === 'pedidos';
+            return obterAbaDoPedidoEfetiva(p) === 'pedidos';
         });
 
         const novos = pedidosNaAbaPedidos.filter(p => !idsConhecidos.includes(p.id));
         return novos.length;
-    }, [localPedidos, idsConhecidos]);
+    }, [localPedidos, idsConhecidos, obterAbaDoPedidoEfetiva]);
 
     useEffect(() => {
         if (lojistaIdApp) {
@@ -265,19 +165,19 @@ export default function GestaoPedidos({
 
         localPedidos.forEach(p => {
             if (!p) return;
-            const abaInfo = descobrirAbaDoPedido(p).idAba;
+            const abaInfo = obterAbaDoPedidoEfetiva(p);
             counts[abaInfo] = (counts[abaInfo] || 0) + 1;
         });
 
         return counts;
-    }, [localPedidos]);
+    }, [localPedidos, obterAbaDoPedidoEfetiva]);
 
-    const verificarMatchBusca = (p: Pedido, termo: string): boolean => {
+    const verificarMatchBusca = useCallback((p: Pedido, termo: string): boolean => {
         const numPedidoStr = p.numeroPedido !== undefined && p.numeroPedido !== null ? String(p.numeroPedido) : (p.numero !== undefined && p.numero !== null ? String(p.numero) : "");
         const idStr = String(p.id || "").toLowerCase();
-        
-        const clienteNome = typeof p.cliente === 'object' 
-            ? String(p.cliente.nome || p.cliente.nmNomeCliente || "").toLowerCase() 
+
+        const clienteNome = typeof p.cliente === 'object'
+            ? String(p.cliente.nome || p.cliente.nmNomeCliente || "").toLowerCase()
             : String(p.cliente || "").toLowerCase();
 
         const nomeComecaComTermo = clienteNome.trim().startsWith(termo);
@@ -288,7 +188,7 @@ export default function GestaoPedidos({
         const idBate = idStr.startsWith(termo);
 
         return nomeComecaComTermo || numeroBate || idBate || itemComecaComTermo;
-    };
+    }, []);
 
     const resultadosBuscaMenu = useMemo(() => {
         const termo = busca.toLowerCase().trim();
@@ -298,12 +198,12 @@ export default function GestaoPedidos({
             if (!p) return false;
             return verificarMatchBusca(p, termo);
         }).slice(0, 8);
-    }, [busca, localPedidos]);
+    }, [busca, localPedidos, verificarMatchBusca]);
 
     const selecionarPedidoDoMenu = (pedidoSelecionado: Pedido) => {
-        const abaDestino = descobrirAbaDoPedido(pedidoSelecionado).idAba;
-        const numPedidoStr = pedidoSelecionado.numeroPedido !== undefined && pedidoSelecionado.numeroPedido !== null 
-            ? String(pedidoSelecionado.numeroPedido) 
+        const abaDestino = obterAbaDoPedidoEfetiva(pedidoSelecionado);
+        const numPedidoStr = pedidoSelecionado.numeroPedido !== undefined && pedidoSelecionado.numeroPedido !== null
+            ? String(pedidoSelecionado.numeroPedido)
             : (pedidoSelecionado.numero !== undefined && pedidoSelecionado.numero !== null ? String(pedidoSelecionado.numero) : pedidoSelecionado.id);
 
         if (abaDestino === 'pedidos') {
@@ -311,105 +211,25 @@ export default function GestaoPedidos({
         } else {
             setAbaAtiva(abaDestino);
         }
-        setTermoBuscaAtivo(numPedidoStr); 
-        setBusca(""); 
+        setTermoBuscaAtivo(numPedidoStr);
+        setBusca("");
     };
 
     const pedidosFiltradosGlobais = useMemo(() => {
+        const termoBuscaEfetivo = debouncedBusca.toLowerCase().trim();
         return localPedidos.filter(p => {
             if (!p) return false;
 
-            const statusGeral = String(p.status || '').trim().toLowerCase();
-            const statusProdObj = (p as any).StatusProducao || {};
-            const statusProdAtual = String(statusProdObj.dsStatusProdução || p.statusProducao || '').toLowerCase();
-            const isPago = Boolean(statusProdObj.isPago !== undefined ? statusProdObj.isPago : p.pago);
-
-            if (abaAtiva === 'concluidos') {
-                if (statusGeral !== 'concluído' && statusGeral !== 'concluido') return false;
-            } else {
-                if (statusGeral === 'concluído' || statusGeral === 'concluido') return false;
-            }
-
-            if (abaAtiva === 'pedidos') {
-                if (isPago || statusProdAtual === 'pronto') return false;
-            } else if (abaAtiva === 'pendente') {
-                if (!(statusProdAtual === 'pendente' && isPago)) return false;
-            } else if (abaAtiva === 'producao') {
-                if (!(statusProdAtual === 'produção' && isPago)) return false;
-            } else if (abaAtiva === 'cotar') {
-                if (p.etiquetaGerada || statusGeral === 'concluído' || statusGeral === 'concluido') return false;
-                if (statusProdAtual !== 'pronto') return false;
-                
-                const itens = Array.isArray(p.itens) ? p.itens : [];
-                const temItemFisico = itens.some((item: any) => item.precisaFrete !== false);
-                if (!temItemFisico) return false;
-
-                const transpFinanceiro = String(p.financeiro?.dsTransportadoraId || "").trim();
-                const transpLogistica = String((p as any).logistica?.dsTransportadoraId || "").trim();
-                const transpCotacao = String((p as any).Cotacao?.dsTransportadoraIdCotado || "").trim();
-
-                const temFreteGratis = 
-                    transpFinanceiro === "frete_gratis_ativado" || 
-                    transpLogistica === "frete_gratis_ativado" || 
-                    transpCotacao === "frete_gratis_ativado" ||
-                    (p as any).logistica?.isFreteGratis === true ||
-                    p.financeiro?.freteGratis === true;
-
-                if (!temFreteGratis) {
-                    const temTransportadoraReal =
-                        (transpFinanceiro !== "" && transpFinanceiro !== "null" && transpFinanceiro !== "undefined" && transpFinanceiro !== "0") ||
-                        (transpLogistica !== "" && transpLogistica !== "null" && transpLogistica !== "undefined" && transpLogistica !== "0") ||
-                        (transpCotacao !== "" && transpCotacao !== "null" && transpCotacao !== "undefined" && transpCotacao !== "0");
-                    
-                    if (temTransportadoraReal) return false;
-                }
-            } else if (abaAtiva === 'etiquetas') {
-                if (p.status === 'Concluído' || p.status === 'enviado' || (p as any).enviado === true) return false;
-
-                const transpFinanceiro = String(p.financeiro?.dsTransportadoraId || "").trim();
-                const transpLogistica = String((p as any).logistica?.dsTransportadoraId || "").trim();
-                const transpCotacao = String((p as any).Cotacao?.dsTransportadoraIdCotado || "").trim();
-
-                if (transpFinanceiro === "frete_gratis_ativado" || transpLogistica === "frete_gratis_ativado" || transpCotacao === "frete_gratis_ativado") {
-                    return false;
-                }
-
-                const temTransportadoraId =
-                    (transpFinanceiro !== "" && transpFinanceiro !== "null" && transpFinanceiro !== "undefined" && transpFinanceiro !== "0") ||
-                    (transpLogistica !== "" && transpLogistica !== "null" && transpLogistica !== "undefined" && transpLogistica !== "0") ||
-                    (transpCotacao !== "" && transpCotacao !== "null" && transpCotacao !== "undefined" && transpCotacao !== "0");
-
-                if (!temTransportadoraId) return false;
-            } else if (abaAtiva === 'enviados') {
-                const isEnviado = 
-                    statusGeral === 'enviado' || 
-                    statusGeral === 'postado' ||
-                    (p as any).enviado === true || 
-                    (p as any).statusEnvio === 'enviado' ||
-                    Boolean(p.codigoRastreio || (p as any).rastreio || (p as any).logistica?.codigoRastreio);
-                if (!isEnviado) return false;
-            } else if (abaAtiva === 'retirada') {
-                const pedidoLogistica = (p as any).logistica || {};
-                const forma = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
-                const transp = String(pedidoLogistica.dsTransportadoraId || '').toLowerCase();
-                const isRetirada = pedidoLogistica.isRetirada === true || forma === 'retirada' || transp === 'retirada' || p.retirada || p.retirarNaLoja;
-                if (!isRetirada) return false;
-            } else if (abaAtiva === 'entregalocal') {
-                const pedidoLogistica = (p as any).logistica || {};
-                const forma = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
-                const transp = String(pedidoLogistica.dsTransportadoraId || '').toLowerCase();
-                const isEntregaLocal = forma === 'entrega_local' || forma === 'entregalocal' || forma === 'motoboy' || transp === 'entrega_local' || transp === 'entregalocal' || (p as any).entregaLocal === true;
-                if (!isEntregaLocal) return false;
-            } else if (abaAtiva === 'digital') {
-                const pedidoLogistica = (p as any).logistica || {};
-                const forma = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
-                const isDigital = forma === 'digital' || p.itens?.some((i: any) => i.precisaFrete === false);
-                if (!isDigital) return false;
-            }
+            const abaInfo = obterAbaDoPedidoEfetiva(p);
+            if (abaInfo !== abaAtiva) return false;
 
             if (termoBuscaAtivo) {
                 const termo = termoBuscaAtivo.toLowerCase().trim();
                 if (!verificarMatchBusca(p, termo)) return false;
+            }
+
+            if (termoBuscaEfetivo) {
+                if (!verificarMatchBusca(p, termoBuscaEfetivo)) return false;
             }
 
             const formaEntregaStr = String(p.logistica?.dsFormaEntrega || p.formaEntrega || '').trim().toLowerCase();
@@ -427,141 +247,21 @@ export default function GestaoPedidos({
             const d2 = new Date(b.data || (b.cliente as any)?.data || 0).getTime();
             return ordenacao === "recentes" ? d2 - d1 : d1 - d2;
         });
-    }, [localPedidos, termoBuscaAtivo, filtroLogistica, ordenacao, abaAtiva]);
-
-    const idsVisiveisDaAba = useMemo(() => pedidosFiltradosGlobais.map(p => p.id), [pedidosFiltradosGlobais]);
-
-    const selecionadosNestaAbaCount = useMemo(() => {
-        return (selecionados || []).filter(id => idsVisiveisDaAba.includes(id)).length;
-    }, [selecionados, idsVisiveisDaAba]);
-
-    const alterarStatusMassa = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const valorAcao = e.target.value;
-        if (!valorAcao) return;
-
-        const selecionadosAtuais = selecionados || [];
-        if (selecionadosAtuais.length === 0) {
-            alert("Selecione ao menos um pedido.");
-            e.target.value = "";
-            return;
-        }
-
-        setProcessandoMassaStatus(true);
-        try {
-            if (valorAcao === 'pago' || valorAcao === 'nao_pago') {
-                const novoPago = valorAcao === 'pago';
-                const statusProdAntigo = String((localPedidos.find(p => selecionadosAtuais.includes(p.id)) as any)?.StatusProducao?.dsStatusProdução || 'pendente').toLowerCase();
-                const novoStatusProd = novoPago ? 'pendente' : statusProdAntigo;
-
-                for (const pedidoId of selecionadosAtuais) {
-                    const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
-                    await updateDoc(pedidoRef, {
-                        "StatusProducao.isPago": novoPago,
-                        "StatusProducao.dsStatusProdução": novoStatusProd
-                    });
-                }
-
-                setLocalPedidos(prev => prev.map(p => selecionadosAtuais.includes(p.id) ? { 
-                    ...p, 
-                    StatusProducao: {
-                        ...(p as any).StatusProducao,
-                        isPago: novoPago,
-                        dsStatusProdução: novoStatusProd
-                    }
-                } : p));
-
-                setSelecionados([]);
-                alert(`✅ ${selecionadosAtuais.length} pedido(s) atualizado(s) para ${novoPago ? 'PAGO (Movido para Pendente)' : 'NÃO PAGO'}!`);
-                if (novoPago) setAbaAtiva('pendente');
-            } else {
-                const pedidosInvalidos = localPedidos.filter(p => selecionadosAtuais.includes(p.id) && !Boolean((p as any).StatusProducao?.isPago));
-                if (pedidosInvalidos.length > 0) {
-                    alert("❌ Ação bloqueada: Esta ação não pode ser feita porque o pedido não foi pago.");
-                    e.target.value = "";
-                    return;
-                }
-
-                if (!confirm(`Deseja alterar o status de produção de ${selecionadosAtuais.length} pedido(s) para "${valorAcao.toUpperCase()}"?`)) {
-                    e.target.value = "";
-                    return;
-                }
-
-                let novaFaseDestino = valorAcao.toLowerCase();
-
-                if (valorAcao === 'pronto') {
-                    const primeiroSelecionado = localPedidos.find(p => p.id === selecionadosAtuais[0]);
-                    if (primeiroSelecionado) {
-                        const pedidoLogistica = (primeiroSelecionado as any).logistica || {};
-                        const forma = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
-                        const transp = String(pedidoLogistica.dsTransportadoraId || '').toLowerCase();
-                        
-                        const isRetirada = pedidoLogistica.isRetirada === true || forma === 'retirada' || transp === 'retirada' || primeiroSelecionado.retirada || primeiroSelecionado.retirarNaLoja;
-                        const isEntregaLocal = forma === 'entrega_local' || forma === 'entregalocal' || forma === 'motoboy' || transp === 'entrega_local' || transp === 'entregalocal' || (primeiroSelecionado as any).entregaLocal === true;
-                        const isDigital = forma === 'digital' || primeiroSelecionado.itens?.some((i: any) => i.precisaFrete === false);
-                        
-                        const temTransportadoraReal = transp && transp !== "" && transp !== "null" && transp !== "undefined" && transp !== "0" && transp !== "frete_gratis_ativado" && transp !== "entrega_local" && transp !== "entregalocal";
-
-                        if (isRetirada) {
-                            setAbaAtiva('retirada');
-                            novaFaseDestino = 'retirada';
-                        } else if (isEntregaLocal) {
-                            setAbaAtiva('entregalocal');
-                            novaFaseDestino = 'entregalocal';
-                        } else if (isDigital) {
-                            setAbaAtiva('digital');
-                            novaFaseDestino = 'digital';
-                        } else if (temTransportadoraReal) {
-                            setAbaAtiva('etiquetas');
-                            novaFaseDestino = 'etiquetas';
-                        } else {
-                            setAbaAtiva('cotar');
-                            novaFaseDestino = 'cotar';
-                        }
-                    }
-                }
-
-                for (const pedidoId of selecionadosAtuais) {
-                    const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
-                    await updateDoc(pedidoRef, { 
-                        "StatusProducao.dsStatusProdução": novaFaseDestino 
-                    });
-                }
-
-                setLocalPedidos(prev => prev.map(p => selecionadosAtuais.includes(p.id) ? { 
-                    ...p, 
-                    StatusProducao: {
-                        ...(p as any).StatusProducao,
-                        dsStatusProdução: novaFaseDestino
-                    }
-                } : p));
-
-                setSelecionados([]);
-                alert("✅ Status de produção atualizados com sucesso!");
-            }
-        } catch (e: any) {
-            alert("Erro ao atualizar em massa: " + e.message);
-        } finally {
-            setProcessandoMassaStatus(false);
-            e.target.value = "";
-        }
-    };
+    }, [localPedidos, termoBuscaAtivo, debouncedBusca, filtroLogistica, ordenacao, abaAtiva, verificarMatchBusca, obterAbaDoPedidoEfetiva]);
 
     const executarExclusaoPermanente = async () => {
         if (!db || !lojistaIdApp || !pedidoParaDeletar) return;
         const identificador = pedidoParaDeletar.numeroPedido ? String(pedidoParaDeletar.numeroPedido) : pedidoParaDeletar.id.slice(-4);
         if (confirmacaoTexto !== identificador) return alert("Incorreto.");
         if (!confirm("⚠️ ATENÇÃO: Ação IRREVERSÍVEL. O estoque dos produtos será estornado.")) return;
-        
-        try {
-            await estornarEstoqueDoPedido(pedidoParaDeletar);
 
-            await deleteDoc(doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoParaDeletar.id));
-            setLocalPedidos(prev => prev.filter(p => p.id !== pedidoParaDeletar.id));
+        const resultado = await excluirPedidoComEstorno(pedidoParaDeletar);
+        if (resultado.sucesso) {
             setPedidoParaDeletar(null);
             setConfirmacaoTexto("");
             alert("💥 Pedido excluído e estoque estornado com sucesso!");
-        } catch (error: any) {
-            alert("Erro ao excluir: " + error.message);
+        } else {
+            alert("Erro ao excluir: " + resultado.erro);
         }
     };
 
@@ -582,39 +282,12 @@ export default function GestaoPedidos({
                     .gp-filter-bar input {
                         width: 100% !important;
                     }
-                    .gp-selection-bar {
-                        flex-direction: column !important;
-                        align-items: stretch !important;
-                        height: auto !important;
-                        padding: 12px !important;
-                        gap: 12px !important;
-                    }
-                    .gp-selection-acoes {
-                        width: 100% !important;
-                        display: flex !important;
-                        flex-direction: column !important;
-                        gap: 8px !important;
-                    }
-                    .gp-selection-acoes select {
-                        width: 100% !important;
-                    }
                 }
             `}</style>
 
             <div style={styles.headerFixoContainer}>
-                <div className="gp-header-topo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                <div className="gp-header-topo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '0px' }}>
                     <h2 style={{ fontSize: '20px', color: '#1e293b', margin: 0, fontWeight: 800 }}>📋 Gestão de Pedidos</h2>
-
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <button onClick={async () => {
-                            const res = await fetch("/api/frete/sincronizar", { method: "POST", body: JSON.stringify({ lojistaId: lojistaIdApp }) });
-                            const data = await res.json();
-                            alert(`Sincronização concluída: ${data.atualizados} pedidos atualizados.`);
-                            window.location.reload();
-                        }} style={{ padding: '8px 14px', backgroundColor: "#8b5cf6", color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px', width: '100%' }}>
-                            🔄 Sincronizar Pagamentos
-                        </button>
-                    </div>
                 </div>
 
                 <div className="gp-filter-bar" style={styles.filterBar}>
@@ -629,7 +302,7 @@ export default function GestaoPedidos({
                         <option value="recentes">📅 Mais Recentes</option>
                         <option value="antigos">⏳ Mais Antigos</option>
                     </select>
-                    
+
                     <div ref={searchContainerRef} style={{ display: 'flex', flex: 1, position: 'relative' }}>
                         <div style={{ display: 'flex', width: '100%', gap: '6px' }}>
                             <input
@@ -672,7 +345,7 @@ export default function GestaoPedidos({
                                     {resultadosBuscaMenu.map((p) => {
                                         const numPed = p.numeroPedido !== undefined && p.numeroPedido !== null ? p.numeroPedido : (p.numero || p.id.slice(-6));
                                         const clienteNome = typeof p.cliente === 'object' ? (p.cliente.nome || p.cliente.nmNomeCliente || "Cliente") : (p.cliente || "Cliente");
-                                        const infoAba = descobrirAbaDoPedido(p).nomeAba;
+                                        const infoAba = obterAbaDoPedidoEfetiva(p);
 
                                         return (
                                             <div
@@ -686,7 +359,7 @@ export default function GestaoPedidos({
                                                     #{numPed} - <span style={{ color: '#1e293b' }}>{clienteNome}</span>
                                                 </div>
                                                 <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                                                    Etapa/Aba: <strong style={{ color: '#059669' }}>{infoAba}</strong>
+                                                    Etapa/Aba: <strong style={{ color: '#059669' }}>{infoAba.toUpperCase()}</strong>
                                                 </div>
                                             </div>
                                         );
@@ -697,96 +370,29 @@ export default function GestaoPedidos({
                     </div>
                 </div>
 
-                <div className="gp-selection-bar" style={styles.selectionBar}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input
-                            type="checkbox"
-                            onChange={() => {
-                                const todosEstaoSelecionados = idsVisiveisDaAba.length > 0 && idsVisiveisDaAba.every(id => (selecionados || []).includes(id));
-
-                                if (todosEstaoSelecionados) {
-                                    setSelecionados(prev => (prev || []).filter(id => !idsVisiveisDaAba.includes(id)));
-                                } else {
-                                    setSelecionados(prev => [...new Set([...(prev || []), ...idsVisiveisDaAba])]);
-                                }
-                            }}
-                            checked={
-                                idsVisiveisDaAba.length > 0 &&
-                                idsVisiveisDaAba.every(id => (selecionados || []).includes(id))
-                            }
-                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
-                        />
-                        <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>
-                            {selecionadosNestaAbaCount > 0
-                                ? `${selecionadosNestaAbaCount} selecionado${selecionadosNestaAbaCount > 1 ? 's' : ''}`
-                                : `Nenhum selecionado`}
-                        </span>
-                    </div>
-
-                    <div className="gp-selection-acoes" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        {selecionadosNestaAbaCount > 0 && (
-                            <>
-                                <select
-                                    disabled={processandoMassaStatus}
-                                    onChange={async (e) => {
-                                        const acao = e.target.value;
-                                        if (!acao) return;
-
-                                        if (acao === 'deletar') {
-                                            const selecionadosAtuais = selecionados || [];
-                                            if (selecionadosAtuais.length === 0) {
-                                                alert("Selecione ao menos um pedido.");
-                                                e.target.value = "";
-                                                return;
-                                            }
-                                            setTextoDigitadoMassa("");
-                                            setModalExclusaoMassaAberto(true);
-                                            e.target.value = "";
-                                            return;
-                                        }
-
-                                        alterarStatusMassa(e);
-                                    }}
-                                    defaultValue=""
-                                    style={styles.selectAcaoMassa}
-                                >
-                                    <option value="" disabled>⚙️ Mudar Status / Ações...</option>
-                                    <option value="pago">✅ Marcar como Pago</option>
-                                    <option value="nao_pago">❌ Marcar como Não Pago</option>
-                                    <option value="pendente">⏳ Status: Pendente</option>
-                                    <option value="produção">⚙️ Status: Produção</option>
-                                    <option value="pronto">✅ Status: Pronto</option>
-                                    <option value="deletar" style={{ color: '#ef4444', fontWeight: 'bold' }}>🗑️ Excluir Pedidos</option>
-                                </select>
-                                <button onClick={() => setSelecionados([])} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Limpar</button>
-                            </>
-                        )}
-                    </div>
-                </div>
-
                 <div style={styles.tabContainer}>
                     <button onClick={lidarComCliqueAbaPedidos} style={{ ...styles.tabStyle, ...(abaAtiva === 'pedidos' ? styles.tabAtiva : {}) }}>
-                        PEDIDOS 
+                        PEDIDOS
                         {novosPedidosCount > 0 && <span style={styles.badgeNovo}>{novosPedidosCount}</span>}
                         <span style={styles.badgeTotal}>({contadoresAbas['pedidos'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('pendente'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'pendente' ? styles.tabAtiva : {}) }}>
                         PENDENTE <span style={styles.badgeTotal}>({contadoresAbas['pendente'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('producao'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'producao' ? styles.tabAtiva : {}) }}>
-                        PRODUÇÃO <span style={styles.badgeTotal}>({contadoresAbas['producao'] || 0})</span>
+                        produção <span style={styles.badgeTotal}>({contadoresAbas['producao'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('cotar'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'cotar' ? styles.tabAtiva : {}) }}>
                         COTAR FRETE <span style={styles.badgeTotal}>({contadoresAbas['cotar'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('etiquetas'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'etiquetas' ? styles.tabAtiva : {}) }}>
                         ETIQUETAS <span style={styles.badgeTotal}>({contadoresAbas['etiquetas'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('retirada'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'retirada' ? styles.tabAtiva : {}) }}>
                         RETIRADA <span style={styles.badgeTotal}>({contadoresAbas['retirada'] || 0})</span>
                     </button>
@@ -794,19 +400,39 @@ export default function GestaoPedidos({
                     <button onClick={() => { setAbaAtiva('entregalocal'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'entregalocal' ? styles.tabAtiva : {}) }}>
                         ENTREGA LOCAL <span style={styles.badgeTotal}>({contadoresAbas['entregalocal'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('digital'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'digital' ? styles.tabAtiva : {}) }}>
                         DIGITAL <span style={styles.badgeTotal}>({contadoresAbas['digital'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('enviados'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'enviados' ? styles.tabAtivaEnviados : {}) }}>
                         ENVIADOS <span style={styles.badgeTotal}>({contadoresAbas['enviados'] || 0})</span>
                     </button>
-                    
+
                     <button onClick={() => { setAbaAtiva('concluidos'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'concluidos' ? styles.tabAtivaConcluidos : {}) }}>
                         CONCLUÍDOS <span style={styles.badgeTotal}>({contadoresAbas['concluidos'] || 0})</span>
                     </button>
                 </div>
+
+                <BarraDeAcoes
+                    selecionados={selecionados || []}
+                    idsVisiveisDaAba={pedidosFiltradosGlobais.map(p => p.id)}
+                    localPedidos={localPedidos}
+                    lojistaIdApp={lojistaIdApp}
+                    db={db}
+                    isAutomacaoAtiva={isAutomacaoHabilitada}
+                    abaAtiva={abaAtiva}
+                    setSelecionados={setSelecionados}
+                    alterarStatusPedido={alterarStatusPedido}
+                    setLocalPedidos={setLocalPedidos}
+                    setAbaAtiva={setAbaAtiva}
+                    cotarFrete={cotarFrete}
+                    onCotarSelecionados={() => funcaoCotarRef.current()}
+                    onConcluirRetirada={() => funcaoConcluirRetiradaRef.current()}
+                    onConcluirEntregaLocal={() => funcaoConcluirEntregaLocalRef.current()}
+                    onConcluirDigital={() => funcaoConcluirDigitalRef.current()}
+                    onConfirmarRecebimento={() => funcaoConfirmarRecebimentoRef.current()}
+                />
             </div>
 
             <div style={styles.conteudoDinamicoArea}>
@@ -820,6 +446,7 @@ export default function GestaoPedidos({
                         setLocalPedidos={setLocalPedidos}
                         selecionados={selecionados || []}
                         setSelecionados={setSelecionados}
+                        registrarFuncaoCotar={(fn) => { funcaoCotarRef.current = fn; }}
                     />
                 ) : abaAtiva === 'retirada' ? (
                     <TabRetiradaLoja
@@ -831,6 +458,7 @@ export default function GestaoPedidos({
                         mudarStatusDireto={async (p, s) => { }}
                         selecionados={selecionados || []}
                         setSelecionados={setSelecionados}
+                        registrarFuncaoConcluirRetirada={(fn) => { funcaoConcluirRetiradaRef.current = fn; }}
                     />
                 ) : abaAtiva === 'entregalocal' ? (
                     <TabEntregaLocal
@@ -842,6 +470,7 @@ export default function GestaoPedidos({
                         mudarStatusDireto={async (p, s) => { }}
                         selecionados={selecionados || []}
                         setSelecionados={setSelecionados}
+                        registrarFuncaoConcluirEntregaLocal={(fn) => { funcaoConcluirEntregaLocalRef.current = fn; }}
                     />
                 ) : abaAtiva === 'digital' ? (
                     <TabDigital
@@ -853,6 +482,7 @@ export default function GestaoPedidos({
                         mudarStatusDireto={async (p, s) => { }}
                         selecionados={selecionados || []}
                         setSelecionados={setSelecionados}
+                        registrarFuncaoConcluirDigital={(fn) => { funcaoConcluirDigitalRef.current = fn; }}
                     />
                 ) : abaAtiva === 'etiquetas' ? (
                     <TabEmitirEtiquetas
@@ -860,10 +490,11 @@ export default function GestaoPedidos({
                         lojistaIdApp={lojistaIdApp}
                         db={db}
                         dadosLoja={dadosLoja}
-                        setModalProgresso={setModalProgresso}
+                        setModalProgresso={() => { }}
                         setLocalPedidos={setLocalPedidos}
                         selecionados={selecionados || []}
                         setSelecionados={setSelecionados}
+                        isAutomacaoCompletaMelhorEnvio={isAutomacaoHabilitada}
                     />
                 ) : abaAtiva === 'enviados' ? (
                     <TabPedidosEnviados
@@ -871,13 +502,17 @@ export default function GestaoPedidos({
                         loading={loading}
                         lojistaIdApp={lojistaIdApp}
                         db={db}
-                        mudarStatusDireto={async (p, s) => { }}
+                        mudarStatusDireto={async (p, s) => {
+                            await alterarStatusPedido(p.id, s);
+                        }}
+                        setLocalPedidos={setLocalPedidos}
                         selecionados={selecionados || []}
                         setSelecionados={setSelecionados}
+                        registrarFuncaoConfirmarRecebimento={(fn) => { funcaoConfirmarRecebimentoRef.current = fn; }}
                     />
                 ) : abaAtiva === 'concluidos' ? (
                     <TabPedidosConcluidos
-                        pedidos={pedidosFiltradosGlobais}
+                        pedidos={localPedidos}
                         lojistaIdApp={lojistaIdApp}
                         db={db}
                         dadosLoja={dadosLoja}
@@ -924,77 +559,6 @@ export default function GestaoPedidos({
                     </div>
                 </div>
             )}
-
-            {modalExclusaoMassaAberto && (
-                <div style={localStyles.modalOverlayCentroFix}>
-                    <div style={{ ...localStyles.modalContentCentroCard, borderTop: '5px solid #ef4444' }}>
-                        <h3 style={{ margin: '0 0 10px 0', color: '#ef4444' }}>⚠️ EXCLUSÃO EM MASSA (COM ESTORNO)</h3>
-                        <p style={{ fontSize: '13px', color: '#475569', marginBottom: '15px', lineHeight: '1.4' }}>
-                            {selecionados.length === 1 ? (
-                                <>Para excluir o pedido e estornar o estoque, digite o número <strong>{String(localPedidos.find(p => p.id === selecionados[0])?.numeroPedido || selecionados[0].slice(-4))}</strong> abaixo:</>
-                            ) : (
-                                <>Para confirmar a exclusão de <strong>{selecionados.length} pedidos</strong> e estornar o estoque de todos, digite a palavra <strong>selecionados</strong> abaixo:</>
-                            )}
-                        </p>
-                        <input
-                            type="text"
-                            placeholder={selecionados.length === 1 ? "Digite o número do pedido..." : "Digite selecionados..."}
-                            value={textoDigitadoMassa}
-                            onChange={(e) => setTextoDigitadoMassa(e.target.value)}
-                            style={{ width: '100%', marginBottom: '20px', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
-                        />
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button onClick={() => setModalExclusaoMassaAberto(false)} style={{ padding: '8px 12px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
-                            <button
-                                onClick={async () => {
-                                    const selecionadosAtuais = selecionados || [];
-                                    const textoEsperado = selecionadosAtuais.length === 1
-                                        ? String(localPedidos.find(p => p.id === selecionadosAtuais[0])?.numeroPedido || selecionadosAtuais[0].slice(-4))
-                                        : "selecionados";
-
-                                    if (textoDigitadoMassa !== textoEsperado) {
-                                        alert("Confirmação incorreta.");
-                                        return;
-                                    }
-
-                                    try {
-                                        setProcessandoMassaStatus(true);
-                                        for (const pedidoId of selecionadosAtuais) {
-                                            const pedidoObj = localPedidos.find(p => p.id === pedidoId);
-                                            if (pedidoObj) {
-                                                await estornarEstoqueDoPedido(pedidoObj);
-                                            }
-                                            await deleteDoc(doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId));
-                                        }
-                                        setLocalPedidos(prev => prev.filter(p => !selecionadosAtuais.includes(p.id)));
-                                        setSelecionados([]);
-                                        setModalExclusaoMassaAberto(false);
-                                        setTextoDigitadoMassa("");
-                                        alert("💥 Pedido(s) excluído(s) e estoque estornado com sucesso!");
-                                    } catch (err: any) {
-                                        alert("Erro ao excluir: " + err.message);
-                                    } finally {
-                                        setProcessandoMassaStatus(false);
-                                    }
-                                }}
-                                style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                            >
-                                Confirmar e Excluir
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <ModalProcessamento
-                aberto={modalProgresso.aberto}
-                titulo={modalProgresso.titulo}
-                itens={modalProgresso.itens}
-                onFechar={() => {
-                    setModalProgresso(prev => ({ ...prev, aberto: false }));
-                    window.location.reload();
-                }}
-            />
         </div>
     );
 }
@@ -1010,24 +574,8 @@ const styles: { [key: string]: React.CSSProperties } = {
         zIndex: 10
     },
     filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px', backgroundColor: '#fff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' },
-    selectionBar: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: '10px',
-        backgroundColor: '#fff',
-        padding: '0 16px',
-        height: '52px',
-        borderRadius: '8px',
-        border: '1px solid #e2e8f0',
-        flexWrap: 'wrap',
-        gap: '10px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        boxSizing: 'border-box'
-    },
     selectLogistica: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' },
     selectOrdenacaoStyle: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' },
-    selectAcaoMassa: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#f8fafc', fontWeight: '600', color: '#1e293b' },
     searchInput: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', flex: 1, backgroundColor: '#fff' },
 
     dropdownMenu: {

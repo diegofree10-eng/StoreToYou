@@ -1,3 +1,4 @@
+// components/_tabsGestaoPedidos/TabTodosPedidos.tsx
 'use client';
 import React, { useState, useMemo } from 'react';
 import { Pedido } from '@/types/pedido';
@@ -9,14 +10,16 @@ interface TabProps {
     loading: boolean;
     lojistaIdApp: string;
     db: any;
-    mudarStatusDireto: (p: Pedido, status: string) => void;
-    alternarPago: (p: Pedido) => void;
-    dispararSegurancaDeletar: (p: Pedido) => void;
-    cotarFrete: (p: Pedido) => Promise<any[]>;
+    mudarStatusDireto?: (p: Pedido, status: string) => void;
+    alternarPago?: (p: Pedido) => void;
+    dispararSegurancaDeletar?: (p: Pedido) => void;
+    cotarFrete?: (p: Pedido) => Promise<any[]>;
     setLocalPedidos: React.Dispatch<React.SetStateAction<Pedido[]>>;
     dadosLoja: any;
     selecionados: string[];
     setSelecionados: React.Dispatch<React.SetStateAction<string[]>>;
+    alterarStatusPedido?: (pedidoId: string, novoStatus: string, extras?: Record<string, any>) => Promise<any>;
+    excluirPedidoComEstorno?: (pedido: Pedido) => Promise<any>;
 }
 
 const formatarData = (dataStr: string | undefined): string => {
@@ -43,18 +46,21 @@ const fetchProduto = async (path: string, db: any) => {
     return snap.exists() ? snap.data() : null;
 };
 
-// 🚚 Função padronizada para olhar diretamente para dsFormaEntrega
 const obterSeloItem = (item: any, pedidoLogistica: any) => {
+    const tipoProduto = String(item.dsTipoProduto || item.tipoProduto || '').trim().toLowerCase();
+
+    if (tipoProduto === 'digital_download' || tipoProduto === 'digital_personalizado' || tipoProduto === 'digital') {
+        return { texto: "Digital", cor: "#3b82f6" };
+    }
+
     const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
 
     if (formaItem === 'retirada') return { texto: "Retirada", cor: "#f59e0b" };
-    if (formaItem === 'digital') return { texto: "Digital", cor: "#3b82f6" };
     if (formaItem === 'entrega_local') return { texto: "Entrega Local", cor: "#8b5cf6" };
 
     return { texto: "Envio", cor: "#10b981" };
 };
 
-// 💬 Função para gerar o link do WhatsApp usando especificamente dsTelefoneCliente
 const gerarLinkWhatsApp = (pedido: Pedido) => {
     const clienteObj = typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : ({} as any);
     const telefoneBruto = clienteObj.dsTelefoneCliente || clienteObj.telefone || clienteObj.whatsapp || clienteObj.celular || (pedido as any).telefone || "";
@@ -72,7 +78,7 @@ const gerarLinkWhatsApp = (pedido: Pedido) => {
     return `https://wa.me/${telefoneFinal}?text=${mensagem}`;
 };
 
-const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db, pedido }: any) => {
+const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db, pedido, isFirstItem }: any) => {
     const idProd = item.idProduto || item.id;
     const { data: produtoData } = useSWR(
         idProd && lojistaId ? `lojistas/${lojistaId}/produtos/${idProd}` : null,
@@ -119,7 +125,7 @@ const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db, pedido 
                 </div>
             </div>
 
-            {linkWhats && (
+            {isFirstItem && linkWhats && (
                 <a
                     href={linkWhats}
                     target="_blank"
@@ -128,7 +134,9 @@ const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db, pedido 
                     title="Chamar cliente no WhatsApp"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#25D366', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', textDecoration: 'none', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.1)', marginLeft: '12px' }}
                 >
-                    💬
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                    </svg>
                 </a>
             )}
         </div>
@@ -139,19 +147,16 @@ export default function TabTodosPedidos({
     pedidos, loading, lojistaIdApp, db, alternarPago, dispararSegurancaDeletar, cotarFrete, setLocalPedidos, selecionados, setSelecionados
 }: TabProps) {
     const [paginaAtual, setPaginaAtual] = useState(1);
-    const itensPorPagina = 30;
+    const [itensPorPagina, setItensPorPagina] = useState(20);
 
-    const [pedidoSelecionadoParaFrete, setPedidoSelecionadoParaFrete] = useState<Pedido | null>(null);
-    const [opcoesFreteCotadas, setOpcoesFreteCotadas] = useState<any[]>([]);
-    const [loadingFreteModal, setLoadingFreteModal] = useState(false);
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
     const pedidosPaginados = useMemo(() => {
         const inicio = (paginaAtual - 1) * itensPorPagina;
         return pedidos.slice(inicio, inicio + itensPorPagina);
-    }, [pedidos, paginaAtual]);
+    }, [pedidos, paginaAtual, itensPorPagina]);
 
-    const totalPaginas = Math.ceil(pedidos.length / itensPorPagina);
+    const totalPaginas = Math.ceil(pedidos.length / itensPorPagina) || 1;
 
     const toggleExpandir = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
@@ -256,11 +261,24 @@ export default function TabTodosPedidos({
                     }
                 }
             `}</style>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
+            
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}> 
                 <div>
                     <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>📦 Todos os Pedidos</h3>
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Visualização completa de todos os pedidos cadastrados na loja.</p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: 'bold', marginLeft: 'auto' }}>
+                    <span>Mostrar:</span>
+                    <select
+                        value={itensPorPagina}
+                        onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
+                        style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                        <option value={20}>20</option>
+                        <option value={40}>40</option>
+                        <option value={60}>60</option>
+                    </select>
                 </div>
             </div>
 
@@ -280,7 +298,13 @@ export default function TabTodosPedidos({
 
                             const formaEntrega = String(pedidoLogistica.dsFormaEntrega || (pedido as any).dsFormaEntrega || '').toLowerCase();
                             const isRetirada = formaEntrega === 'retirada' || pedidoLogistica.isRetirada === true || pedido.retirada || pedido.retirarNaLoja;
-                            const isEtqGerada = Boolean(etiquetaData.isEtiquetaGerada || pedido.etiquetaGerada);
+                            
+                            // 🛠️ Verificações para identificar se o pedido é Digital ou Entrega Local
+                            const isEntregaLocal = formaEntrega === 'entrega_local' || String(pedidoLogistica.transportadoraId || '').toLowerCase() === 'entrega_local' || pedido.entregaLocal;
+                            const isDigital = pedido.itens?.some((i: any) => {
+                                const tipoProd = String(i.dsTipoProduto || i.tipoProduto || '').toLowerCase();
+                                return tipoProd.includes('digital') || i.precisaFrete === false;
+                            });
 
                             const statusEtiquetaStr = String(etiquetaData.statusEtiqueta || pedido.statusEtiqueta || '').toLowerCase();
                             const isPendenteSaldo = statusEtiquetaStr.includes('saldo') || statusEtiquetaStr.includes('pendente') || statusEtiquetaStr.includes('erro');
@@ -297,9 +321,10 @@ export default function TabTodosPedidos({
                             const corBordaCard = isPagoReal ? '#2ecc71' : '#e74c3c';
 
                             const fin = pedido.financeiro || {};
+                            const log = (pedido as any).logistica || {};
 
                             const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? fin.valorSubtotal ?? (pedido as any).subtotal ?? 0);
-                            const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? cotacao.vlFreteCotado ?? (pedido as any).valorFrete ?? 0);
+                            const freteVal = Number(log.vlFrete ?? fin.vlFrete ?? 0);
                             const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? fin.vlDescontos ?? 0);
 
                             const totalCalculadoManual = subtotalVal + freteVal - descontoVal;
@@ -369,31 +394,42 @@ export default function TabTodosPedidos({
 
                                     <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                         {pedido.itens?.map((item, idx) => (
-                                            <ItemResumido key={idx} item={item} lojistaId={lojistaIdApp} pedidoLogistica={pedidoLogistica} db={db} pedido={pedido} />
+                                            <ItemResumido
+                                                key={idx}
+                                                item={item}
+                                                lojistaId={lojistaIdApp}
+                                                pedidoLogistica={pedidoLogistica}
+                                                db={db}
+                                                pedido={pedido}
+                                                isFirstItem={idx === 0}
+                                            />
                                         ))}
                                     </div>
 
                                     {expandido && (
                                         <div style={localStyles.conteudoExpandido}>
                                             <div className="grid-expandido" style={localStyles.gridExpandido}>
-                                                
-                                                {/* BLOCO 1: PERSONALIZAÇÃO */}
+
                                                 <div style={localStyles.caixaPersonalizacao}>
-                                                    <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '4px', fontSize: '12px' }}>
+                                                    <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '12px' }}>
                                                         ✨ Personalização:
                                                     </div>
                                                     {temPersonalizacao ? (
                                                         pedido.itens.map((item: any, idx: number) => {
                                                             const resp = item.respostasFormatadas || item.personalizacao;
                                                             if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
+
+                                                            const nomeItem = item.nome || item.title || `Item ${idx + 1}`;
+
                                                             return (
-                                                                <div key={idx} style={{ fontSize: '11px', color: '#78350f', lineHeight: '1.3', marginBottom: '4px' }}>
+                                                                <div key={idx} style={{ fontSize: '11px', color: '#78350f', lineHeight: '1.4', marginBottom: '8px', borderBottom: idx < pedido.itens.length - 1 ? '1px dashed #fcd34d' : 'none', paddingBottom: '4px' }}>
+                                                                    <div style={{ fontWeight: 'bold', color: '#92400e', marginBottom: '2px' }}>• {nomeItem}:</div>
                                                                     {typeof resp === 'object' ? (
                                                                         Object.entries(resp).map(([k, v]) => (
-                                                                            <div key={k}>{k}: <strong>{String(v)}</strong></div>
+                                                                            <div key={k} style={{ paddingLeft: '8px' }}>{k}: <strong>{String(v)}</strong></div>
                                                                         ))
                                                                     ) : (
-                                                                        <div>{String(resp)}</div>
+                                                                        <div style={{ paddingLeft: '8px' }}>{String(resp)}</div>
                                                                     )}
                                                                 </div>
                                                             );
@@ -403,9 +439,8 @@ export default function TabTodosPedidos({
                                                     )}
                                                 </div>
 
-                                                {/* BLOCO 2: ENDEREÇO (PADRÃO PARA QUALQUER LOGÍSTICA) */}
                                                 <div style={localStyles.caixaBlocoPadrao}>
-                                                    <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>📍 Endereço</div>
+                                                    <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
                                                     <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
                                                         <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
                                                         <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
@@ -415,14 +450,13 @@ export default function TabTodosPedidos({
                                                     </div>
                                                 </div>
 
-                                                {/* BLOCO 3: LOGÍSTICA */}
                                                 <div style={localStyles.caixaBlocoPadrao}>
                                                     <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
                                                     <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
                                                         <div><strong>Forma de Entrega:</strong> {formaEntrega || '-'}</div>
                                                         <div><strong>Método de Pagamento:</strong> {fin.dsMetodoPagamento || fin.metodo || 'PIX'}</div>
                                                         <div><strong>Transportadora ID:</strong> {fin.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || '-'}</div>
-                                                        <div><strong>Serviço:</strong> {etiquetaData.servicoVinculado || pedido.servicoVinculado || 'Retirar na Loja'}</div>
+                                                        <div><strong>Serviço:</strong> {pedido?.logistica?.dsServico || etiquetaData.servicoVinculado || pedido.servicoVinculado || 'Retirar na Loja'}</div>
                                                     </div>
                                                     <div style={{ marginTop: '6px' }}>
                                                         {pedido.etiquetaGerada || (pedido.financeiro?.dsTransportadoraId && pedido.financeiro?.dsTransportadoraId !== "frete_gratis_ativado") ? (
@@ -433,27 +467,32 @@ export default function TabTodosPedidos({
                                                     </div>
                                                 </div>
 
-                                                {/* BLOCO 4: ETIQUETA */}
+                                                {/* BLOCO DA ETIQUETA COM VERIFICAÇÃO PARA DIGITAL OU ENTREGA LOCAL */}
                                                 <div style={localStyles.caixaBlocoPadrao}>
                                                     <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🏷️ Etiqueta</div>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
-                                                        <div style={{ fontSize: '10px', color: '#047857', lineHeight: '1.3' }}>
-                                                            <div><b>Id:</b> {etiquetaData.IdEtiqueta || pedido.idEtiqueta || '-'}</div>
-                                                            <div><b>Cód Envio:</b> {etiquetaData.codigoEnvio || '-'}</div>
-                                                            <div><b>Status Pagto:</b> <span style={{ color: isPendenteSaldo ? '#b91c1c' : '#047857', fontWeight: 'bold' }}>{etiquetaData.statusEtiqueta || pedido.statusEtiqueta || 'pendente'}</span></div>
-                                                            <div><b>Rastreio:</b> {etiquetaData.dsNumRastreio || pedido.dsNumRastreio || '-'}</div>
-                                                            <div><b>Serviço:</b> {etiquetaData.servicoVinculado || pedido.servicoVinculado || '1'}</div>
-                                                            <div><b>Valor Cobrado:</b> R$ {Number(etiquetaData.valorCobrado ?? 0).toFixed(2).replace('.', ',')}</div>
-                                                            {etiquetaData.urlEtiqueta || pedido.urlEtiqueta ? (
-                                                                <a href={etiquetaData.urlEtiqueta || pedido.urlEtiqueta} target="_blank" rel="noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px' }}>
-                                                                    Ver Etiqueta PDF
-                                                                </a>
-                                                            ) : null}
+                                                    {isDigital || isEntregaLocal || isRetirada ? (
+                                                        <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic', padding: '4px 0' }}>
+                                                            {isDigital ? "Pedido digital, não possui etiqueta de envio." : isEntregaLocal ? "Entrega local, não possui etiqueta de envio." : "Retirada na loja, não possui etiqueta de envio."}
                                                         </div>
-                                                    </div>
+                                                    ) : (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+                                                            <div style={{ fontSize: '10px', color: '#047857', lineHeight: '1.3' }}>
+                                                                <div><b>Id:</b> {etiquetaData.IdEtiqueta || pedido.idEtiqueta || '-'}</div>
+                                                                <div><b>Cód Envio:</b> {etiquetaData.codigoEnvio || '-'}</div>
+                                                                <div><b>Status Pagto:</b> <span style={{ color: isPendenteSaldo ? '#b91c1c' : '#047857', fontWeight: 'bold' }}>{etiquetaData.statusEtiqueta || pedido.statusEtiqueta || 'pendente'}</span></div>
+                                                                <div><b>Rastreio:</b> {etiquetaData.dsNumRastreio || pedido.dsNumRastreio || '-'}</div>
+                                                                <div><b>Serviço:</b> {etiquetaData.servicoVinculado || pedido.servicoVinculado || '1'}</div>
+                                                                <div><b>Valor Cobrado:</b> R$ {Number(etiquetaData.valorCobrado ?? 0).toFixed(2).replace('.', ',')}</div>
+                                                                {etiquetaData.urlEtiqueta || pedido.urlEtiqueta ? (
+                                                                    <a href={etiquetaData.urlEtiqueta || pedido.urlEtiqueta} target="_blank" rel="noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px' }}>
+                                                                        Ver Etiqueta PDF
+                                                                    </a>
+                                                                ) : null}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
 
-                                                {/* BLOCO 5: PAGAMENTO */}
                                                 <div style={localStyles.caixaBlocoPadrao}>
                                                     <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                     <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
@@ -502,6 +541,5 @@ const localStyles: { [key: string]: React.CSSProperties } = {
     gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' },
     caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '10px' },
     caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' },
-    btnRemoverTransparente: { padding: '8px', backgroundColor: 'transparent', border: '1px solid #ef4444', borderRadius: '6px', color: '#ef4444', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', width: '100%' },
     btnReset: { background: 'none', border: 'none', color: '#059669', textDecoration: 'underline', marginTop: '2px', cursor: 'pointer' }
 };

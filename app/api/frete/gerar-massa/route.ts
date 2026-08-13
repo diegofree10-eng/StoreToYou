@@ -22,19 +22,40 @@ export async function POST(request: Request) {
     }
 
     const dadosLoja = lojistaSnap.data() || {};
-    const token =
-      dadosLoja?.sistema?.dsTokenMelhorEnvio || dadosLoja?.tokenMelhorEnvio;
+
+    // Verifica se a flag do Sandbox está ativa nas configurações do lojista
+    const isSandbox =
+      dadosLoja?.melhorEnvioSandbox === true ||
+      dadosLoja?.dadosLoja?.melhorEnvioSandbox === true ||
+      dadosLoja?.sistema?.melhorEnvioSandbox === true;
+
+    const baseUrl = isSandbox
+      ? "https://sandbox.melhorenvio.com.br"
+      : "https://melhorenvio.com.br";
+
+    // Seleciona o token estritamente correspondente ao ambiente ativado
+    let token = "";
+    if (isSandbox) {
+      token =
+        dadosLoja?.sistema?.dsTokenMelhorEnvioSandbox ||
+        dadosLoja?.tokenMelhorEnvioSandbox ||
+        "";
+    } else {
+      token =
+        dadosLoja?.sistema?.dsTokenMelhorEnvio ||
+        dadosLoja?.tokenMelhorEnvio ||
+        dadosLoja?.dadosLoja?.dsTokenMelhorEnvio ||
+        "";
+    }
 
     if (!token) {
       return NextResponse.json(
-        { error: "Token do Melhor Envio não configurado para este lojista." },
+        {
+          error: `Token do Melhor Envio (${isSandbox ? "Sandbox" : "Produção"}) não configurado para este lojista.`,
+        },
         { status: 400 },
       );
     }
-
-    const baseUrl = dadosLoja.melhorEnvioSandbox
-      ? "https://sandbox.melhorenvio.com.br"
-      : "https://melhorenvio.com.br";
 
     const results: any[] = [];
     const errors: any[] = [];
@@ -72,10 +93,10 @@ export async function POST(request: Request) {
 
       const serviceId = Number(
         p.Cotacao?.dsTransportadoraIdCotado ||
-        p.logistica?.dsTransportadoraId ||
-        p.financeiro?.dsTransportadoraId ||
-        p.freteSelecionado?.id ||
-        0,
+          p.logistica?.dsTransportadoraId ||
+          p.financeiro?.dsTransportadoraId ||
+          p.freteSelecionado?.id ||
+          0,
       );
 
       const pedidoRef = db
@@ -210,20 +231,17 @@ export async function POST(request: Request) {
 
         const cartItemId = cartData.id || cartData.data?.id;
         if (!cartItemId) {
-          throw new Error(
-            "Carrinho do Melhor Envio não retornou o ID do item.",
-          );
+          throw new Error("Carrinho do Melhor Envio não retornou o ID do item.");
         }
 
-        // CAPTURA CORRETA: Pega o protocolo oficial e o ID real retornados pela API do Melhor Envio
         const protocoloOficial =
           cartData.protocol || cartData.data?.protocol || `ORD-${cartItemId}`;
         const etiquetaRealId = cartData.id || cartData.data?.id || cartItemId;
 
         const idEtiquetaVal = String(etiquetaRealId);
-        const codigoEnvioVal = String(protocoloOficial); // <--- Vai salvar exatamente "ORD-202607140051971" igual ao painel
+        const codigoEnvioVal = String(protocoloOficial);
 
-        // 2. Tenta a geração/emissão da etiqueta (`/shipment/generate`)
+        // 2. Geração da etiqueta (`/shipment/generate`)
         const generateRes = await fetch(
           `${baseUrl}/api/v2/me/shipment/generate`,
           {
@@ -237,18 +255,12 @@ export async function POST(request: Request) {
           },
         );
 
-        const generateData = await generateRes.json().catch(() => ({}));
-        if (!generateRes.ok) {
-          throw new Error(
-            generateData.message ||
-              JSON.stringify(generateData.errors) ||
-              "Erro ao gerar etiqueta",
-          );
-        }
+        await generateRes.json().catch(() => ({}));
 
         // 3. Tenta o Checkout (`/shipment/checkout`)
         let checkoutSucesso = false;
         let checkoutErrorMsg = "";
+        let urlEtiquetaFinal = null;
 
         const checkoutRes = await fetch(
           `${baseUrl}/api/v2/me/shipment/checkout`,
@@ -272,45 +284,73 @@ export async function POST(request: Request) {
             "Erro ao realizar checkout";
         } else {
           checkoutSucesso = true;
+
+          // 4. CHAMA A API DE IMPRESSÃO PARA OBTER O LINK DO PDF DA ETIQUETA
+          try {
+            const printRes = await fetch(
+              `${baseUrl}/api/v2/me/shipment/print`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${token.trim()}`,
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({ orders: [cartItemId] }),
+              },
+            );
+
+            const printData = await printRes.json().catch(() => ({}));
+
+            urlEtiquetaFinal =
+              printData?.url ||
+              printData?.data?.url ||
+              printData?.print ||
+              null;
+          } catch (printErr) {
+            console.error(`❌ [ERRO AO BUSCAR URL DE IMPRESSÃO]:`, printErr);
+          }
         }
 
-        // Aguarda 1s
-        await new Promise((r) => setTimeout(r, 1000));
-
-        // Dados finais que serão salvos no Firebase
-        // O Melhor Envio retorna o preço exato do frete na resposta do carrinho (cartData.price) ou do checkout
         const precoRealFrete = Number(
-          cartData?.price || cartData?.data?.price || checkoutData?.price || 0
+          cartData?.price || cartData?.data?.price || checkoutData?.price || 0,
         );
 
-        // Se por acaso o preço vier 0, usa o valor que estava salvo na cotação para nunca puxar o total do produto
-        const valorFinalCalculado = precoRealFrete > 0 
-          ? precoRealFrete 
-          : Number(p.Cotacao?.vlFreteCotado || p.financeiro?.vlFrete || 0);
+        const valorFinalCalculado =
+          precoRealFrete > 0
+            ? precoRealFrete
+            : Number(p.Cotacao?.vlFreteCotado || p.financeiro?.vlFrete || 0);
 
-        // Dados finais que serão salvos no Firebase
+        // ✨ DEFINIÇÃO UNIFICADA E RIGOROSA DO STATUS: pago | erro | pendente
+        let statusEtiquetaFinal = "pendente";
+        if (checkoutSucesso) {
+          statusEtiquetaFinal = "pago";
+        } else if (
+          typeof checkoutErrorMsg === "string" &&
+          (checkoutErrorMsg.toLowerCase().includes("saldo") || checkoutErrorMsg.toLowerCase().includes("insuficiente"))
+        ) {
+          statusEtiquetaFinal = "erro"; // Erro explícito de saldo para o lojista tratar
+        } else {
+          statusEtiquetaFinal = "erro";
+        }
+
         const dadosEtiquetaParaSalvar = {
           pedido: String(p.id),
-          IdEtiqueta: String(cartItemId),
-          codigoEnvio: String(protocoloOficial),
+          IdEtiqueta: idEtiquetaVal,
+          codigoEnvio: codigoEnvioVal,
           dsNumRastreio: checkoutData?.tracking || null,
-          urlEtiqueta: checkoutData?.url || null,
-          statusEtiqueta: checkoutSucesso ? "gerada" : "pendente_saldo",
+          urlEtiqueta: urlEtiquetaFinal,
+          statusEtiqueta: statusEtiquetaFinal, // <--- Aqui fica unificado: "pago", "pendente" ou "erro"
           servicoVinculado: String(serviceId),
-          valorCobrado: valorFinalCalculado, // <-- Agora puxa o valor real exato da etiqueta (ex: 32.60)
+          valorCobrado: valorFinalCalculado,
           dataGeracaoEtiqueta: new Date().toISOString(),
+          isEtiquetaGerada: checkoutSucesso,
+          erroPagamento: checkoutSucesso ? null : checkoutErrorMsg,
         };
 
-        // EXIBE NO TERMINAL OS DADOS EXATOS QUE ESTÃO INDO PARA O FIREBASE
-        console.log(
-          `📦 [DADOS DA ETIQUETA - PEDIDO ${p.id}]:`,
-          JSON.stringify(dadosEtiquetaParaSalvar, null, 2),
-        );
-
-        // Salva no Firebase
+        // Atualiza estritamente dentro do mapa Etiqueta no Firestore
         await pedidoRef.update({
-          etiquetaGerada: true,
-          statusEtiqueta: checkoutSucesso ? "gerada" : "pendente_saldo",
+          statusEtiqueta: statusEtiquetaFinal,
           dsNumRastreio: checkoutData?.tracking || "",
           Etiqueta: dadosEtiquetaParaSalvar,
         });
@@ -321,17 +361,18 @@ export async function POST(request: Request) {
           results.push({ pedido: p.id, status: "sucesso" });
         }
       } catch (err: any) {
+        console.error(`❌ [ERRO NO LOOP DO PEDIDO ${p.id}]:`, err.message);
+        
+        // Em caso de exceção de código, salva explicitamente como erro na Etiqueta
+        await pedidoRef.update({
+          "Etiqueta.statusEtiqueta": "erro",
+          "Etiqueta.erroPagamento": err.message,
+        }).catch(() => {});
+
         errors.push({ pedido: p.id, message: err.message });
       }
 
       await new Promise((r) => setTimeout(r, 800));
-    }
-
-    if (errors.length > 0) {
-      console.error(
-        "🚨 DETALHES DOS ERROS NO MELHOR ENVIO:",
-        JSON.stringify(errors, null, 2),
-      );
     }
 
     return NextResponse.json({ success: true, results, errors });

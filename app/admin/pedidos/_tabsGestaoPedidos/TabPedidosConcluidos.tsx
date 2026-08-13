@@ -38,30 +38,36 @@ const fetchProduto = async (path: string, db: any) => {
     return snap.exists() ? snap.data() : null;
 };
 
+// 🛠️ Padrão idêntico ao de TabTodosPedidos para os selos de entrega
 const obterSeloItem = (item: any, pedidoLogistica: any) => {
-    const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
-    const isRetirada = pedidoLogistica?.isRetirada === true || formaItem === 'retirada';
-    const isDigital = item.precisaFrete === false || formaItem === 'digital';
+    const tipoProduto = String(item.dsTipoProduto || item.tipoProduto || '').trim().toLowerCase();
 
-    if (isRetirada) return { texto: "Retirada", cor: "#f59e0b" };
-    if (isDigital) return { texto: "Digital", cor: "#3b82f6" };
+    if (tipoProduto === 'digital_download' || tipoProduto === 'digital_personalizado' || tipoProduto === 'digital') {
+        return { texto: "Digital", cor: "#3b82f6" };
+    }
+
+    const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
+
+    if (formaItem === 'retirada') return { texto: "Retirada", cor: "#f59e0b" };
+    if (formaItem === 'entrega_local') return { texto: "Entrega Local", cor: "#8b5cf6" };
+
     return { texto: "Envio", cor: "#10b981" };
 };
 
 export default function TabPedidosConcluidos({
-    pedidos, lojistaIdApp, db, selecionados = [], setSelecionados
+    pedidos, lojistaIdApp, db, setLocalPedidos, selecionados = [], setSelecionados
 }: TabPedidosConcluidosProps) {
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
-    // Paginação
     const [paginaAtual, setPaginaAtual] = useState(1);
-    const itensPorPagina = 30;
+    const [itensPorPagina, setItensPorPagina] = useState(20);
 
     const pedidosConcluidos = useMemo(() => {
         return pedidos.filter(p => {
             if (!p) return false;
             const statusGeral = String(p.status || '').trim().toLowerCase();
-            const isConcluido = statusGeral === 'concluído' || statusGeral === 'concluido' || statusGeral === 'enviado' || (p as any).enviado === true;
+            const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
+            const isConcluido = statusGeral === 'concluído' || statusGeral === 'concluido' || statusGeral === 'enviado' || statusProd === 'concluído' || statusProd === 'concluido' || (p as any).enviado === true;
             return isConcluido;
         });
     }, [pedidos]);
@@ -69,15 +75,9 @@ export default function TabPedidosConcluidos({
     const pedidosPaginados = useMemo(() => {
         const inicio = (paginaAtual - 1) * itensPorPagina;
         return pedidosConcluidos.slice(inicio, inicio + itensPorPagina);
-    }, [pedidosConcluidos, paginaAtual]);
+    }, [pedidosConcluidos, paginaAtual, itensPorPagina]);
 
-    const totalPaginas = Math.ceil(pedidosConcluidos.length / itensPorPagina);
-
-    // Contagem restrita estritamente aos pedidos visíveis nesta aba
-    const idsVisiveisNestaAba = useMemo(() => pedidosConcluidos.map(p => p.id), [pedidosConcluidos]);
-    const selecionadosNestaAbaCount = useMemo(() => {
-        return (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id)).length;
-    }, [selecionados, idsVisiveisNestaAba]);
+    const totalPaginas = Math.ceil(pedidosConcluidos.length / itensPorPagina) || 1;
 
     const toggleExpandir = (id: string) => {
         setPedidosExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
@@ -92,7 +92,6 @@ export default function TabPedidosConcluidos({
     return (
         <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
             <style jsx>{`
-                /* Estilos aplicados EXCLUSIVAMENTE em telas mobile (max-width: 768px) */
                 @media (max-width: 768px) {
                     .card-header-linha {
                         flex-direction: column !important;
@@ -141,8 +140,6 @@ export default function TabPedidosConcluidos({
                         gap: 10px !important;
                     }
                 }
-
-                /* Estilos aplicados EXCLUSIVAMENTE em telas PC (min-width: 769px) */
                 @media (min-width: 769px) {
                     .mobile-bloco-organizado {
                         display: none !important;
@@ -162,14 +159,19 @@ export default function TabPedidosConcluidos({
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Histórico de todos os pedidos finalizados, entregues ou concluídos da loja.</p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', minHeight: '40px' }}>
-                    {selecionadosNestaAbaCount > 0 ? (
-                        <div style={{ display: 'flex', gap: '10px', backgroundColor: '#ecfdf5', padding: '8px 14px', borderRadius: '8px', border: '1px solid #a7f3d0', alignItems: 'center' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#047857' }}>{selecionadosNestaAbaCount} selecionados</span>
-                        </div>
-                    ) : (
-                        <div style={{ visibility: 'hidden', height: '40px' }} />
-                    )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: 'bold' }}>
+                        <span>Mostrar:</span>
+                        <select
+                            value={itensPorPagina}
+                            onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
+                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            <option value={20}>20</option>
+                            <option value={40}>40</option>
+                            <option value={60}>60</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -187,7 +189,12 @@ export default function TabPedidosConcluidos({
                         const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
+                        const cotacao = (pedido as any).Cotacao || {};
+                        const etiquetaData = (pedido as any).Etiqueta || {};
                         const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
+                        const statusProdAtual = (pedido as any).StatusProducao?.dsStatusProdução || pedido.status || 'Concluído';
+
+                        const formaEntrega = pedidoLogistica.formaEntrega || pedidoLogistica.dsFormaEntrega || pedido.formaEntrega || '-';
 
                         const temPersonalizacao = pedido.itens?.some(i => {
                             const resp = i.respostasFormatadas || i.personalizacao;
@@ -200,33 +207,32 @@ export default function TabPedidosConcluidos({
                         const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).statusPagamento === 'pago';
 
                         const fin = pedido.financeiro || {};
+                        const log = (pedido as any).logistica || {};
+
                         const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? fin.valorTotal ?? 0);
-                        const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
+                        const freteVal = Number(log.vlFrete ?? fin.vlFrete ?? 0);
                         const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
                         const totalVal = Number(fin.vlTotal ?? fin.total ?? fin.valorTotal ?? (subtotalVal + freteVal - descontoVal));
+
                         const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
                         const formaPgtoStr = fin.metodo ?? fin.formaPagamento ?? fin.dsFormaPagamento ?? "-";
                         const statusPgtoStr = fin.status ?? fin.statusPagamento ?? (isPagoReal ? "Pago" : "Pendente");
 
                         return (
-                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: '1.5px solid #2008fd' }}>
+                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: '1.5px solid #059669' }}>
                                 <div
                                     onClick={() => toggleExpandir(pedido.id)}
                                     className="card-header-linha"
                                     style={localStyles.cardHeaderLinha}
                                 >
-                                    {/* ESTRUTURA ORIGINAL PARA PC */}
                                     <div className="pc-bloco-linha-unica" onClick={(e) => e.stopPropagation()}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={(selecionados || []).includes(pedido.id)}
-                                                onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
-                                                style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
-                                            />
                                             <span style={{ fontWeight: '800', color: '#059669', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
                                             <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
                                             <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '235px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+                                            <span style={{ fontSize: '11px', fontWeight: 'bold', backgroundColor: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: '4px' }}>
+                                                {statusProdAtual}
+                                            </span>
                                         </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
@@ -237,26 +243,22 @@ export default function TabPedidosConcluidos({
                                         </div>
                                     </div>
 
-                                    {/* ESTRUTURA ORGANIZADA EXCLUSIVA PARA MOBILE */}
                                     <div className="mobile-bloco-organizado" style={{ display: 'none' }}>
                                         <div className="mobile-linha-topo" onClick={(e) => e.stopPropagation()}>
-                                            <input
-                                                type="checkbox"
-                                                checked={(selecionados || []).includes(pedido.id)}
-                                                onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
-                                                style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
-                                            />
                                             <span style={{ fontWeight: '800', color: '#059669', fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
                                             <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            <span style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: '4px' }}>
+                                                {statusProdAtual}
+                                            </span>
                                         </div>
 
                                         <div className="mobile-linha-baixo">
-                                            <span 
-                                                className="mobile-id-badge" 
+                                            <span
+                                                className="mobile-id-badge"
                                                 onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
                                                 title="Toque para copiar o ID completo"
                                             >
-                                                📋ID: {idEncurtadoMobile}
+                                                📋 ID: {idEncurtadoMobile}
                                             </span>
 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
@@ -304,25 +306,23 @@ export default function TabPedidosConcluidos({
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>📍 Destino / Contato</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                                                    {endereco.dsRuaCliente || endereco.rua ? (
-                                                        <>
-                                                            {endereco.dsRuaCliente || endereco.rua}, {endereco.dsNumeroCliente || endereco.numero}
-                                                            <br />
-                                                            {endereco.dsBairroCliente || endereco.bairro} - {endereco.dsCidadeCliente || endereco.cidade}/{endereco.dsUfCliente || endereco.uf}
-                                                        </>
-                                                    ) : (
-                                                        <div><b>E-mail:</b> {typeof pedido.cliente === 'object' ? (pedido.cliente?.dsEmailCliente || pedido.cliente?.email || '-') : '-'}</div>
-                                                    )}
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
+                                                    <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
+                                                    <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
+                                                    <strong>Cidade:</strong> {endereco.dsCidadeCliente || endereco.cidade || '-'}&nbsp;&nbsp;<strong>UF:</strong> {endereco.dsUfCliente || endereco.uf || '-'}<br />
+                                                    <strong>CEP:</strong> {endereco.dsCepCliente || endereco.cep || '-'}
                                                 </div>
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🚚 Logística</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                                                    <div><strong>Forma:</strong> {pedidoLogistica.dsFormaEntrega || "Padrão"}</div>
-                                                    <div><strong>Status Envio:</strong> {pedido.status || 'Concluído'}</div>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <div><strong>Forma de Entrega:</strong> {formaEntrega}</div>
+                                                    <div><strong>Método de Pagamento:</strong> {fin.dsMetodoPagamento || fin.metodo || 'PIX'}</div>
+                                                    <div><strong>Transportadora ID:</strong> {fin.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || '-'}</div>
+                                                    <div><strong>Serviço:</strong> {pedido?.logistica?.dsServico || etiquetaData.servicoVinculado || pedido.servicoVinculado || 'Retirar na Loja'}</div>
                                                 </div>
                                             </div>
 
@@ -333,7 +333,6 @@ export default function TabPedidosConcluidos({
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO COMPLETO */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                 <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
@@ -343,8 +342,7 @@ export default function TabPedidosConcluidos({
                                                         <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
                                                     </div>
                                                     <div><strong>Cupom:</strong> {cupomStr}</div>
-                                                    <div><strong>Forma Pgto:</strong> {formaPgtoStr}</div>
-                                                    <div><strong>Status Pgto:</strong> <span style={{ color: isPagoReal ? '#059669' : '#d97706', fontWeight: 'bold' }}>{statusPgtoStr}</span></div>
+                                                
                                                     <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
                                                         <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                     </div>

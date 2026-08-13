@@ -1,5 +1,6 @@
+// components/_tabsGestaoPedidos/TabRetiradaLoja.tsx
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Pedido } from '@/types/pedido';
 import useSWR from 'swr';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -13,6 +14,7 @@ interface TabRetiradaLojaProps {
     selecionados: string[];
     setSelecionados: React.Dispatch<React.SetStateAction<string[]>>;
     mudarStatusDireto: (pedido: Pedido, novoStatus: string) => Promise<void>;
+    registrarFuncaoConcluirRetirada?: (fn: () => void) => void;
 }
 
 const formatarData = (dataStr: string | undefined): string => {
@@ -50,14 +52,14 @@ const obterSeloItem = (item: any, pedidoLogistica: any) => {
 };
 
 export default function TabRetiradaLoja({
-    pedidos, lojistaIdApp, db, setLocalPedidos, selecionados = [], setSelecionados, mudarStatusDireto
+    pedidos, lojistaIdApp, db, setLocalPedidos, selecionados = [], setSelecionados, mudarStatusDireto, registrarFuncaoConcluirRetirada
 }: TabRetiradaLojaProps) {
     const [processandoMassa, setProcessandoMassa] = useState(false);
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
-    // Paginação
+    // Paginação com seletor dinâmico (20, 40, 60)
     const [paginaAtual, setPaginaAtual] = useState(1);
-    const itensPorPagina = 30;
+    const [itensPorPagina, setItensPorPagina] = useState(20);
 
     const pedidosRetiradaLoja = useMemo(() => {
         return pedidos.filter(p => {
@@ -78,9 +80,9 @@ export default function TabRetiradaLoja({
     const pedidosPaginados = useMemo(() => {
         const inicio = (paginaAtual - 1) * itensPorPagina;
         return pedidosRetiradaLoja.slice(inicio, inicio + itensPorPagina);
-    }, [pedidosRetiradaLoja, paginaAtual]);
+    }, [pedidosRetiradaLoja, paginaAtual, itensPorPagina]);
 
-    const totalPaginas = Math.ceil(pedidosRetiradaLoja.length / itensPorPagina);
+    const totalPaginas = Math.ceil(pedidosRetiradaLoja.length / itensPorPagina) || 1;
 
     const idsVisiveisNestaAba = useMemo(() => pedidosRetiradaLoja.map(p => p.id), [pedidosRetiradaLoja]);
     const selecionadosNestaAbaCount = useMemo(() => {
@@ -131,6 +133,12 @@ export default function TabRetiradaLoja({
             setProcessandoMassa(false);
         }
     };
+
+    useEffect(() => {
+        if (registrarFuncaoConcluirRetirada) {
+            registrarFuncaoConcluirRetirada(concluirRetiradaEmLote);
+        }
+    }, [selecionados, pedidosRetiradaLoja, idsVisiveisNestaAba, processandoMassa]);
 
     return (
         <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
@@ -205,17 +213,20 @@ export default function TabRetiradaLoja({
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Gerencie os pedidos que os clientes selecionaram para retirar diretamente na loja física.</p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', minHeight: '40px' }}>
-                    {selecionadosNestaAbaCount > 0 ? (
-                        <div style={{ display: 'flex', gap: '10px', backgroundColor: '#eff6ff', padding: '8px 14px', borderRadius: '8px', border: '1px solid #bfdbfe', alignItems: 'center' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e40af' }}>{selecionadosNestaAbaCount} selecionados</span>
-                            <button onClick={concluirRetiradaEmLote} disabled={processandoMassa} style={{ padding: '8px 14px', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>
-                                {processandoMassa ? "⏳ Processando..." : "✅ Confirmar Retirada"}
-                            </button>
-                        </div>
-                    ) : (
-                        <div style={{ visibility: 'hidden', height: '40px' }} />
-                    )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', minHeight: '40px', marginLeft: 'auto' }}>
+                    {/* Seletor de itens por página */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: 'bold' }}>
+                        <span>Mostrar:</span>
+                        <select 
+                            value={itensPorPagina} 
+                            onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
+                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            <option value={20}>20</option>
+                            <option value={40}>40</option>
+                            <option value={60}>60</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -254,8 +265,6 @@ export default function TabRetiradaLoja({
                         const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
                         const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
                         const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
-                        const formaPgtoStr = fin.metodo ?? fin.formaPagamento ?? fin.dsFormaPagamento ?? "-";
-                        const statusPgtoStr = fin.status ?? fin.statusPagamento ?? (isPagoReal ? "Pago" : "Pendente");
 
                         return (
                             <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${corBordaCard}` }}>
@@ -305,7 +314,7 @@ export default function TabRetiradaLoja({
                                                 onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
                                                 title="Toque para copiar o ID completo"
                                             >
-                                                📋ID: {idEncurtadoMobile}
+                                                📋 ID: {idEncurtadoMobile}
                                             </span>
 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
@@ -384,7 +393,6 @@ export default function TabRetiradaLoja({
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO COMPLETO */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>💳 Pagamento</div>
                                                 <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>

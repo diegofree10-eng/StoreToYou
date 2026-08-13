@@ -79,7 +79,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const token = dados?.sistema?.dsTokenMelhorEnvio || dados?.tokenMelhorEnvio;
+    // ✨ Verificação rigorosa do ambiente Sandbox vs Produção
+    const isSandbox =
+      dados?.melhorEnvioSandbox === true ||
+      dados?.dadosLoja?.melhorEnvioSandbox === true ||
+      dados?.sistema?.melhorEnvioSandbox === true;
+
+    // Seleciona o token estritamente correspondente ao ambiente ativado
+    let token = "";
+    if (isSandbox) {
+      token = dados?.sistema?.dsTokenMelhorEnvioSandbox || dados?.tokenMelhorEnvioSandbox || "";
+    } else {
+      token =
+        dados?.sistema?.dsTokenMelhorEnvio || 
+        dados?.tokenMelhorEnvio ||
+        dados?.dadosLoja?.dsTokenMelhorEnvio || "";
+    }
+
     const cepOrigem = String(
       dados?.dsCepLoja || dados?.dadosLoja?.dsCepLoja || dados?.cep || "",
     ).replace(/\D/g, "");
@@ -196,8 +212,7 @@ export async function POST(request: Request) {
         peso: pesoTotalCalculado,
       };
 
-      const IsMelhorEnvioSandbox = dados?.melhorEnvioSandbox === true;
-      const UrlMelhorEnvio = IsMelhorEnvioSandbox
+      const UrlMelhorEnvio = isSandbox
         ? "https://sandbox.melhorenvio.com.br/api/v2/me/shipment/calculate"
         : "https://melhorenvio.com.br/api/v2/me/shipment/calculate";
 

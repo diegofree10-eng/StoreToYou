@@ -23,6 +23,7 @@ export const executarFluxoPedido = async ({
   cupomDigitado,
   freteGratisConfig,
   payloadPixBruto,
+  freteSel,
 }: any) => {
   try {
     const contadorRef = doc(
@@ -116,6 +117,29 @@ export const executarFluxoPedido = async ({
       },
     );
 
+    // 🌟 Classificação rigorosa e padronizada da forma de entrega
+    const temFreteCarrinho = safeCart.some((item: any) => item.precisaFrete !== false);
+    let dsFormaEntregaPadrao = 'transportadora';
+
+    if (!temFreteCarrinho) {
+      dsFormaEntregaPadrao = 'digital';
+    } else if (
+      logistica?.formaEnvio === 'retirada' ||
+      freteSel?.id === 'retirada' ||
+      freteSel?.id === 'retirar_loja' ||
+      String(freteSel?.name || "").toLowerCase().includes("retirada")
+    ) {
+      dsFormaEntregaPadrao = 'retirada';
+    } else if (
+      logistica?.formaEnvio === 'entrega_local' ||
+      freteSel?.id === 'entrega_local' ||
+      String(freteSel?.name || "").toLowerCase().includes("entrega local")
+    ) {
+      dsFormaEntregaPadrao = 'entrega_local';
+    } else {
+      dsFormaEntregaPadrao = 'transportadora';
+    }
+
     // 2. Montagem dos itens formatados com as respostas dos requisitos padronizadas
     const itensFormatados = safeCart.map((item: any, index: number) => {
       const chaveUnica = `${item.cartItemId || item.id || "prod"}_${index}`;
@@ -159,7 +183,9 @@ export const executarFluxoPedido = async ({
 
         // ✨ Salvando o prazo de produção e o tipo rigoroso do produto no banco
         nrDiasProducao: Number(item.nrDiasProducao || item.diasProducao || 0),
-        dsTipoProduto: String(item.dsTipoProduto || item.tipoProduto || "Fisico_Sem"),
+        dsTipoProduto: String(
+          item.dsTipoProduto || item.tipoProduto || "Fisico_Sem",
+        ),
 
         weight: Number(
           item.weight || item.peso || item.variacaoSelecionada?.peso || 0.3,
@@ -223,8 +249,8 @@ export const executarFluxoPedido = async ({
       },
 
       logistica: {
-        isRetirada: logistica?.formaEnvio === "retirada",
-        dsFormaEntrega: logistica?.formaEnvio || "desconhecida",
+        isRetirada: dsFormaEntregaPadrao === "retirada",
+        dsFormaEntrega: dsFormaEntregaPadrao,
         isFreteGratis: freteGratisConfig?.atingido || false,
 
         // 🚚 Seguindo o padrão string (ds)
@@ -233,7 +259,7 @@ export const executarFluxoPedido = async ({
         // 💰 Valor do frete na logística (numérico)
         vlFrete: Number(logistica?.valorFrete || logistica?.vlFrete || 0),
 
-        // ⏱️ Prazo de entrega na logística (numérico, seguindo o padrão vl)
+        // ⏱️ Prazo de entrega na logística (numérico)
         vlPrazo: Number(
           logistica?.prazoEntrega ||
             logistica?.prazo ||
@@ -245,28 +271,19 @@ export const executarFluxoPedido = async ({
           logistica?.formaPagamentoEtiqueta || "saldo_melhor_envio",
 
         dsTransportadoraId:
-          logistica?.transportadoraId || logistica?.dsTransportadoraId || null,
+          dsFormaEntregaPadrao === 'transportadora' 
+            ? (logistica?.transportadoraId || logistica?.dsTransportadoraId || null)
+            : (dsFormaEntregaPadrao === 'entrega_local' ? 'entrega_local' : null),
       },
 
       itens: itensFormatados,
 
       Cotacao: {
-        dsServicoCotado: logistica?.servico || logistica?.dsServico || "N/A",
-
-        vlFreteCotado: Number(
-          logistica?.valorFrete || logistica?.vlFreteCotado || 0,
-        ),
-
-        // Renomeado para refletir o saldo do Melhor Envio
-        dsFormaPagamentoEtiquetaCotado:
-          logistica?.formaPagamentoEtiqueta || "saldo_melhor_envio",
-
-        dsTransportadoraIdCotado:
-          logistica?.transportadoraId || logistica?.dsTransportadoraId || null,
-
-        prazoEntregaCotado: Number(
-          logistica?.prazoEntrega || logistica?.prazo || 0,
-        ),
+        dsServicoCotado: null,
+        vlFreteCotado: 0,
+        dsFormaPagamentoEtiquetaCotado: null,
+        dsTransportadoraIdCotado: null,
+        prazoEntregaCotado: 0,
       },
 
       Etiqueta: {

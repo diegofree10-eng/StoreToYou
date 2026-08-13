@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Pedido } from '@/types/pedido';
 import useSWR from 'swr';
 import { doc, getDoc } from 'firebase/firestore';
@@ -10,8 +10,10 @@ interface TabEnviadosProps {
     lojistaIdApp: string;
     db: any;
     mudarStatusDireto: (p: Pedido, status: string) => void;
+    setLocalPedidos?: React.Dispatch<React.SetStateAction<Pedido[]>>;
     selecionados?: string[];
     setSelecionados?: React.Dispatch<React.SetStateAction<string[]>>;
+    registrarFuncaoConfirmarRecebimento?: (fn: () => void) => void;
 }
 
 const formatarData = (dataStr: string | undefined): string => {
@@ -95,25 +97,45 @@ const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db }: any) 
 });
 
 export default function TabPedidosEnviados({
-    pedidos, loading, lojistaIdApp, db, mudarStatusDireto, selecionados = [], setSelecionados = () => { }
+    pedidos, loading, lojistaIdApp, db, mudarStatusDireto, setLocalPedidos, selecionados = [], setSelecionados = () => { }, registrarFuncaoConfirmarRecebimento
 }: TabEnviadosProps) {
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
+    const [paginaAtual, setPaginaAtual] = useState(1);
+    const [itensPorPagina, setItensPorPagina] = useState(20);
+
     const pedidosEnviados = useMemo(() => {
         return (pedidos || []).filter(p => {
+            if (!p) return false;
+
             const statusGeral = String(p.status || '').trim().toLowerCase();
+            const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
+            const isConcluidoFlag = (p as any).enviado === true && statusGeral === 'concluído';
+
+            // 🛑 Bloqueio absoluto: Se o pedido estiver concluído por qualquer via, remove imediatamente da aba de enviados
+            if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusProd === 'concluído' || statusProd === 'concluido' || isConcluidoFlag) {
+                return false;
+            }
+
             const etiquetaGerada = p.etiquetaGerada === true || p.statusEtiqueta === 'paga' || p.statusEtiqueta === 'enviado';
-
-            if (statusGeral === 'concluído' || statusGeral === 'concluido') return false;
-
             return etiquetaGerada || p.rastreio || p.codigoRastreio || (p as any).logistica?.tracking;
         });
     }, [pedidos]);
 
+    const totalPaginas = Math.ceil(pedidosEnviados.length / itensPorPagina) || 1;
+
+    useEffect(() => {
+        if (paginaAtual > totalPaginas) {
+            setPaginaAtual(totalPaginas);
+        }
+    }, [totalPaginas, paginaAtual]);
+
+    const pedidosPaginados = useMemo(() => {
+        const inicio = (paginaAtual - 1) * itensPorPagina;
+        return pedidosEnviados.slice(inicio, inicio + itensPorPagina);
+    }, [pedidosEnviados, paginaAtual, itensPorPagina]);
+
     const idsVisiveisNestaAba = useMemo(() => pedidosEnviados.map(p => p.id), [pedidosEnviados]);
-    const selecionadosNestaAbaCount = useMemo(() => {
-        return (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id)).length;
-    }, [selecionados, idsVisiveisNestaAba]);
 
     const toggleExpandir = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
@@ -126,6 +148,28 @@ export default function TabPedidosEnviados({
         alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
     };
 
+    const executarConclusao = (pedidoAlvo: Pedido) => {
+        mudarStatusDireto(pedidoAlvo, 'Concluído');
+
+        if (setLocalPedidos) {
+            setLocalPedidos(prev => prev.map(p => {
+                if (p.id === pedidoAlvo.id) {
+                    return {
+                        ...p,
+                        status: 'Concluído',
+                        enviado: true,
+                        StatusProducao: {
+                            ...(p as any).StatusProducao,
+                            dsStatusProdução: 'Concluído',
+                            isConcluido: true
+                        }
+                    };
+                }
+                return p;
+            }));
+        }
+    };
+
     const confirmarRecebimentoEmLote = () => {
         const aptos = pedidosEnviados.filter(p => (selecionados || []).includes(p.id));
         if (aptos.length === 0) return alert("Nenhum pedido selecionado.");
@@ -133,15 +177,21 @@ export default function TabPedidosEnviados({
         if (!confirm(`Deseja realmente marcar ${aptos.length} pedido(s) como entregue/concluído?`)) return;
 
         for (const pedido of aptos) {
-            mudarStatusDireto(pedido, 'Concluído');
+            executarConclusao(pedido);
         }
+
         setSelecionados(prev => prev.filter(id => !idsVisiveisNestaAba.includes(id)));
     };
+
+    useEffect(() => {
+        if (registrarFuncaoConfirmarRecebimento) {
+            registrarFuncaoConfirmarRecebimento(confirmarRecebimentoEmLote);
+        }
+    }, [selecionados, pedidosEnviados]);
 
     return (
         <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
             <style jsx>{`
-                /* Estilos aplicados EXCLUSIVAMENTE em telas mobile (max-width: 768px) */
                 @media (max-width: 768px) {
                     .card-header-linha {
                         flex-direction: column !important;
@@ -191,8 +241,6 @@ export default function TabPedidosEnviados({
                         gap: 10px !important;
                     }
                 }
-
-                /* Estilos aplicados EXCLUSIVAMENTE em telas PC (min-width: 769px) */
                 @media (min-width: 769px) {
                     .mobile-bloco-organizado {
                         display: none !important;
@@ -213,17 +261,17 @@ export default function TabPedidosEnviados({
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Acompanhe o rastreio e atualize para concluído assim que forem entregues.</p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', minHeight: '40px' }}>
-                    {selecionadosNestaAbaCount > 0 ? (
-                        <div style={{ display: 'flex', gap: '10px', backgroundColor: '#eff6ff', padding: '8px 14px', borderRadius: '8px', border: '1px solid #bfdbfe', alignItems: 'center' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e40af' }}>{selecionadosNestaAbaCount} selecionados</span>
-                            <button onClick={confirmarRecebimentoEmLote} style={{ padding: '8px 14px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>
-                                ✅ Confirmar Recebimento ({selecionadosNestaAbaCount})
-                            </button>
-                        </div>
-                    ) : (
-                        <div style={{ visibility: 'hidden', height: '40px' }} />
-                    )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: 'bold', marginLeft: 'auto' }}>
+                    <span>Mostrar:</span>
+                    <select
+                        value={itensPorPagina}
+                        onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
+                        style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                        <option value={20}>20</option>
+                        <option value={40}>40</option>
+                        <option value={60}>60</option>
+                    </select>
                 </div>
             </div>
 
@@ -235,7 +283,7 @@ export default function TabPedidosEnviados({
                         Nenhum pedido enviado ou em trânsito no momento. 🎉
                     </div>
                 ) : (
-                    pedidosEnviados.map(pedido => {
+                    pedidosPaginados.map(pedido => {
                         const nomeCliente = typeof pedido.cliente === 'object' ? (pedido.cliente?.nmNomeCliente || pedido.cliente?.nome || "Cliente") : (pedido.cliente || "Cliente");
                         const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
                         const idPedidoExibicao = String(pedido.id || "");
@@ -272,8 +320,6 @@ export default function TabPedidosEnviados({
                         const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
                         const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
                         const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
-                        const formaPgtoStr = fin.metodo ?? fin.formaPagamento ?? fin.dsFormaPagamento ?? "-";
-                        const statusPgtoStr = fin.status ?? fin.statusPagamento ?? (isPagoReal ? "Pago" : "Pendente");
 
                         return (
                             <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${corBordaCard}` }}>
@@ -282,7 +328,6 @@ export default function TabPedidosEnviados({
                                     className="card-header-linha"
                                     style={localStyles.cardHeaderLinha}
                                 >
-                                    {/* ESTRUTURA ORIGINAL PARA PC */}
                                     <div className="pc-bloco-linha-unica">
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
                                             <input
@@ -291,7 +336,6 @@ export default function TabPedidosEnviados({
                                                 onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
                                                 style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
                                             />
-
                                             <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
                                             <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
                                             <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '220px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
@@ -305,7 +349,6 @@ export default function TabPedidosEnviados({
                                         </div>
                                     </div>
 
-                                    {/* ESTRUTURA ORGANIZADA EXCLUSIVA PARA MOBILE */}
                                     <div className="mobile-bloco-organizado" style={{ display: 'none' }}>
                                         <div className="mobile-linha-topo">
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
@@ -321,12 +364,12 @@ export default function TabPedidosEnviados({
                                         </div>
 
                                         <div className="mobile-linha-baixo">
-                                            <span 
-                                                className="mobile-id-badge" 
+                                            <span
+                                                className="mobile-id-badge"
                                                 onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
                                                 title="Toque para copiar o ID completo"
                                             >
-                                                📋ID: {idEncurtadoMobile}
+                                                📋 ID: {idEncurtadoMobile}
                                             </span>
 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
@@ -374,25 +417,19 @@ export default function TabPedidosEnviados({
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>📍 Endereço de Entrega</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                                                    {isRetirada ? (
-                                                        <strong>Retirada na Loja física</strong>
-                                                    ) : (
-                                                        <>
-                                                            {endereco.dsRuaCliente || endereco.rua}, {endereco.dsNumeroCliente || endereco.numero}
-                                                            <br />
-                                                            {endereco.dsBairroCliente || endereco.bairro} - {endereco.dsCidadeCliente || endereco.cidade}/{endereco.dsUfCliente || endereco.uf}
-                                                            <br />
-                                                            CEP: {endereco.dsCepCliente || endereco.cep}
-                                                        </>
-                                                    )}
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                                    <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
+                                                    <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
+                                                    <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
+                                                    <strong>Cidade:</strong> {endereco.dsCidadeCliente || endereco.cidade || '-'}&nbsp;&nbsp;<strong>UF:</strong> {endereco.dsUfCliente || endereco.uf || '-'}<br />
+                                                    <strong>CEP:</strong> {endereco.dsCepCliente || endereco.cep || '-'}
                                                 </div>
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🚚 Transportadora / Logística</div>
-                                                <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
+                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
                                                     {!precisaFrete ? (
                                                         <div style={{ color: '#64748b', fontStyle: 'italic' }}>Pedido sem Frete</div>
                                                     ) : isRetirada ? (
@@ -420,7 +457,7 @@ export default function TabPedidosEnviados({
                                             </div>
 
                                             <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>🏷️ Rastreio e Ação</div>
+                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🏷️ Rastreio e Ação</div>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                     <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
                                                         <div><b>Código Rastreio:</b> {codigoRastreio}</div>
@@ -437,14 +474,13 @@ export default function TabPedidosEnviados({
                                                     </div>
 
                                                     <div style={{ marginTop: '6px' }}>
-                                                        <button onClick={() => mudarStatusDireto(pedido, 'Concluído')} style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>
+                                                        <button onClick={() => executarConclusao(pedido)} style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>
                                                             ✅ Marcar como Entregue
                                                         </button>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 5: PAGAMENTO / RESUMO FINANCEIRO COMPLETO */}
                                             <div style={localStyles.caixaBlocoPadrao}>
                                                 <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                 <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
@@ -454,8 +490,7 @@ export default function TabPedidosEnviados({
                                                         <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
                                                     </div>
                                                     <div><strong>Cupom:</strong> {cupomStr}</div>
-                                                    
-                                                    
+
                                                     <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
                                                         <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                     </div>
@@ -469,9 +504,22 @@ export default function TabPedidosEnviados({
                     })
                 )}
             </div>
+
+            {totalPaginas > 1 && (
+                <div style={styles.paginationContainer}>
+                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} style={styles.pageBtn}>Anterior</button>
+                    <span style={{ margin: '0 15px', fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>Página {paginaAtual} de {totalPaginas}</span>
+                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} style={styles.pageBtn}>Próxima</button>
+                </div>
+            )}
         </div>
     );
 }
+
+const styles: { [key: string]: React.CSSProperties } = {
+    paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
+    pageBtn: { padding: '8px 16px', cursor: 'pointer', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 'bold' }
+};
 
 const localStyles: { [key: string]: React.CSSProperties } = {
     cardContainer: { borderRadius: '8px', backgroundColor: '#fff', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },

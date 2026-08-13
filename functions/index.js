@@ -118,6 +118,7 @@ exports.prepararNovoLojista = functions
         vlFreteLocal: 0,
         isRetiradaLoja: false,
         dsTokenMelhorEnvio: "",
+        isAutomacaoCompletaMelhorEnvio: false,
         isTransportadoraAtivo: false,
         dsTransportadoras: {
           correios: true,

@@ -7,7 +7,7 @@ import imageCompression from "browser-image-compression";
 import {
   FiAward, FiUploadCloud, FiZap, FiTruck, FiCreditCard,
   FiStar, FiShoppingBag, FiDollarSign, FiCalendar, FiClock,
-  FiLayers, FiPieChart
+  FiLayers, FiPieChart, FiShield
 } from "react-icons/fi";
 
 interface TabPlanosProps {
@@ -79,28 +79,18 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
     try {
       const planosFormatados = { ...planos };
 
-      // Ajuste: Encontra a chave do plano, ignorando maiúsculas/minúsculas
       const chaves = Object.keys(planosFormatados);
       const chaveOuro = chaves.find(k => k.toLowerCase() === 'ouro');
-
-      // Pega o valor dos dias, garantindo que pegamos o número correto
       const diasOuroConfig = chaveOuro ? Number(planosFormatados[chaveOuro]?.diasTeste || 0) : 0;
 
-      // Log para depuração: verifique no F12 se este valor é 15
-      console.log("Chave encontrada:", chaveOuro);
-      console.log("Dias capturados:", diasOuroConfig);
-
-      // Remove campos temporários
       Object.keys(planosFormatados).forEach((key) => {
         delete planosFormatados[key].temGateway;
       });
 
-      // Salva os planos
       await setDoc(doc(db, "configuracoes", "planos"), planosFormatados);
 
-      // Salva a configuração global
       await setDoc(doc(db, "configuracoes", "sistema"), {
-        nrDiasTesteOuro: diasOuroConfig, // Agora ele deve salvar o valor de 15
+        nrDiasTesteOuro: diasOuroConfig,
         dsPlanoTeste: "Ouro",
         ultimaAtualizacao: new Date()
       }, { merge: true });
@@ -118,6 +108,8 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
         const gatewaysLiberados = Array.isArray(planos[key].meios_pagamento)
           ? planos[key].meios_pagamento
           : [];
+
+        const isDiamante = key.toLowerCase() === 'diamante';
 
         return (
           <div key={key} style={{ ...styles.planCard, borderTop: `6px solid ${planos[key].cor}` }}>
@@ -230,7 +222,6 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
               </label>
             </div>
 
-            {/* SEÇÃO: RECURSOS ADICIONAIS — ALINHAMENTO ORIGINAL 100% RESTAURADO */}
             <div style={styles.recursosSection}>
               <p style={styles.recursosTitle}>RECURSOS ADICIONAIS HABILITADOS</p>
 
@@ -253,6 +244,21 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
                 <div style={styles.checkLabel}><FiTruck /> Cálculo de Frete (Melhor Envio)</div>
                 <input type="checkbox" checked={!!planos[key].temLogistica} onChange={() => toggleRecurso(key, 'temLogistica')} />
               </label>
+
+              <label style={styles.checkRow}>
+                <div style={styles.checkLabel}><FiTruck color="#6366f1" /> ⚡ Automação Completa Melhor Envio</div>
+                <input type="checkbox" checked={!!planos[key].temAutomacaoFrete} onChange={() => toggleRecurso(key, 'temAutomacaoFrete')} />
+              </label>
+
+              {/* OPÇÃO DE SANDBOX EXCLUSIVA DO PLANO DIAMANTE (ALINHADA) */}
+              {isDiamante && (
+                <label style={styles.checkRow}>
+                  <div style={{ ...styles.checkLabel, color: '#ca8a04' }}>
+                    <FiShield color="#ca8a04" /> 🟡 Acesso a Modo Sandbox (Testes)
+                  </div>
+                  <input type="checkbox" checked={!!planos[key].temSandbox} onChange={() => toggleRecurso(key, 'temSandbox')} />
+                </label>
+              )}
 
               <label style={styles.checkRow}>
                 <div style={styles.checkLabel}><FiTruck color="#10b981" /> Estratégia de Frete Grátis</div>
@@ -288,7 +294,6 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
         Salvar Todas as Configurações de Planos
       </button>
     </div>
-
   );
 }
 
