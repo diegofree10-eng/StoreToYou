@@ -174,6 +174,7 @@ export default function TabTodosPedidos({
         try {
             const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedido.id);
             const isOriginalmenteFreteGratis = pedido.financeiro?.dsTransportadoraId === "frete_gratis_ativado" || pedido.financeiro?.freteGratis;
+
             await updateDoc(pedidoRef, {
                 etiquetaGerada: false,
                 statusEtiqueta: null,
@@ -181,15 +182,23 @@ export default function TabTodosPedidos({
                 "financeiro.dsTransportadoraId": isOriginalmenteFreteGratis ? "frete_gratis_ativado" : null,
                 "financeiro.metodo": null,
                 "financeiro.vlFrete": null,
-                "financeiro.prazoEntrega": null
+                "financeiro.prazoEntrega": null,
+                // 🛠️ Aponta estritamente para o campo padronizado do helper, sem criar novas variáveis
+                "StatusProducao.dsStatusProducao": "Pendente"
             });
+
             setLocalPedidos(prev => prev.map(p => p.id === pedido.id ? {
                 ...p,
                 etiquetaGerada: false,
                 statusEtiqueta: undefined,
-                financeiro: { ...p.financeiro, metodo: undefined, vlFrete: undefined, prazoEntrega: undefined }
+                financeiro: { ...p.financeiro, metodo: undefined, vlFrete: undefined, prazoEntrega: undefined },
+                StatusProducao: {
+                    ...(p as any).StatusProducao,
+                    dsStatusProducao: "Pendente"
+                }
             } : p));
-            alert("✅ Etiqueta resetada!");
+
+            alert("✅ Etiqueta resetada e status ajustado!");
         } catch (e: any) {
             alert("Erro ao resetar: " + e.message);
         }
@@ -261,8 +270,8 @@ export default function TabTodosPedidos({
                     }
                 }
             `}</style>
-            
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}> 
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
                     <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>📦 Todos os Pedidos</h3>
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Visualização completa de todos os pedidos cadastrados na loja.</p>
@@ -298,7 +307,7 @@ export default function TabTodosPedidos({
 
                             const formaEntrega = String(pedidoLogistica.dsFormaEntrega || (pedido as any).dsFormaEntrega || '').toLowerCase();
                             const isRetirada = formaEntrega === 'retirada' || pedidoLogistica.isRetirada === true || pedido.retirada || pedido.retirarNaLoja;
-                            
+
                             // 🛠️ Verificações para identificar se o pedido é Digital ou Entrega Local
                             const isEntregaLocal = formaEntrega === 'entrega_local' || String(pedidoLogistica.transportadoraId || '').toLowerCase() === 'entrega_local' || pedido.entregaLocal;
                             const isDigital = pedido.itens?.some((i: any) => {

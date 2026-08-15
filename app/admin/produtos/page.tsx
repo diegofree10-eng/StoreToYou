@@ -468,7 +468,10 @@ export default function CadastroProdutos() {
     return (
         <div style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', background: '#f8fafc', position: 'relative', boxSizing: 'border-box' }}>
 
-            <style jsx>{`
+            {/* Importação global da fonte Amaranth para uso isolado no modal de descrição */}
+            <style jsx global>{`
+                @import url('https://fonts.googleapis.com/css2?family=Amaranth:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
                 @media (max-width: 768px) {
                     .mobile-header-card {
                         flex-direction: column !important;
@@ -488,8 +491,16 @@ export default function CadastroProdutos() {
                 {showDescModal && (
                     <div style={{ ...styles.modalOverlay, zIndex: 5000 }}>
                         <div style={styles.modalContent}>
-                            <h3 style={{ marginBottom: '10px' }}>Editar Descrição</h3>
-                            <textarea style={styles.modalTextarea} value={descricao} onChange={e => setDescricao(e.target.value)} autoFocus />
+                            <h3 style={{ marginBottom: '10px', fontFamily: "'Amaranth', sans-serif" }}>Editar Descrição</h3>
+                            <textarea
+                                style={{
+                                    ...styles.modalTextarea,
+                                    fontFamily: "'Amaranth', sans-serif"
+                                }}
+                                value={descricao}
+                                onChange={e => setDescricao(e.target.value)}
+                                autoFocus
+                            />
                             <button type="button" onClick={() => setShowDescModal(false)} style={styles.btnSave}>Concluir</button>
                         </div>
                     </div>

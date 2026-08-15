@@ -143,7 +143,8 @@ export default function TabRetirarLocal({
                 const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", idPedido);
                 await updateDoc(pedidoRef, {
                     status: 'Concluído',
-                    enviado: true
+                    enviado: true,
+                    "StatusProducao.dsStatusProducao": "Concluído"
                 });
             }
 
@@ -271,7 +272,7 @@ export default function TabRetirarLocal({
                         const pedidoLogistica = (pedido as any).logistica || {};
                         const cotacao = (pedido as any).Cotacao || {};
                         const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
-                        
+
                         const isRetirada = pedidoLogistica.isRetirada || pedidoLogistica.dsFormaEntrega === 'retirada';
 
                         const temPersonalizacao = pedido.itens?.some(i => {
@@ -359,14 +360,14 @@ export default function TabRetirarLocal({
 
                                 <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {pedido.itens?.map((item: any, idx: number) => (
-                                        <ItemResumido 
-                                            key={idx} 
-                                            item={item} 
-                                            lojistaId={lojistaIdApp} 
-                                            pedidoLogistica={pedidoLogistica} 
-                                            db={db} 
-                                            pedido={pedido} 
-                                            isFirstItem={idx === 0} 
+                                        <ItemResumido
+                                            key={idx}
+                                            item={item}
+                                            lojistaId={lojistaIdApp}
+                                            pedidoLogistica={pedidoLogistica}
+                                            db={db}
+                                            pedido={pedido}
+                                            isFirstItem={idx === 0}
                                         />
                                     ))}
                                 </div>
@@ -374,7 +375,7 @@ export default function TabRetirarLocal({
                                 {expandido && (
                                     <div style={localStyles.conteudoExpandido}>
                                         <div className="grid-expandido" style={localStyles.gridExpandido}>
-                                            
+
                                             {/* BLOCO 1: PERSONALIZAÇÃO */}
                                             <div style={localStyles.caixaPersonalizacao}>
                                                 <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '12px' }}>
@@ -384,9 +385,9 @@ export default function TabRetirarLocal({
                                                     pedido.itens.map((item: any, idx: number) => {
                                                         const resp = item.respostasFormatadas || item.personalizacao;
                                                         if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
-                                                        
+
                                                         const nomeItem = item.nome || item.title || `Item ${idx + 1}`;
-                                                        
+
                                                         return (
                                                             <div key={idx} style={{ fontSize: '11px', color: '#78350f', lineHeight: '1.4', marginBottom: '8px', borderBottom: idx < pedido.itens.length - 1 ? '1px dashed #fcd34d' : 'none', paddingBottom: '4px' }}>
                                                                 <div style={{ fontWeight: 'bold', color: '#92400e', marginBottom: '2px' }}>• {nomeItem}:</div>

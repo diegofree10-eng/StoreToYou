@@ -20,6 +20,7 @@ import AparenciaTab from "./tabsConfig/AparenciaTab";
 import SistemaTab from "./tabsConfig/SistemaTab";
 import MensagensTab from "./tabsConfig/MensagensTab";
 import AssinaturaTab from "./tabsConfig/AssinaturaTab";
+import AtualizacoesTab from "./tabsConfig/AtualizacoesTab"; // <-- Nova Aba de Atualizações adicionada
 
 export default function AdminConfig() {
   interface ConfigState {
@@ -29,6 +30,7 @@ export default function AdminConfig() {
     pagamentos: { [key: string]: any };
     aparencia: { [key: string]: any };
     sistema: { [key: string]: any };
+    atualizacao: { [key: string]: any };
     historicoMensagens: any[];
     financeiro: { [key: string]: any };
     redesSociais: any[];
@@ -40,8 +42,9 @@ export default function AdminConfig() {
     dadosLoja: { dsNomeLoja: "Nova Loja", dsRuaLoja: "", nrNumeroLoja: "", dsCepLoja: "", dsBairroLoja: "", dsCidadeLoja: "", dsUfLoja: "", nrCnpjCpfLoja: "", dsStatusLoja: "ativo", dsPlanoLoja: "Bronze", nrWhatssapLoja: "", dsSeguimentoLoja: "", dsSlug: "", dsLogoLoja: "", redesSociais: [] },
     banners: { dsDesktop: [], dsMobile: [], dsBanner1: "", dsBanner2: "", dsBanner3: "", dsLinkBanner1: "", dsLinkBanner2: "", dsLinkBanner3: "" },
     pagamentos: { dsChavePix: "", dsMercadoPago: { publicKey: "", accessToken: "", ativo: false }, dsPagSeguro: { token: "", email: "", ativo: false } },
-    aparencia: { dscorFundo: "#f8fafc", dscorPrincipal: "#FF8C00", dscorSecundaria: "#F5F5DC", dscorTextoCard: "#1e293b" },
-    sistema: { isFreteGratisAtivo: false, vlFreteGratisMinimo: 0, dsTokenMelhorEnvio: "", dstransportadoras: { correios: true, jadlog: true, azul: true, latam: true }, cupons: {}, horarios: {}, isLojaAberta: true },
+    aparencia: { dscorFundo: "#f8fafc", dscorPrincipal: "#FF8C00", dscorSecundaria: "#F5F5DC", dscorTextoCard: "#1e293b", isModoNoturno: false },
+    sistema: { isFreteGratisAtivo: false, vlFreteGratisMinimo: 0, dsTokenMelhorEnvio: "", dstransportadoras: { correios: true, jadlog: true, azul: true, latam: true }, cupons: {}, horarios: {}, isLojaAberta: true, dsVersaoSistema: "1.0.0" },
+    atualizacao: { nrVersaoSistemaLogista: "0.0.0", nrVersaoSchemaLogista: 0 },
     historicoMensagens: [],
     financeiro: { vlLucroReal: 0, vlMetaFaturamentoMensal: 0, vlTicketMedio: 0 },
     redesSociais: [],
@@ -122,7 +125,6 @@ export default function AdminConfig() {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          // 1. Busca primeiro o vínculo na coleção usuarios para pegar o lojaId real
           const userDocRef = doc(db, "usuarios", user.uid);
           const userSnap = await getDoc(userDocRef);
 
@@ -136,12 +138,13 @@ export default function AdminConfig() {
 
           setUid(lojaIdReal);
 
-          // 2. Busca o documento da loja usando o ID real correto
           const snap = await getDoc(doc(db, "lojistas", lojaIdReal));
           if (snap.exists()) {
-            const dados = snap.data();
+            let dados = snap.data();
+
             setDadosAntigos(dados);
             setConfig((prev: ConfigState) => ({ ...prev, ...dados }));
+
             if (dados.mensagemMaster && !dados.mensagemMaster.lida) {
               setAvisoPopup(dados.mensagemMaster);
             }
@@ -246,11 +249,9 @@ export default function AdminConfig() {
     };
 
     try {
-      // 1. Tratamento da Logo da Loja (se houver nova, limpa a antiga ou substitui)
       if (novaLogo) {
         const storageRef = ref(storage, `logos_lojistas/${uid}`);
         await uploadBytes(storageRef, novaLogo);
-
         (dadosParaSalvar.dadosLoja as any).dsLogoLoja = await getDownloadURL(storageRef);
       }
 
@@ -275,13 +276,10 @@ export default function AdminConfig() {
         });
       };
 
-      // Função auxiliar para gerenciar a troca de banners salvos
       const processarBanner = async (arquivoNovo: File | null, numero: number) => {
-        if (!arquivoNovo) return config.banners[`dsBanner${numero}`]; // Retorna o atual se não mudou
-
+        if (!arquivoNovo) return config.banners[`dsBanner${numero}`];
         const campoUrlAntiga = config.banners[`dsBanner${numero}`];
 
-        // Se já existia um banner antigo no Storage, deleta ele fisicamente antes
         if (campoUrlAntiga && typeof campoUrlAntiga === 'string' && campoUrlAntiga.startsWith('http')) {
           try {
             const refAntiga = ref(storage, campoUrlAntiga);
@@ -291,25 +289,16 @@ export default function AdminConfig() {
           }
         }
 
-        // Faz o upload da nova imagem comprimida
         const blob = await comprimirImagem(arquivoNovo);
         const refNovo = ref(storage, `banners/${uid}/banner${numero}.jpg`);
         await uploadBytes(refNovo, blob);
         return await getDownloadURL(refNovo);
       };
 
-      // 2. Processa e substitui os banners se houver novos arquivos selecionados
-      if (arquivoBanner1) {
-        dadosParaSalvar.banners.dsBanner1 = await processarBanner(arquivoBanner1, 1);
-      }
-      if (arquivoBanner2) {
-        dadosParaSalvar.banners.dsBanner2 = await processarBanner(arquivoBanner2, 2);
-      }
-      if (arquivoBanner3) {
-        dadosParaSalvar.banners.dsBanner3 = await processarBanner(arquivoBanner3, 3);
-      }
+      if (arquivoBanner1) dadosParaSalvar.banners.dsBanner1 = await processarBanner(arquivoBanner1, 1);
+      if (arquivoBanner2) dadosParaSalvar.banners.dsBanner2 = await processarBanner(arquivoBanner2, 2);
+      if (arquivoBanner3) dadosParaSalvar.banners.dsBanner3 = await processarBanner(arquivoBanner3, 3);
 
-      // 3. Salva tudo atualizado no Firestore
       await setDoc(doc(db, "lojistas", uid), dadosParaSalvar, { merge: true });
       setDadosAntigos(dadosParaSalvar);
 
@@ -383,7 +372,6 @@ export default function AdminConfig() {
     return planosConfig[planoVigente][chaveTecnica] === true;
   };
 
-  // Funções de gerenciamento de redes sociais para passar via props
   const adicionarRedeSocial = () => {
     const novasRedes = [...(config.dadosLoja.redesSociais || []), { plataforma: 'instagram', url: '' }];
     setConfig({ ...config, dadosLoja: { ...config.dadosLoja, redesSociais: novasRedes } });
@@ -478,7 +466,14 @@ export default function AdminConfig() {
       )}
 
       <div style={styles.card}>
-        <h2 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '20px' }}>⚙️ Configurações</h2>
+        {/* Cabeçalho com Título e Versão Dinâmica do Sistema */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: '800', margin: 0 }}>⚙️ Configurações</h2>
+          <span style={{ fontSize: '11px', fontWeight: '800', background: '#f1f5f9', color: '#64748b', padding: '4px 10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            Versão: {config.atualizacao?.nrVersaoSistemaLogista || config.sistema?.dsVersaoSistema || "0.0.0"}
+          </span>
+        </div>
+
         {renderSeloPlano()}
 
         <div style={styles.tabBar}>
@@ -490,9 +485,9 @@ export default function AdminConfig() {
           <button type="button" style={abaAtiva === 'sistema' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('sistema')}>SISTEMA / CUPONS</button>
           <button type="button" style={abaAtiva === 'mensagens' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('mensagens')}>MENSAGENS</button>
           <button type="button" style={abaAtiva === 'assinatura' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('assinatura')}>ASSINATURA</button>
+          <button type="button" style={abaAtiva === 'atualizacoes' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('atualizacoes')}>ATUALIZAÇÕES</button>
         </div>
 
-        {/* Renderização das Abas Modularizadas */}
         {abaAtiva === 'pessoal' && <DadosPessoaisTab config={config} setConfig={setConfig} buscarCep={buscarCep} />}
         {abaAtiva === 'loja' && <DadosLojaTab config={config} setConfig={setConfig} buscarCep={buscarCep} novaLogo={novaLogo} setNovaLogo={setNovaLogo} setShowHorarioModal={setShowHorarioModal} adicionarRedeSocial={adicionarRedeSocial} atualizarRedeSocial={atualizarRedeSocial} removerRedeSocial={removerRedeSocial} />}
         {abaAtiva === 'banner' && (
@@ -514,8 +509,9 @@ export default function AdminConfig() {
         {abaAtiva === 'sistema' && <SistemaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} setShowCupomModal={setShowCupomModal} showToken={showToken} setShowToken={setShowToken} />}
         {abaAtiva === 'mensagens' && <MensagensTab config={config} confirmarLeituraMensagem={confirmarLeituraMensagem} />}
         {abaAtiva === 'assinatura' && <AssinaturaTab config={config} planosConfig={planosConfig} setShowUpgradeModal={setShowUpgradeModal} />}
+        {abaAtiva === 'atualizacoes' && <AtualizacoesTab config={config} />}
 
-        {abaAtiva !== 'mensagens' && abaAtiva !== 'assinatura' && (
+        {abaAtiva !== 'mensagens' && abaAtiva !== 'assinatura' && abaAtiva !== 'atualizacoes' && (
           <button type="button" onClick={handleSalvar} disabled={salvando} style={salvando ? styles.btnDisabled : styles.btnSalvar}>
             {salvando ? "Processando..." : "💾 Salvar Alterações"}
           </button>
@@ -553,18 +549,16 @@ const styles: any = {
   page: { padding: "0px 16px 40px 16px", background: "#f8fafc", minHeight: "100vh", display: "flex", justifyContent: "center", boxSizing: "border-box" },
   card: { background: "#fff", padding: "20px", borderRadius: "0 0 24px 24px", width: "100%", maxWidth: "970px", boxShadow: "0 10px 15px rgba(0,0,0,0.05)", marginTop: "0px", boxSizing: "border-box" },
 
-  /* Ajustado para flexível e sem apertar no mobile */
   seloCard: { display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', background: '#fff', borderRadius: '16px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', boxSizing: 'border-box', width: '100%' },
   medalhaBox: { minWidth: '56px', width: '56px', height: '56px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
   imgFull: { width: '100%', height: '100%', objectFit: 'contain' },
 
-  /* Grid flexível adaptável a telas menores */
   infoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '8px', marginTop: '10px', width: '100%' },
   infoItem: { display: 'flex', flexDirection: 'column', gap: '2px', background: '#f8fafc', padding: '6px 10px', borderRadius: '8px', boxSizing: 'border-box' },
   infoLabel: { fontSize: '9px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' },
   infoValue: { fontSize: '11px', fontWeight: '700', color: '#1e293b', wordBreak: 'break-word' },
 
-  tabBar: { display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', overflowX: 'auto', paddingBottom: '5px' },
+  tabBar: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' },
   tabBtn: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid transparent', cursor: 'pointer', color: '#94a3b8', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
   tabBtnActive: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid #2563eb', cursor: 'pointer', color: '#2563eb', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
   btnSalvar: { width: "100%", padding: "16px", background: "#059669", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", marginTop: '30px' },

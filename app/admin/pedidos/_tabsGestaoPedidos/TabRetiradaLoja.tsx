@@ -115,7 +115,8 @@ export default function TabRetiradaLoja({
                 const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", idPedido);
                 await updateDoc(pedidoRef, {
                     status: 'Concluído',
-                    enviado: true
+                    enviado: true,
+                    "StatusProducao.dsStatusProducao": "Concluído"
                 });
             }
 
@@ -217,8 +218,8 @@ export default function TabRetiradaLoja({
                     {/* Seletor de itens por página */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: 'bold' }}>
                         <span>Mostrar:</span>
-                        <select 
-                            value={itensPorPagina} 
+                        <select
+                            value={itensPorPagina}
                             onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
                             style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
                         >
@@ -309,8 +310,8 @@ export default function TabRetiradaLoja({
                                         </div>
 
                                         <div className="mobile-linha-baixo">
-                                            <span 
-                                                className="mobile-id-badge" 
+                                            <span
+                                                className="mobile-id-badge"
                                                 onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
                                                 title="Toque para copiar o ID completo"
                                             >
@@ -402,7 +403,7 @@ export default function TabRetiradaLoja({
                                                         <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
                                                     </div>
                                                     <div><strong>Cupom:</strong> {cupomStr}</div>
-                                                    
+
                                                     <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
                                                         <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                     </div>

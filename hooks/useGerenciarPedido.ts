@@ -51,13 +51,13 @@ export function useGerenciarPedido({ db, lojistaIdApp, setLocalPedidos }: UseGer
             const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
             
             const payload: Record<string, any> = {
-                "StatusProducao.dsStatusProdução": novoStatus,
+                "StatusProducao.dsStatusProducao": novoStatus,
                 ...extras
             };
 
             await updateDoc(pedidoRef, payload);
 
-            // 🎯 ATUALIZAÇÃO OTIMISTA CORRIGIDA: Assegura mapeamento profundo de StatusProducao e extras
+            // 🎯 ATUALIZAÇÃO OTIMISTA CORRIGIDA: Assegura mapeamento profundo de StatusProducao e extras sem acento
             setLocalPedidos(prev => prev.map(p => {
                 if (p.id === pedidoId) {
                     const statusProducaoAtual = (p as any).StatusProducao || {};
@@ -66,8 +66,8 @@ export function useGerenciarPedido({ db, lojistaIdApp, setLocalPedidos }: UseGer
                         ...extras,
                         StatusProducao: {
                             ...statusProducaoAtual,
-                            dsStatusProdução: novoStatus,
-                            ...(extras["StatusProducao.dsStatusProdução"] ? { dsStatusProdução: extras["StatusProducao.dsStatusProdução"] } : {})
+                            dsStatusProducao: novoStatus,
+                            ...(extras["StatusProducao.dsStatusProducao"] ? { dsStatusProducao: extras["StatusProducao.dsStatusProducao"] } : {})
                         }
                     };
                 }

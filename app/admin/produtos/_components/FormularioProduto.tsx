@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import { FiSettings, FiCamera, FiSliders, FiGrid, FiInfo } from "react-icons/fi";
 import { styles } from "../styles";
-import { formatarPeso, formatarMedida } from "@/utils/formatters"; // ✨ Importando as máscaras fluidas
+import { formatarPeso, formatarMedida } from "@/utils/formatters";
 
 interface FormularioProdutoProps {
   nome: string;
@@ -125,12 +125,16 @@ export default function FormularioProduto({
     setFiles(novosFiles);
   };
 
-  // 🚚 Precisa de frete apenas se NÃO for download digital e NEM produto digital personalizado
   const precisaDeFrete = tipoProduto !== 'digital_download' && tipoProduto !== 'Digital_Personalizado';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       
+      {/* Importação isolada da fonte Amaranth apenas para uso na descrição */}
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Amaranth:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+      `}</style>
+
       <style jsx>{`
         @media (max-width: 768px) {
           .imagens-container-mobile {
@@ -163,7 +167,6 @@ export default function FormularioProduto({
         </label>
         <div className="imagens-container-mobile" style={{ display: 'flex', gap: '10px', alignItems: 'center', overflowX: 'auto', paddingBottom: '5px' }}>
           
-          {/* Slot Principal / Capa */}
           <div
             className="slot-imagem-mobile"
             draggable={totalImagensCount > 0}
@@ -222,7 +225,6 @@ export default function FormularioProduto({
             )}
           </div>
 
-          {/* Slots Secundários (3 miniaturas) */}
           {[1, 2, 3].map((slotIndex) => {
             const temImagem = slotIndex < totalImagensCount;
             let imgSrc = "";
@@ -295,7 +297,6 @@ export default function FormularioProduto({
           })}
         </div>
 
-        {/* Botão de Upload Modernizado e Limpo */}
         <label className="btn-moderno" style={{
           display: 'flex',
           alignItems: 'center',
@@ -366,15 +367,19 @@ export default function FormularioProduto({
           </select>
         )}
 
+        {/* ✨ CAIXA DE DESCRIÇÃO COM A FONTE AMARANTH APLICADA */}
         <textarea
-          style={{ ...styles.textarea, marginBottom: '10px' }}
+          style={{ 
+            ...styles.textarea, 
+            marginBottom: '10px', 
+            fontFamily: "'Amaranth', sans-serif" 
+          }}
           value={descricao}
           onClick={() => setShowDescModal(true)}
           readOnly
           placeholder="Descrição... *"
         />
 
-        {/* Botões de Ação Internos Modernizados (Grade e Personalização) */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
           <button
             type="button"
@@ -456,7 +461,7 @@ export default function FormularioProduto({
         </select>
 
         <div>
-          <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309', display: 'block', marginBottom: '4px' }}>
+          <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#b45309', display: 'block', marginBottom: '4px' }}>
             ⏱️ Dias necessários para produzir / preparar o produto:
           </label>
           <input
@@ -506,10 +511,9 @@ export default function FormularioProduto({
 
       <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
 
-      {/* 5. CONFIGURAÇÕES DE LOGÍSTICA E FRETE (Exibe campos de peso ou aviso de produto sem frete) */}
+      {/* 5. CONFIGURAÇÕES DE LOGÍSTICA E FRETE */}
       {precisaDeFrete ? (
         <div style={{ opacity: temVariaveisComPreco && !pesosDiferentesPorVariacao ? 0.6 : 1 }}>
-          {/* ✨ SELETOR DE PESOS E MEDIDAS POR VARIAÇÃO */}
           <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '10px 12px', borderRadius: '8px', marginBottom: '12px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
               <input
@@ -602,7 +606,7 @@ export default function FormularioProduto({
 
       <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
 
-      {/* 6. SKU (CÓDIGO) — Desativado caso as variações tenham preço ativo */}
+      {/* 6. SKU (CÓDIGO) */}
       <div style={{ opacity: temVariaveisComPreco ? 0.6 : 1 }}>
         <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px', display: 'block' }}>
           SKU (Código Base) {temVariaveisComPreco && "— Gerenciado na Grade"}

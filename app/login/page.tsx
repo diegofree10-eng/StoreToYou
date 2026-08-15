@@ -63,8 +63,23 @@ export default function AuthPage() {
                     return;
                 }
 
-                // ✨ Atualiza automaticamente contas antigas com os novos campos do index ao logar
-                await sincronizarNovosCamposLojista(userCredential.user.uid, lojaDoc.data());
+                // ✨ BUSCA A VERSÃO GLOBAL MAIS RECENTE CADASTRADA PELO MASTER
+                let schemaGlobal = 0;
+                let versaoSistemaGlobal = "0.0.0";
+                try {
+                    const configSistemaRef = doc(db, "configuracoes", "sistema");
+                    const configSnap = await getDoc(configSistemaRef);
+                    if (configSnap.exists()) {
+                        const dataConfig = configSnap.data();
+                        schemaGlobal = Number(dataConfig.versaoSchemaAtual) || Number(dataConfig.historicoVersoes?.nrVersaoSchemaSistema) || 0;
+                        versaoSistemaGlobal = dataConfig.dsVersaoSistema || dataConfig.historicoVersoes?.nrVersaoSistemaSistema || "0.0.0";
+                    }
+                } catch (err) {
+                    console.error("Erro ao buscar versão global do sistema:", err);
+                }
+
+                // ✨ Atualiza automaticamente contas antigas e valida o schema e a versão do sistema ao logar
+                await sincronizarNovosCamposLojista(userCredential.user.uid, lojaDoc.data(), schemaGlobal, versaoSistemaGlobal);
 
                 await setDoc(lojaRef, { ultimoLogin: serverTimestamp() }, { merge: true });
                 router.push("/admin");

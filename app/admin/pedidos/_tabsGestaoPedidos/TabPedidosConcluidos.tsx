@@ -66,8 +66,16 @@ export default function TabPedidosConcluidos({
         return pedidos.filter(p => {
             if (!p) return false;
             const statusGeral = String(p.status || '').trim().toLowerCase();
-            const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
-            const isConcluido = statusGeral === 'concluído' || statusGeral === 'concluido' || statusGeral === 'enviado' || statusProd === 'concluído' || statusProd === 'concluido' || (p as any).enviado === true;
+            const statusProd = String((p as any).StatusProducao?.dsStatusProducao || '').trim().toLowerCase();
+
+            const isConcluido =
+                statusGeral === 'concluído' ||
+                statusGeral === 'concluido' ||
+                statusGeral === 'enviado' ||
+                statusProd === 'concluído' ||
+                statusProd === 'concluido' ||
+                (p as any).enviado === true;
+
             return isConcluido;
         });
     }, [pedidos]);
@@ -342,7 +350,7 @@ export default function TabPedidosConcluidos({
                                                         <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
                                                     </div>
                                                     <div><strong>Cupom:</strong> {cupomStr}</div>
-                                                
+
                                                     <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
                                                         <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                     </div>

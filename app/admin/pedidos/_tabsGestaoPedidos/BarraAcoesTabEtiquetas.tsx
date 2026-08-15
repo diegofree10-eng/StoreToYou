@@ -2,6 +2,7 @@
 'use client';
 import React, { useState } from 'react';
 import ModalProcessamento from '../ModalProcessamento';
+import AlertaErrosMelhorEnvio from './AlertaErrosMelhorEnvio';
 import { doc, updateDoc } from 'firebase/firestore';
 
 interface BarraAcoesProps {
@@ -50,6 +51,9 @@ export default function BarraAcoesTabEtiquetas({
         itens: { id: string; numero: string; status: 'processando' | 'sucesso' | 'erro'; mensagem?: string }[];
     }>({ aberto: false, titulo: "", itens: [] });
 
+    // Estado para controlar o modal central de erro do Melhor Envio
+    const [erroModalMelhorEnvio, setErroModalMelhorEnvio] = useState<string | null>(null);
+
     // 🛡️ Se estiver na aba de concluídos, bloqueia completamente seleções e ações em massa
     const isAbaConcluidos = abaAtiva === 'concluidos';
 
@@ -60,24 +64,31 @@ export default function BarraAcoesTabEtiquetas({
 
     const todosVisiveisSelecionados = !isAbaConcluidos && idsVisiveisDaAba.length > 0 && idsVisiveisDaAba.every(id => selecionados.includes(id));
 
-    // 🔍 Filtro 1: Pedidos sem etiqueta gerada (exclui os que deram erro ou pendência de saldo)
+    // 🔍 Filtro: Pedidos que NÃO têm etiqueta gerada, NÃO possuem ID/Código de Envio OU que estão com erro (para permitir reemissão e correção)
     const pedidosSelecionadosObj = selecionadosNestaAba
         .map(id => localPedidos.find(p => p.id === id))
         .filter(Boolean);
 
-    const pedidosPendentesDeEtiqueta = pedidosSelecionadosObj.filter(
-        p => p?.Etiqueta?.isEtiquetaGerada !== true &&
-            p?.Etiqueta?.statusEtiqueta !== 'erro' &&
-            p?.Etiqueta?.statusEtiqueta !== 'pendente_saldo' &&
-            p?.statusEtiqueta !== 'pendente_saldo'
-    );
+    const pedidosPendentesDeEtiqueta = pedidosSelecionadosObj.filter(p => {
+        const idEtq = p?.Etiqueta?.IdEtiqueta;
+        const codEnv = p?.Etiqueta?.codigoEnvio;
+        const statusEtq = p?.Etiqueta?.statusEtiqueta;
+
+        // Se tem ID e Cod, a etiqueta existe no Melhor Envio.
+        // Só permitimos emitir de novo se ele estiver em status de erro E NÃO tiver o ID/Cod
+        // Se tiver ID e Cod, ele não pode ser "emitido", deve ser "pago" ou "sincronizado".
+        if (idEtq && codEnv) return false;
+
+        // Se chegar aqui, não tem Id/Cod, então pode aparecer o botão de emitir se estiver em erro ou pendente
+        return statusEtq === 'pendente' || statusEtq === 'erro' || !statusEtq;
+    });
     const qtdPendentes = pedidosPendentesDeEtiqueta.length;
 
     // 🔍 Filtro 2: Pedidos com erro de pagamento ou pendência de saldo (para o botão Tentar Pagamento)
     const pedidosComErroPagamento = pedidosSelecionadosObj.filter(p => {
         const statusEtq = String(p?.Etiqueta?.statusEtiqueta || p?.statusEtiqueta || "").toLowerCase();
         const temErroMsg = !!p?.erroPagamento || !!p?.Etiqueta?.erroPagamento || !!p?.mensagemErro;
-        return statusEtq === 'erro' || statusEtq === 'pendente_saldo' || temErroMsg;
+        return statusEtq === 'pendente_saldo' || temErroMsg;
     });
     const qtdComErro = pedidosComErroPagamento.length;
 
@@ -90,46 +101,134 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    // ⚡ 1. Emitir Etiquetas em Massa
+    // ⚡ 1. Emitir Etiquetas em Massa com Limpeza Prévia, Tradução e Status por Pedido
     const emitirEtiquetasEmMassa = async () => {
         if (isAbaConcluidos) return;
         if (selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
-        if (qtdPendentes === 0) return;
+
+        // Filtra novamente para garantir segurança estrita contra duplicidade
+        const pedidosParaProcessar = pedidosPendentesDeEtiqueta.filter(p => {
+            const jaPossui = !!p?.Etiqueta?.codigoEnvio || !!p?.Etiqueta?.IdEtiqueta;
+            return !jaPossui || p?.Etiqueta?.statusEtiqueta === 'erro' || !!p?.mensagemError;
+        });
+
+        if (pedidosParaProcessar.length === 0) {
+            alert("Nenhum pedido elegível para emissão (os selecionados já possuem etiqueta válida).");
+            return;
+        }
 
         setCarregandoAcao(true);
         setModalProgresso({
             aberto: true,
             titulo: "Emitindo Etiquetas em Massa",
-            itens: pedidosPendentesDeEtiqueta.map(ped => {
+            itens: pedidosParaProcessar.map(ped => {
                 const num = ped?.numeroPedido ? String(ped.numeroPedido) : ped.id.slice(-4);
-                return { id: ped.id, numero: num, status: 'processando', mensagem: 'Aguardando...' };
+                return { id: ped.id, numero: num, status: 'processando', mensagem: 'Limpando dados antigos e emitindo...' };
             })
         });
 
         try {
+            // 🛡️ Limpeza preventiva no banco para apagar resíduos de erros anteriores
+            for (const ped of pedidosParaProcessar) {
+                if (db && lojistaIdApp) {
+                    const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", ped.id);
+                    await updateDoc(pedidoRef, {
+                        "Etiqueta": {
+                            isEtiquetaGerada: false,
+                            statusEtiqueta: "processando",
+                            urlEtiqueta: null,
+                            IdEtiqueta: null,
+                            codigoEnvio: null,
+                            dsNumRastreio: null,
+                            mensagemErro: null
+                        },
+                        "statusEtiqueta": "processando",
+                        "dsNumRastreio": null,
+                        "mensagemErro": null
+                    }).catch(() => { });
+                }
+            }
+
             const res = await fetch("/api/frete/gerar-massa", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     lojistaId: lojistaIdApp,
-                    orders: pedidosPendentesDeEtiqueta
+                    orders: pedidosParaProcessar
                 })
             });
             const data = await res.json();
 
+            // Função para traduzir erros técnicos da API em mensagens claras para o lojista
+            const traduzirErroMelhorEnvio = (msgBruta: string) => {
+                const m = (msgBruta || "").toLowerCase();
+                if (m.includes("unauthenticated") || m.includes("token") || m.includes("unauthorized")) {
+                    return "Token de acesso do Melhor Envio expirado ou inválido. Reconecte a integração.";
+                }
+                if (m.includes("cep") || m.includes("postal")) {
+                    return "CEP de origem ou destino inválido ou não encontrado.";
+                }
+                if (m.includes("balance") || m.includes("saldo") || m.includes("funds")) {
+                    return "Saldo insuficiente na carteira do Melhor Envio.";
+                }
+                if (m.includes("weight") || m.includes("dimensõ") || m.includes("dimension") || m.includes("size")) {
+                    return "Dimensões ou peso do pacote fora dos limites permitidos.";
+                }
+                if (m.includes("service") || m.includes("serviço")) {
+                    return "Serviço de frete indisponível para esta rota.";
+                }
+                return msgBruta || "Erro desconhecido ao processar etiqueta.";
+            };
+
+            // Processa o retorno item por item e atualiza individualmente o Firestore de cada pedido
+            const novosItensProgresso = await Promise.all(pedidosParaProcessar.map(async (ped) => {
+                const num = ped?.numeroPedido ? String(ped.numeroPedido) : ped.id.slice(-4);
+
+                const resultadoItem = data.results?.find((r: any) => r.pedido === ped.id || r.pedidoId === ped.id);
+                const erroItem = data.errors?.find((err: any) => err.pedido === ped.id);
+
+                const isSucesso = resultadoItem && (resultadoItem.status === 'sucesso' || resultadoItem.sucesso);
+                const mensagemErroBruta = erroItem?.message || resultadoItem?.erro || (isSucesso ? null : data.error);
+
+                if (db && lojistaIdApp) {
+                    const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", ped.id);
+                    if (isSucesso) {
+                        await updateDoc(pedidoRef, {
+                            "Etiqueta.isEtiquetaGerada": true,
+                            "Etiqueta.statusEtiqueta": "gerada",
+                            "Etiqueta.IdEtiqueta": resultadoItem.id || resultadoItem.IdEtiqueta,
+                            "Etiqueta.codigoEnvio": resultadoItem.codigoEnvio,
+                            "Etiqueta.urlEtiqueta": resultadoItem.url,
+                            "Etiqueta.mensagemErro": null,
+                            "statusEtiqueta": "gerada",
+                            "dsNumRastreio": resultadoItem.dsNumRastreio || resultadoItem.codigoEnvio,
+                            "mensagemErro": null
+                        }).catch(() => { });
+                    } else if (mensagemErroBruta) {
+                        const mensagemAmigavel = traduzirErroMelhorEnvio(mensagemErroBruta);
+                        await updateDoc(pedidoRef, {
+                            "Etiqueta.statusEtiqueta": "erro",
+                            "Etiqueta.mensagemErro": mensagemAmigavel,
+                            "statusEtiqueta": "erro",
+                            "mensagemErro": mensagemAmigavel
+                        }).catch(() => { });
+                    }
+                }
+
+                if (isSucesso) {
+                    return { id: ped.id, numero: num, status: 'sucesso' as const, mensagem: 'Etiqueta emitida com sucesso!' };
+                } else {
+                    const msgFinal = traduzirErroMelhorEnvio(mensagemErroBruta);
+                    return { id: ped.id, numero: num, status: 'erro' as const, mensagem: msgFinal };
+                }
+            }));
+
             setModalProgresso(prev => ({
                 ...prev,
-                itens: prev.itens.map(item => {
-                    const resultadoItem = data.results?.find((r: any) => r.pedido === item.id || r.pedidoId === item.id);
-                    if (resultadoItem && (resultadoItem.status === 'sucesso' || resultadoItem.sucesso)) {
-                        return { ...item, status: 'sucesso', mensagem: 'Etiqueta emitida com sucesso!' };
-                    }
-                    const erroItem = data.errors?.find((err: any) => err.pedido === item.id);
-                    return { ...item, status: 'erro', mensagem: erroItem?.message || resultadoItem?.erro || data.error || 'Falha ao emitir' };
-                })
+                itens: novosItensProgresso
             }));
         } catch (e: any) {
-            alert("Erro ao emitir etiquetas: " + e.message);
+            alert("Erro de conexão ao emitir etiquetas: " + e.message);
             setModalProgresso(prev => ({ ...prev, aberto: false }));
         } finally {
             setCarregandoAcao(false);
@@ -161,6 +260,13 @@ export default function BarraAcoesTabEtiquetas({
             });
             const data = await res.json();
 
+            if (!res.ok || data.error) {
+                const msgErro = data.error || "Falha ao reprocessar pagamento.";
+                setModalProgresso(prev => ({ ...prev, aberto: false }));
+                setErroModalMelhorEnvio(msgErro);
+                return;
+            }
+
             setModalProgresso(prev => ({
                 ...prev,
                 itens: prev.itens.map(item => {
@@ -173,8 +279,8 @@ export default function BarraAcoesTabEtiquetas({
                 })
             }));
         } catch (e: any) {
-            alert("Erro ao tentar pagamento: " + e.message);
             setModalProgresso(prev => ({ ...prev, aberto: false }));
+            setErroModalMelhorEnvio("Erro ao tentar pagamento: " + e.message);
         } finally {
             setCarregandoAcao(false);
         }
@@ -206,10 +312,10 @@ export default function BarraAcoesTabEtiquetas({
             if (data.url) {
                 window.open(data.url, '_blank');
             } else {
-                alert(data.erro || "Não foi possível gerar o PDF de impressão.");
+                setErroModalMelhorEnvio(data.erro || "Não foi possível gerar o PDF de impressão.");
             }
         } catch (e: any) {
-            alert("Erro ao imprimir etiquetas: " + e.message);
+            setErroModalMelhorEnvio("Erro ao imprimir etiquetas: " + e.message);
         } finally {
             setCarregandoAcao(false);
         }
@@ -248,53 +354,6 @@ export default function BarraAcoesTabEtiquetas({
             alert("✅ Pedidos movidos para a aba de Enviados com sucesso!");
         } catch (e: any) {
             alert("Erro ao enviar pedidos: " + e.message);
-        } finally {
-            setCarregandoAcao(false);
-        }
-    };
-
-    // ✨ 4. Forçar Status Concluído
-    const marcarComoConcluidoEmLote = async () => {
-        if (isAbaConcluidos) return;
-        if (selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
-        if (!db || !lojistaIdApp) return;
-
-        if (!confirm(`Deseja marcar ${selecionadosCount} pedido(s) selecionado(s) como Concluído?`)) return;
-
-        setCarregandoAcao(true);
-        try {
-            for (const pedidoId of selecionadosNestaAba) {
-                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
-                const dadosAtualizacao = {
-                    status: 'Concluído',
-                    enviado: true,
-                    "StatusProducao.dsStatusProdução": 'Concluído',
-                    "StatusProducao.isConcluido": true
-                };
-
-                await updateDoc(pedidoRef, dadosAtualizacao);
-            }
-
-            setLocalPedidos(prev => prev.map(p => {
-                if (selecionadosNestaAba.includes(p.id)) {
-                    return {
-                        ...p,
-                        status: 'Concluído',
-                        enviado: true,
-                        StatusProducao: {
-                            ...(p as any).StatusProducao,
-                            dsStatusProdução: 'Concluído',
-                            isConcluido: true
-                        }
-                    };
-                }
-                return p;
-            }));
-
-            setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
-            alert(`✅ ${selecionadosCount} pedido(s) atualizados para Concluído com sucesso!`);
-        } catch (e: any) {
-            alert("Erro ao atualizar pedidos: " + e.message);
         } finally {
             setCarregandoAcao(false);
         }
@@ -339,7 +398,8 @@ export default function BarraAcoesTabEtiquetas({
                     "Etiqueta.codigoEnvio": null,
                     "Etiqueta.dsNumRastreio": null,
                     "statusEtiqueta": "pendente",
-                    "dsNumRastreio": ""
+                    "dsNumRastreio": "",
+                    "mensagemErro": null
                 });
             }
 
@@ -349,6 +409,7 @@ export default function BarraAcoesTabEtiquetas({
                         ...p,
                         statusEtiqueta: "pendente",
                         dsNumRastreio: "",
+                        mensagemErro: null,
                         Etiqueta: {
                             ...(p as any).Etiqueta,
                             isEtiquetaGerada: false,
@@ -356,7 +417,8 @@ export default function BarraAcoesTabEtiquetas({
                             urlEtiqueta: null,
                             IdEtiqueta: null,
                             codigoEnvio: null,
-                            dsNumRastreio: null
+                            dsNumRastreio: null,
+                            mensagemErro: null
                         }
                     };
                 }
@@ -412,7 +474,8 @@ export default function BarraAcoesTabEtiquetas({
                 const novoPago = valorAcao === 'pago';
                 for (const pedidoId of selecionadosNestaAba) {
                     await alterarStatusPedido(pedidoId, 'pendente', {
-                        "StatusProducao.isPago": novoPago
+                        "StatusProducao.isPago": novoPago,
+                        "StatusProducao.dsStatusProducao": "Pendente" // 🛠️ Força o campo padronizado para evitar o conflito
                     });
                 }
                 setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
@@ -424,7 +487,9 @@ export default function BarraAcoesTabEtiquetas({
                     return;
                 }
                 for (const pedidoId of selecionadosNestaAba) {
-                    await alterarStatusPedido(pedidoId, valorAcao.toLowerCase());
+                    await alterarStatusPedido(pedidoId, valorAcao.toLowerCase(), {
+                        "StatusProducao.dsStatusProducao": valorAcao.charAt(0).toUpperCase() + valorAcao.slice(1)
+                    });
                 }
                 setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
                 alert("✅ Status atualizado com sucesso!");
@@ -439,7 +504,7 @@ export default function BarraAcoesTabEtiquetas({
 
     // 🛡️ Se estiver na aba de concluídos, não exibe nenhuma barra de ação ou controle de massa
     if (isAbaConcluidos) {
-        return null; 
+        return null;
     }
 
     return (
@@ -604,6 +669,11 @@ export default function BarraAcoesTabEtiquetas({
                     window.location.reload();
                 }}
             />
+
+            <AlertaErrosMelhorEnvio
+                erroMensagem={erroModalMelhorEnvio}
+                onLimparErro={() => setErroModalMelhorEnvio(null)}
+            />
         </>
     );
 }
@@ -656,7 +726,6 @@ const styles: { [key: string]: React.CSSProperties } = {
         color: '#1e293b'
     }
 };
-
 // Barra de acoes controla toda a logica do select de Status produção e botoes de Etiquetas na TabEmitirEtiquetas.tsx
 //⚡ Emitir (Emitir Etiquetas) — Para gerar as etiquetas em lote na API do Melhor Envio.
 

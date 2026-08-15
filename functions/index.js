@@ -1,6 +1,10 @@
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
-const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
+const {
+  getFirestore,
+  FieldValue,
+  Timestamp,
+} = require("firebase-admin/firestore");
 
 admin.initializeApp();
 const db = getFirestore();
@@ -110,6 +114,7 @@ exports.prepararNovoLojista = functions
         dscorPrincipal: "#FF8C00",
         dscorSecundaria: "#F5F5DC",
         dscorTextoCard: "#1e293b",
+        isModoNoturno: false,
       },
       sistema: {
         isFreteGratisAtivo: false,
@@ -130,6 +135,11 @@ exports.prepararNovoLojista = functions
         dsPlanoTeste: "",
         isTesteOuroAtivo: false,
         tsVencimentoTeste: null,
+        isMelhorEnvioSandbox: false,
+      },
+      atualizacao: {
+        nrVersaoSistemaLogista: "0.0.0",
+        nrVersaoSchemaLogista: 0,
       },
       cupons: {},
       financeiro: {
@@ -140,14 +150,19 @@ exports.prepararNovoLojista = functions
       redesSociais: [],
     };
 
-    await db.doc(`lojistas/${lojistaId}`).set(estruturaLojista, { merge: true });
-    await db.collection(`lojistas/${lojistaId}/assinaturas`).doc("registro_inicial").set({
-      vlAssinaturaLojista: 0,
-      tsAssinaturaLojista: FieldValue.serverTimestamp(),
-      dsStatusPagamentoLojista: "Ativação",
-      dsMesReferencia: "Cadastro Inicial",
-      createdAt: FieldValue.serverTimestamp(),
-    });
+    await db
+      .doc(`lojistas/${lojistaId}`)
+      .set(estruturaLojista, { merge: true });
+    await db
+      .collection(`lojistas/${lojistaId}/assinaturas`)
+      .doc("registro_inicial")
+      .set({
+        vlAssinaturaLojista: 0,
+        tsAssinaturaLojista: FieldValue.serverTimestamp(),
+        dsStatusPagamentoLojista: "Ativação",
+        dsMesReferencia: "Cadastro Inicial",
+        createdAt: FieldValue.serverTimestamp(),
+      });
     await db.collection(`lojistas/${lojistaId}/mensagens`).add({
       titulo: "Bem-vindo!",
       texto: "...",
@@ -156,7 +171,9 @@ exports.prepararNovoLojista = functions
       prioridade: "alta",
       categoria: "sistema",
     });
-    await db.doc(`lojistas/${lojistaId}/categorias/geral`).set({ nome: "Geral" });
+    await db
+      .doc(`lojistas/${lojistaId}/categorias/geral`)
+      .set({ nome: "Geral" });
     return null;
   });
 
@@ -199,16 +216,17 @@ exports.verificarPagamentoLojistas = functions
   .timeZone("America/Sao_Paulo")
   .onRun(async (context) => {
     const agora = Timestamp.now();
-    
-    const snapshot = await db.collection("lojistas")
+
+    const snapshot = await db
+      .collection("lojistas")
       .where("dadosLoja.dsStatusLoja", "==", "ativo")
       .where("dadosLoja.tsVencimentoLoja", "<", agora)
       .get();
 
     if (snapshot.empty) return null;
 
-    const promessas = snapshot.docs.map((doc) => 
-      doc.ref.update({ "dadosLoja.dsStatusLoja": "suspenso" })
+    const promessas = snapshot.docs.map((doc) =>
+      doc.ref.update({ "dadosLoja.dsStatusLoja": "suspenso" }),
     );
 
     await Promise.all(promessas);

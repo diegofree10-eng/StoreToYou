@@ -217,7 +217,8 @@ export default function TabDigital({
                 const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", idPedido);
                 await updateDoc(pedidoRef, {
                     status: 'Concluído',
-                    enviado: true
+                    enviado: true,
+                    "StatusProducao.dsStatusProducao": "Concluído"
                 });
             }
 

@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { doc, updateDoc, collection, onSnapshot, addDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, onSnapshot, addDoc } from "firebase/firestore";
 // Como a pasta hooks está dentro de app:
 import { useDashboardInteligencia } from "@/hooks/useDashboardInteligencia";
 
@@ -17,6 +17,12 @@ import { TabFaturamentoCanais } from "./_tabsDashBoardLogista/TabFaturamentoCana
 import { TabDespesas } from "./_tabsDashBoardLogista/TabDespesas";
 import { TabRelatorioHistorico } from "./_tabsDashBoardLogista/TabRelatorioHistorico";
 import { TabVendas } from "./_tabsDashBoardLogista/TabVendas";
+
+
+// ============================================================================
+// CONSTANTE DE VERSÃO DO SCHEMA (Incrementar apenas ao adicionar novos campos)
+// ============================================================================
+const VERSAO_SCHEMA_CODE = 2;
 
 
 // ============================================================================
@@ -34,17 +40,33 @@ interface ItemPedido {
 interface Pedido {
   id: string;
   data: string;
-  cliente: string;
+  cliente: string | { nmNomeCliente?: string; nome?: string };
   numeroPedido: string | number;
   devolvido: boolean;
   custoFreteLojista?: number;
   freteCusto?: number;
   financeiro: {
-    total: number;
-    frete: number;
+    total?: number;
+    vlTotal?: number;
+    valorTotal?: number;
+    frete?: number;
+    vlFrete?: number;
     subtotal?: number;
+    vlSubtotal?: number;
+    valorSubtotal?: number;
     discount?: number;
+    vlDesconto?: number;
+    descontos?: number;
+    freteGratis?: boolean;
+    dsTransportadoraId?: string;
   };
+  logistica?: {
+    vlFrete?: number;
+  };
+  StatusProducao?: {
+    dsStatusProducao?: string;
+  };
+  status?: string;
   itens: ItemPedido[];
 }
 
@@ -64,48 +86,24 @@ interface DespesaLojista {
 // ============================================================================
 // CONSTANTES E AUXILIARES
 // ============================================================================
-const TABELA_CUSTOS: Record<string, number> = {
-  "Convite Marsala": 2.50,
-  "Convite One Peace": 1.80,
-  "Topo de Bolo Simples": 5.00,
-  "Topo de Bolo Luxo": 12.00,
-  "Digital": 0.00,
-};
-const CUSTO_PADRAO_GENERICO = 2.00;
-
 const formatarMoeda = (valor: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
 
-const INFO_ABAS: Record<string, string> = {
-  vendas: "Visualize pedidos ativos. Clique no nome do cliente para ver os itens comprados e o valor do frete.",
-  catalogo: "Ranking de lucro por produto e variações. Identifique quais itens mais trazem retorno financeiro para o seu bolso.",
-  sazonalidade: "Desempenho mensal do faturamento para identificar meses de pico e vales de vendas.",
-  clientes: "Lista de clientes estrelas baseada no lucro real acumulado que eles deixam para a empresa.",
-  lucro: `Margem de Contribuição: É o que sobra das vendas (R$ 100 - R$ 35 = R$ 65) após pagar insumos e frete. 
-  
-  Esses R$ 65 são o seu "combustível" para:
-  1. Pagar despesas fixas (Aluguel, Luz, Internet).
-  2. Gerar o seu Lucro Real.
-  
-  ⚠️ Se a margem for baixa, você está apenas "trocando dinheiro". O ideal é manter acima de 30%.`,
-  precificacao: "Simulador estratégico. Calcule exatamente por quanto vender seus produtos para obter margens de lucro reais e seguras.",
-  canais: "Distribuição e divisão de faturamento Omnichannel unificado (Sistema Próprio, Shopee, Mercado Livre, TikTok Shop).",
-  despesas: "Controle de despesas fixas e variáveis operacionais para apuração correta do seu caixa real.",
-  devolucoes: "Histórico de pedidos cancelados ou devolvidos. Os valores são removidos automaticamente dos gráficos e totais gerais."
-};
-
 const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dataFormatada }: any) => {
-  const nomeExibicao = pedido.cliente && typeof pedido.cliente === 'object'
-    ? pedido.cliente.nome
-    : (pedido.cliente || "Cliente Sem Nome");
+  const clienteObj = typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : {};
+  const nomeExibicao = clienteObj.nmNomeCliente || clienteObj.nome || (typeof pedido.cliente === 'string' ? pedido.cliente : "Cliente Sem Nome");
 
   const fin = pedido.financeiro || {};
-  const totalProdutos = Number(fin.totalProdutos || fin.subtotal || 0);
-  const desconto = Number(fin.discount || 0);
-  const frete = Number(fin.frete || 0);
-  const totalFinal = Number(fin.total || 0);
+  const log = pedido.logistica || {};
 
-  const subtotalComDesconto = totalProdutos - desconto;
+  // 🛡️ Extração robusta unificada com os campos reais do Firebase (vlSubtotal, vlFrete, etc.)
+  const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? fin.valorSubtotal ?? 0);
+  const descontoVal = Number(fin.vlDesconto ?? fin.discount ?? fin.descontos ?? 0);
+  const freteVal = Number(log.vlFrete ?? fin.frete ?? fin.vlFrete ?? 0);
+  const freteGratisFlag = fin.freteGratis || fin.dsTransportadoraId === "frete_gratis_ativado";
+
+  const totalCalculadoManual = subtotalVal + (freteGratisFlag ? 0 : freteVal) - descontoVal;
+  const totalFinal = Number(fin.vlTotal ?? fin.total ?? fin.valorTotal ?? (totalCalculadoManual > 0 ? totalCalculadoManual : 0));
 
   return (
     <React.Fragment>
@@ -130,7 +128,7 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
 
               <div style={{ flex: 2, backgroundColor: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>Itens do Pedido:</strong>
-                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#333' }}>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#333', marginBottom: '12px' }}>
                   {(pedido.itens || []).map((it: ItemPedido, idx: number) => (
                     <li key={idx} style={{ marginBottom: '4px' }}>
                       {Number(it.qty || 1)}x {it.nome || "Produto"}
@@ -138,6 +136,11 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
                     </li>
                   ))}
                 </ul>
+
+                {/* 🛠️ ID do Pedido adicionado abaixo dos itens */}
+                <div style={{ fontSize: '13px', color: '#333', borderTop: '1px dashed #e2e8f0', paddingTop: '8px' }}>
+                  <strong>ID do Pedido:</strong> <span style={{ fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>{pedido.id}</span>
+                </div>
               </div>
 
               <div style={{ flex: 1, backgroundColor: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -146,13 +149,13 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
                 <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={styles.finRow}>
                     <span>Total dos Produtos:</span>
-                    <span>{formatarMoeda(Number(fin.subtotal || 0))}</span>
+                    <span>{formatarMoeda(subtotalVal)}</span>
                   </div>
 
-                  {Number(fin.desconto || 0) > 0 ? (
+                  {descontoVal > 0 ? (
                     <div style={{ ...styles.finRow, color: '#16a34a' }}>
                       <span>Cupom de Desconto:</span>
-                      <span>- {formatarMoeda(Number(fin.desconto))}</span>
+                      <span>- {formatarMoeda(descontoVal)}</span>
                     </div>
                   ) : (
                     <div style={{ ...styles.finRow, color: '#94a3b8', fontStyle: 'italic' }}>
@@ -163,18 +166,18 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
 
                   <div style={styles.finRow}>
                     <span>Sub total:</span>
-                    <span>{formatarMoeda(Number(fin.subtotal || 0) - Number(fin.desconto || 0))}</span>
+                    <span>{formatarMoeda(subtotalVal - descontoVal)}</span>
                   </div>
 
                   <div style={styles.finRow}>
                     <span>Total de Frete:</span>
-                    <strong>{fin.freteGratis ? "Grátis" : formatarMoeda(Number(fin.frete || 0))}</strong>
+                    <strong>{freteGratisFlag ? "Grátis" : formatarMoeda(freteVal)}</strong>
                   </div>
 
                   <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
 
                   <div style={{ ...styles.finRow, fontSize: '14px', fontWeight: 'bold', color: '#78350f' }}>
-                    <span>Pagamento total:</span> <span>{formatarMoeda(Number(fin.total || 0))}</span>
+                    <span>Pagamento total:</span> <span>{formatarMoeda(totalFinal)}</span>
                   </div>
                 </div>
               </div>
@@ -200,7 +203,6 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
   const [dataFim, setDataFim] = useState("");
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
 
-  // Estado posicionado corretamente dentro do componente
   const [itensPorPagina, setItensPorPagina] = useState(20);
 
   const [canaisExternos, setCanaisExternos] = useState<CanalRenda[]>([]);
@@ -237,20 +239,64 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
     }
   };
 
+  // ============================================================================
+  // CARREGAMENTO OTIMIZADO COM PROMISE.ALL E MIGRAÇÃO AUTOMÁTICA DE SCHEMA
+  // ============================================================================
   useEffect(() => {
     if (!lojistaId) return;
 
-    const unsubLojista = onSnapshot(doc(db, "lojistas", lojistaId), (lojistaSnap) => {
-      if (lojistaSnap.exists()) {
-        const dadosLojista = lojistaSnap.data();
-        const nomePlanoLojista = dadosLojista.plano || "Bronze";
+    const carregarEVerificarLojista = async () => {
+      try {
+        // Busca paralela: Perfil do lojista + Configurações globais do sistema
+        const [lojistaSnap, planosSnap] = await Promise.all([
+          getDoc(doc(db, "lojistas", lojistaId)),
+          getDoc(doc(db, "configuracoes", "planos"))
+        ]);
 
-        if (dadosLojista.metaFaturamentoMensal) {
-          setMetaFaturamento(Number(dadosLojista.metaFaturamentoMensal));
-          setInputMeta(String(dadosLojista.metaFaturamentoMensal));
-        }
+        if (lojistaSnap.exists()) {
+          const dadosLojista = lojistaSnap.data();
+          const nomePlanoLojista = dadosLojista.plano || "Bronze";
 
-        const unsubPlanos = onSnapshot(doc(db, "configuracoes", "planos"), (planosSnap) => {
+          // Verificação da versão de schema para contas antigas
+          const versaoSchemaBanco = dadosLojista.sistema?.versaoSchema || 0;
+
+          if (versaoSchemaBanco < VERSAO_SCHEMA_CODE) {
+            console.log("🔄 Sincronizando campos novos na conta do lojista...");
+            let houveAlteracao = false;
+            const dadosAtualizados = { ...dadosLojista };
+
+            if (!dadosAtualizados.sistema) {
+              dadosAtualizados.sistema = {};
+            }
+
+            // Exemplo de campo estrutural novo adicionado em versões futuras
+            if (!dadosAtualizados.aparencia) {
+              dadosAtualizados.aparencia = {};
+              houveAlteracao = true;
+            }
+            if (dadosAtualizados.aparencia.isModoNoturno === undefined) {
+              dadosAtualizados.aparencia.isModoNoturno = false;
+              houveAlteracao = true;
+            }
+
+            // Atualiza a versão do schema no objeto
+            dadosAtualizados.sistema.versaoSchema = VERSAO_SCHEMA_CODE;
+            houveAlteracao = true;
+
+            if (houveAlteracao) {
+              await updateDoc(doc(db, "lojistas", lojistaId), {
+                ...dadosAtualizados,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          }
+
+          if (dadosLojista.metaFaturamentoMensal) {
+            setMetaFaturamento(Number(dadosLojista.metaFaturamentoMensal));
+            setInputMeta(String(dadosLojista.metaFaturamentoMensal));
+          }
+
+          // Atribuição de recursos baseados no plano
           if (planosSnap.exists()) {
             const masterPlanos = planosSnap.data();
             const configDoPlanoAtual = masterPlanos[nomePlanoLojista] || {};
@@ -260,13 +306,13 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
               temDespesas: !!configDoPlanoAtual.temDespesas
             });
           }
-        });
-
-        return () => unsubPlanos();
+        }
+      } catch (error) {
+        console.error("Erro ao carregar ou sincronizar dados do lojista:", error);
       }
-    });
+    };
 
-    return () => unsubLojista();
+    carregarEVerificarLojista();
   }, [lojistaId]);
 
   useEffect(() => {
@@ -377,7 +423,7 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
     return pedidos.filter(p => {
       let clienteNomeStr = "";
       if (p.cliente && typeof p.cliente === 'object') {
-        clienteNomeStr = String((p.cliente as any).nome || "");
+        clienteNomeStr = String((p.cliente as any).nmNomeCliente || (p.cliente as any).nome || "");
       } else {
         clienteNomeStr = String(p.cliente || "");
       }
@@ -395,22 +441,6 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
       return true;
     });
   }, [pedidos, buscaNome, dataInicio, dataFim, parseDataPedido]);
-
-  const clientesEstrelaFiltrados = useMemo(() => {
-    if (!buscaNome) return inteligencia.clientesEstrela;
-
-    const resultado: Record<string, any> = {};
-    Object.keys(inteligencia.clientesEstrela).forEach((nomeKey) => {
-      const item = inteligencia.clientesEstrela[nomeKey];
-      const matchNome = nomeKey.toLowerCase().includes(buscaNome.toLowerCase());
-      const matchPedido = item.codigosPedidos?.some((cod: string) => cod.toLowerCase().includes(buscaNome.toLowerCase()));
-
-      if (matchNome || matchPedido) {
-        resultado[nomeKey] = item;
-      }
-    });
-    return resultado;
-  }, [inteligencia.clientesEstrela, buscaNome]);
 
   const abasDisponiveis = [
     { id: "vendas", label: "VENDAS" }, { id: "devolucoes", label: "🔄 DEVOLVIDOS" },
@@ -478,7 +508,6 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
             style={styles.inputDate}
           />
 
-          {/* SELETOR DE PAGINAÇÃO AO LADO DOS FILTROS */}
           <select
             value={itensPorPagina}
             onChange={(e) => setItensPorPagina(Number(e.target.value))}
@@ -517,9 +546,10 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
         {abaAtiva === 'vendas' && (
           <TabVendas
             pedidos={pedidos.filter(p => {
+              // 1. Busca por nome (nmNomeCliente ou nome) ou número do pedido
               let clienteNomeStr = "";
               if (p.cliente && typeof p.cliente === 'object') {
-                clienteNomeStr = String((p.cliente as any).nome || "");
+                clienteNomeStr = String((p.cliente as any).nmNomeCliente || (p.cliente as any).nome || "");
               } else {
                 clienteNomeStr = String(p.cliente || "");
               }
@@ -530,12 +560,19 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
               if (buscaNome && !correspondenciaNome && !correspondenciaNumero) return false;
 
+              // 2. Filtro de Datas
               const dataP = parseDataPedido(p.data);
               if (dataInicio && dataP && dataP < new Date(dataInicio + "T00:00:00")) return false;
               if (dataFim && dataP && dataP > new Date(dataFim + "T23:59:59")) return false;
 
-             
-              return (p as any).status?.toLowerCase() === 'concluído' && !p.devolvido;
+              // 3. APONTAMENTO SEGURO PARA O STATUS CONCLUÍDO
+              const statusProd = String(p.StatusProducao?.dsStatusProducao || "").toLowerCase().trim();
+              const ehConcluido = statusProd === "concluído" || statusProd === "concluido";
+
+              const statusRaiz = String(p.status || "").toLowerCase().trim();
+              const ehConcluidoRaiz = statusRaiz === "concluído" || statusRaiz === "concluido";
+
+              return (ehConcluido || ehConcluidoRaiz) && !p.devolvido;
             })}
             formatarDataExibicao={formatarDataExibicao}
             formatarMoeda={formatarMoeda}
@@ -662,7 +699,6 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
         border-radius: 4px;
       }
 
-      /* Ajuste responsivo exclusivo para os filtros no Mobile */
       @media (max-width: 768px) {
         .filtro-container {
           flex-direction: column !important;
@@ -695,7 +731,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   header: { marginBottom: '24px' },
   btnVoltar: { padding: '8px 16px', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#334155' },
 
-  /* Filtros ajustados para responsividade mobile */
   filtrosCard: { display: 'flex', gap: '12px', flexWrap: 'wrap', backgroundColor: '#fff', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px', alignItems: 'center' },
   input: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', flex: 1, minWidth: '240px', outline: 'none', boxSizing: 'border-box' },
   inputDate: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', color: '#334155', boxSizing: 'border-box' },
@@ -703,10 +738,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   btnAtalho: { padding: '10px 16px', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#475569' },
   btnLimpar: { padding: '10px 16px', backgroundColor: '#fee2e2', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#ef4444', flexShrink: 0, boxSizing: 'border-box' },
 
-  /* Abas transformadas em carrossel horizontal fluido para celular */
-  tabBar: { display: 'flex', gap: '6px', overflowX: 'auto', whiteSpace: 'nowrap', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' },
-  tab: { padding: '8px 14px', border: 'none', background: '#f1f5f9', cursor: 'pointer', color: '#64748b', fontWeight: '600', fontSize: '12px', borderRadius: '8px', flexShrink: 0 },
-  tabActive: { padding: '8px 14px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontWeight: '600', fontSize: '12px', borderRadius: '8px', flexShrink: 0 },
+  tabBar: { display: 'flex', gap: '6px', flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' },
+
+  tab: { padding: '8px 14px', border: 'none', background: '#f1f5f9', cursor: 'pointer', color: '#64748b', fontWeight: '600', fontSize: '12px', borderRadius: '8px' },
+  tabActive: { padding: '8px 14px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontWeight: '600', fontSize: '12px', borderRadius: '8px' },
 
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' },
   card: { backgroundColor: '#fff', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },

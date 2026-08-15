@@ -13,6 +13,35 @@ export default function AparenciaTab({
       ) : (
         <>
           <p style={styles.helpText}>Ajuste as cores principais do seu site para combinar com sua marca.</p>
+          
+          {/* Campo de Ativação do Modo Noturno */}
+          <div style={styles.modoNoturnoContainer}>
+            <div style={styles.modoNoturnoInfo}>
+              <span style={styles.label}>Modo Noturno (Dark Mode)</span>
+              <span style={styles.subLabel}>Ativar tema escuro padrão para os clientes</span>
+            </div>
+            <label style={styles.switch}>
+              <input
+                type="checkbox"
+                checked={config.aparencia?.isModoNoturno || false}
+                onChange={e => setConfig({ 
+                  ...config, 
+                  aparencia: { ...config.aparencia, isModoNoturno: e.target.checked } 
+                })}
+                style={styles.checkboxHidden}
+              />
+              <span style={{
+                ...styles.slider,
+                backgroundColor: config.aparencia?.isModoNoturno ? '#2563eb' : '#cbd5e1'
+              }}>
+                <span style={{
+                  ...styles.sliderThumb,
+                  transform: config.aparencia?.isModoNoturno ? 'translateX(20px)' : 'translateX(2px)'
+                }} />
+              </span>
+            </label>
+          </div>
+
           <div style={styles.colorGrid}>
             <div style={styles.colorItem}>
               <label style={styles.label}>Cor Principal</label>
@@ -56,7 +85,14 @@ export default function AparenciaTab({
             style={{ ...styles.btnRestaurar, marginTop: '20px' }}
             onClick={() => setConfig({
               ...config,
-              aparencia: { dscorPrincipal: "#FFCC80", dscorSecundaria: "#f1e5d7", dscorFundo: "#FFF9F2", dscorTextoCard: "#8B5E3C" }
+              aparencia: { 
+                ...config.aparencia,
+                dscorPrincipal: "#FFCC80", 
+                dscorSecundaria: "#f1e5d7", 
+                dscorFundo: "#FFF9F2", 
+                dscorTextoCard: "#8B5E3C",
+                isModoNoturno: false 
+              }
             })}
           >
             🔄 Restaurar Cores Padrão
@@ -69,9 +105,17 @@ export default function AparenciaTab({
 
 const styles: any = {
   h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
-  label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "4px", display: 'block' },
+  label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "2px", display: 'block' },
+  subLabel: { fontSize: "10px", color: "#94a3b8" },
   helpText: { fontSize: '12px', color: '#64748b', marginBottom: '20px', background: '#f1f5f9', padding: '10px', borderRadius: '8px', borderLeft: '4px solid #2563eb' },
   lockNotice: { padding: '12px', background: '#fff1f2', color: '#be123c', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #fecdd3', marginTop: '10px' },
+  
+  modoNoturnoContainer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '15px' },
+  switch: { position: 'relative', display: 'inline-block', width: '44px', height: '24px', cursor: 'pointer' },
+  checkboxHidden: { opacity: 0, width: 0, height: 0 },
+  slider: { position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, transition: '.3s', borderRadius: '24px' },
+  sliderThumb: { position: 'absolute', content: '""', height: '20px', width: '20px', left: '2px', bottom: '2px', backgroundColor: 'white', transition: '.3s', borderRadius: '50%' },
+
   colorGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', background: '#f8fafc', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', marginTop: '10px' },
   colorItem: { display: 'flex', flexDirection: 'column', gap: '6px' },
   inputColor: { width: '100%', height: '40px', border: '2px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', padding: '2px', background: '#fff' },

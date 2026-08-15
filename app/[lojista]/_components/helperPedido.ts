@@ -299,7 +299,7 @@ export const executarFluxoPedido = async ({
         isEtiquetaGerada: false,
       },
       StatusProducao: {
-        dsStatusProdução: "PEDIDOS",
+        dsStatusProducao: "PEDIDOS",
         isPago: false,
         historico: [
           {

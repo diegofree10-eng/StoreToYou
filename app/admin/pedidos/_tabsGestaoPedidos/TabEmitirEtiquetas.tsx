@@ -271,7 +271,10 @@ export default function TabEmitirEtiquetas({
 
                         const fin = pedido.financeiro || {};
                         const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
-                        const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
+                        
+                        // 🚚 FRETE ATUALIZADO: Olha primeiro na logistica, depois no financeiro e por fim na cotacao
+                        const freteVal = Number(pedidoLogistica.vlFrete ?? fin.vlFrete ?? fin.valorFrete ?? cotacao.vlFreteCotado ?? 0);
+                        
                         const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
                         const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
                         const cupomStr = fin.dsCupom ?? fin.cupom ?? null;
@@ -444,11 +447,11 @@ export default function TabEmitirEtiquetas({
                                                         <div>
                                                             <div><strong>Forma:</strong> Digital</div>
                                                         </div>
-                                                    ) : (pedido.financeiro?.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || pedido.etiquetaGerada) ? (
+                                                    ) : (pedido.logistica?.vlFrete > 0 || pedido.financeiro?.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || pedido.etiquetaGerada) ? (
                                                         <div>
-                                                            <div><strong>Método:</strong> {cotacao.dsMetodoPagamentoCotado || pedido.financeiro?.metodo?.replace('Logística: ', '') || pedidoLogistica.dsMetodoPagamento || "Definida"}</div>
-                                                            <div><strong>Valor:</strong> R$ {Number(cotacao.vlFreteCotado ?? pedido.financeiro?.vlFrete ?? 0).toFixed(2).replace('.', ',')}</div>
-                                                            <div><strong>Prazo:</strong> {cotacao.prazoEntregaCotado ?? pedido.financeiro?.prazoEntrega ?? 0} dias</div>
+                                                            <div><strong>Método:</strong> {pedido.logistica?.dsServico || cotacao.dsMetodoPagamentoCotado || pedido.financeiro?.metodo?.replace('Logística: ', '') || pedidoLogistica.dsMetodoPagamento || "Definida"}</div>
+                                                            <div><strong>Valor:</strong> R$ {Number(pedido.logistica?.vlFrete ?? cotacao.vlFreteCotado ?? pedido.financeiro?.vlFrete ?? 0).toFixed(2).replace('.', ',')}</div>
+                                                            <div><strong>Prazo:</strong> {pedido.logistica?.vlPrazo ?? cotacao.prazoEntregaCotado ?? pedido.financeiro?.prazoEntrega ?? 0} dias</div>
                                                         </div>
                                                     ) : (
                                                         <div>
