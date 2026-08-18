@@ -16,17 +16,19 @@ exports.atualizarEstatisticas = functions
   .onWrite(async (change, context) => {
     const lojistaId = context.params.lojistaId;
     const newData = change.after.exists ? change.after.data() : null;
-    const antes = change.before.data();
+    const antes = change.before.exists ? change.before.data() : null; // Corrigido para verificar se o before existe
 
+    // Se o pedido já estava concluído e continua concluído, não faz nada
     if (
       antes &&
-      antes.status === "concluído" &&
+      antes.status?.toLowerCase() === "concluído" &&
       newData &&
-      newData.status === "concluído"
+      newData.status?.toLowerCase() === "concluído"
     ) {
       return null;
     }
 
+    // Se o pedido mudou para "concluído" agora
     if (newData && newData.status?.toLowerCase() === "concluído") {
       const total = Number(
         newData.financeiro?.vlTotal ||
@@ -34,20 +36,52 @@ exports.atualizarEstatisticas = functions
           newData.total ||
           0,
       );
+
       const data = new Date(newData.data || Date.now());
       const chave = `${data.getFullYear()}_${data.getMonth() + 1}`;
       const statsRef = db.doc(`lojistas/${lojistaId}/dashboard_stats/${chave}`);
+
+      // 🌟 Captura a Forma de Pagamento (padronizada em minúsculo/sem espaços para evitar duplicatas)
+      const formaPagamentoBruta =
+        newData.financeiro?.dsFormaPagamentoCarrinho ||
+        newData.financeiro?.metodo ||
+        newData.formaPagamento ||
+        "pix";
+      const formaPagamento = String(formaPagamentoBruta).trim().toLowerCase();
+
+      // 🌟 Captura a Origem do Pedido (Ex: "pdv" ou "site")
+      const origemBruta = newData.origemPedido || "site";
+      const origem = String(origemBruta).trim().toLowerCase();
 
       await db.runTransaction(async (t) => {
         const doc = await t.get(statsRef);
         const stats = doc.exists
           ? doc.data()
-          : { faturamento: 0, totalPedidos: 0 };
+          : {
+              faturamento: 0,
+              totalPedidos: 0,
+              porFormaPagamento: {},
+              porOrigem: {},
+            };
+
+        // Garante que os mapas existam caso o doc seja antigo
+        const porFormaPagamento = stats.porFormaPagamento || {};
+        const porOrigem = stats.porOrigem || {};
+
+        // Incrementa o contador da forma de pagamento específica
+        porFormaPagamento[formaPagamento] =
+          (porFormaPagamento[formaPagamento] || 0) + 1;
+
+        // Incrementa o contador da origem específica
+        porOrigem[origem] = (porOrigem[origem] || 0) + 1;
+
         t.set(
           statsRef,
           {
             faturamento: (stats.faturamento || 0) + total,
             totalPedidos: (stats.totalPedidos || 0) + 1,
+            porFormaPagamento: porFormaPagamento,
+            porOrigem: porOrigem,
             ultimaAtualizacao: FieldValue.serverTimestamp(),
           },
           { merge: true },

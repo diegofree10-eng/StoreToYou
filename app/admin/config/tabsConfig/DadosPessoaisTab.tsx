@@ -2,16 +2,30 @@
 
 import { aplicarMascara } from "@/utils/formatters";
 
-export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) {
+export default function DadosPessoaisTab({ config, setConfig, buscarCep, theme }: any) {
+  // Cores de fallback caso o theme não seja passado por algum motivo
+  const currentTheme = theme || {
+    bgCard: "#ffffff",
+    textMain: "#1e293b",
+    textSec: "#64748b",
+    border: "#e2e8f0",
+    inputBg: "#ffffff"
+  };
+
   return (
     <section className="dados-pessoais-container">
-      <h3 style={styles.h3}>Identificação do Responsável</h3>
+      <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Identificação do Responsável</h3>
       <div style={styles.inputRow} className="row-responsavel-1">
         <div style={{ flex: 2 }} className="input-group-mobile">
-          <label style={styles.label}>Nome Completo</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>Nome Completo</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsNomeResponsavel || ""}
             onChange={e => setConfig({
               ...config,
@@ -20,10 +34,15 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
           />
         </div>
         <div style={{ flex: 1 }} className="input-group-mobile">
-          <label style={styles.label}>CPF</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>CPF</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsCpfResponsavel || ""}
             onChange={e => setConfig({
               ...config,
@@ -35,11 +54,16 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
 
       <div style={{ ...styles.inputRow, marginTop: '15px' }} className="row-responsavel-2">
         <div style={{ flex: 1 }} className="input-group-mobile">
-          <label style={styles.label}>E-mail Pessoal</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>E-mail Pessoal</label>
           <input
             required
             type="email"
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsEmailResponsavel || ""}
             onChange={e => setConfig({
               ...config,
@@ -48,10 +72,15 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
           />
         </div>
         <div style={{ flex: 1 }} className="input-group-mobile">
-          <label style={styles.label}>Telefone</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>Telefone</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsTelResponsavel || ""}
             onChange={e => setConfig({
               ...config,
@@ -61,32 +90,47 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
         </div>
       </div>
 
-      <h3 style={{ ...styles.h3, marginTop: '25px' }}>Endereço do Responsável</h3>
+      <h3 style={{ ...styles.h3, marginTop: '25px', color: currentTheme.textMain }}>Endereço do Responsável</h3>
 
       <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-resp-row-1">
         <div style={{ flex: 3 }} className="input-group-mobile">
-          <label style={styles.label}>Rua *</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>Rua *</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsRuaResponsavel || ""}
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsRuaResponsavel: e.target.value } })}
           />
         </div>
         <div style={{ flex: 1 }} className="input-group-mobile">
-          <label style={styles.label}>Nº *</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>Nº *</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.nrNumeroResponsavel || ""}
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, nrNumeroResponsavel: e.target.value } })}
           />
         </div>
         <div style={{ flex: 1.5 }} className="input-group-mobile">
-          <label style={styles.label}>CEP *</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>CEP *</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsCepResponsavel || ""}
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsCepResponsavel: aplicarMascara(e.target.value, 'cep') } })}
             onBlur={e => buscarCep(e.target.value, 'pessoal')}
@@ -96,29 +140,44 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
 
       <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-resp-row-2">
         <div style={{ flex: 2 }} className="input-group-mobile">
-          <label style={styles.label}>Bairro *</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>Bairro *</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsBairroResponsavel || ""}
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsBairroResponsavel: e.target.value } })}
           />
         </div>
         <div style={{ flex: 2 }} className="input-group-mobile">
-          <label style={styles.label}>Cidade *</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>Cidade *</label>
           <input
             required
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsCidadeResponsavel || ""}
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsCidadeResponsavel: e.target.value } })}
           />
         </div>
         <div style={{ flex: 0.5 }} className="input-group-mobile">
-          <label style={styles.label}>UF *</label>
+          <label style={{ ...styles.label, color: currentTheme.textSec }}>UF *</label>
           <input
             required
             maxLength={2}
-            style={styles.input}
+            style={{ 
+              ...styles.input, 
+              background: currentTheme.inputBg, 
+              color: currentTheme.textMain, 
+              border: `1px solid ${currentTheme.border}` 
+            }}
             value={config.dadosPessoais.dsUfResponsavel || ""}
             onChange={e => setConfig({ ...config, dadosPessoais: { ...config.dadosPessoais, dsUfResponsavel: e.target.value.toUpperCase() } })}
           />
@@ -147,8 +206,8 @@ export default function DadosPessoaisTab({ config, setConfig, buscarCep }: any) 
 }
 
 const styles: any = {
-  h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
-  label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "4px", display: 'block' },
+  h3: { fontSize: "11px", fontWeight: "800", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
+  label: { fontSize: "11px", fontWeight: "600", marginBottom: "4px", display: 'block' },
   inputRow: { display: 'flex', gap: '15px' },
-  input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', boxSizing: 'border-box' }
+  input: { width: "100%", padding: "12px", borderRadius: "10px", fontSize: "14px", outline: 'none', boxSizing: 'border-box', transition: 'background 0.3s, color 0.3s, border 0.3s' }
 };

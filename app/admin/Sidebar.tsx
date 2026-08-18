@@ -1,19 +1,21 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX, FiArchive } from "react-icons/fi";
+import React, { useEffect, useState, useMemo } from "react";
+import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX, FiArchive, FiDollarSign } from "react-icons/fi";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot, getDoc, updateDoc } from "firebase/firestore";
 
 interface SidebarProps {
   telaAtiva: string;
-  setTelaAtiva: (tela: string) => void;
+  setTelaAtiva?: (tela: string) => void;
   onLogout: () => void;
-  isOpenMobile?: boolean;          
-  onCloseMobile?: () => void;      
+  isOpenMobile?: boolean;
+  onCloseMobile?: () => void;
+  planoEfetivo?: any;
+  masterLiberou?: (feature: string) => boolean;
 }
 
-export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobile, onCloseMobile }: SidebarProps) {
+export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobile, onCloseMobile, planoEfetivo, masterLiberou }: SidebarProps) {
   const [role, setRole] = useState<string | null>(null);
   const [lojistaId, setLojistaId] = useState<string | null>(null);
   const [novosPedidosCount, setNovosPedidosCount] = useState<number>(0);
@@ -31,12 +33,12 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
       try {
         const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-        
+
         if (!userDoc.exists()) return;
 
         const userData = userDoc.data();
         setRole(userData.role);
-        
+
         const lojaIdReal = userData.lojaId;
         if (!lojaIdReal) return;
 
@@ -94,13 +96,10 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
       setNovosPedidosCount(valorSalvo ? Number(valorSalvo) : 0);
     };
 
-    // Lê na montagem
     lerContadorLocalStorage();
 
-    // Evento acionado quando outra aba/componente altera o localStorage
     window.addEventListener('storage', lerContadorLocalStorage);
-    
-    // Intervalo de verificação leve para atualizar dentro da mesma aba sem reload
+
     const interval = setInterval(lerContadorLocalStorage, 1000);
 
     return () => {
@@ -109,16 +108,35 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
     };
   }, [lojistaId]);
 
+  // Validação reativa e blindada do PDV utilizando useMemo para refletir alterações instantaneamente
+  const pdvLiberado = useMemo(() => {
+    if (typeof masterLiberou === "function") {
+      return masterLiberou("temPdv");
+    }
+    return Boolean(
+      planoEfetivo?.temPdv ??
+      planoEfetivo?.configs?.temPdv ??
+      planoEfetivo?.dadosPlano?.temPdv ??
+      false
+    );
+  }, [planoEfetivo, masterLiberou]);
+
   const menuItens = [
     { id: 'dash', label: 'Dashboard', icon: <FiPieChart /> },
     { id: 'produtos', label: 'Produtos', icon: <FiPackage /> },
     { id: 'pedidos', label: 'Pedidos', icon: <FiShoppingCart />, badge: novosPedidosCount },
+    // O PDV só aparece no menu se a verificação reativa retornar true
+    ...(pdvLiberado ? [{ id: 'pdv', label: 'PDV (Caixa)', icon: <FiDollarSign /> }] : []),
     { id: 'estoque', label: 'Estoque', icon: <FiArchive /> },
     { id: 'config', label: 'Configurações', icon: <FiSettings /> },
   ];
 
   const handleMudarTela = (id: string) => {
-    setTelaAtiva(id);
+    if (typeof setTelaAtiva === 'function') {
+      setTelaAtiva(id);
+    } else {
+      console.warn("Aviso: setTelaAtiva não foi passado corretamente para a Sidebar.");
+    }
     if (onCloseMobile) onCloseMobile();
   };
 
@@ -131,7 +149,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
       <aside style={{
         ...styles.sidebar,
-        transform: isOpenMobile ? 'translateX(0)' : undefined, 
+        transform: isOpenMobile ? 'translateX(0)' : undefined,
       }} className="sidebar-container">
 
         {/* Botão de Fechar no Mobile */}
@@ -244,7 +262,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   logoImg: { width: '100%', height: '100%', objectFit: 'cover' },
   logoPlaceholder: { fontSize: '36px', fontWeight: 'bold', color: '#fdb813' },
   storeName: { fontSize: '18px', color: '#fff', textAlign: 'center', fontWeight: '600' },
-  nav: { flex: 1, padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto' },
+  nav: { flex: 1, padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px', overflow: 'hidden' }, // <--- Alterado de 'overflowY: auto' para 'overflow: 'hidden''
   navBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 15px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', width: '100%', transition: 'all 0.2s', textAlign: 'left' },
   badgeNovo: {
     backgroundColor: '#ef4444',

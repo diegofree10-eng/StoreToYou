@@ -9,6 +9,7 @@ import {
 
 export const executarFluxoPedido = async ({
   lojistaId,
+  lojistaSlug,
   cliente,
   endereco,
   safeCart,
@@ -24,6 +25,7 @@ export const executarFluxoPedido = async ({
   freteGratisConfig,
   payloadPixBruto,
   freteSel,
+  dsFormaPagamentoCarrinho = "pix", // 🌟 Parâmetro flexível com "pix" como padrão atual
 }: any) => {
   try {
     const contadorRef = doc(
@@ -41,14 +43,12 @@ export const executarFluxoPedido = async ({
         // FASE 1: TODAS AS LEITURAS (READS) PRIMEIRO
         // ==========================================
 
-        // 1. Ler o documento do contador
         const docSnapContador = await transaction.get(contadorRef);
         let proximo = 1;
         if (docSnapContador.exists()) {
           proximo = (docSnapContador.data().ultimoNumero || 0) + 1;
         }
 
-        // 2. Ler os dados de todos os produtos do carrinho de uma só vez
         const produtosParaAtualizar: Array<{
           prodRef: any;
           prodSnap: any;
@@ -61,7 +61,7 @@ export const executarFluxoPedido = async ({
           if (!produtoId) continue;
 
           const prodRef = doc(db, "lojistas", lojistaId, "produtos", produtoId);
-          const prodSnap = await transaction.get(prodRef); // 👈 Leitura executada estritamente antes das escritas
+          const prodSnap = await transaction.get(prodRef);
 
           if (!prodSnap.exists()) continue;
 
@@ -80,14 +80,12 @@ export const executarFluxoPedido = async ({
         // FASE 2: TODAS AS ESCRITAS (WRITES) DEPOIS
         // ==========================================
 
-        // A. Atualizar o contador
         transaction.set(
           contadorRef,
           { ultimoNumero: proximo },
           { merge: true },
         );
 
-        // B. Executar as baixas de estoque usando os dados já lidos
         for (const itemAtualizacao of produtosParaAtualizar) {
           const { prodRef, prodSnap, qtdComprada, nomeVar } = itemAtualizacao;
           const dadosProd = prodSnap.data();
@@ -117,21 +115,28 @@ export const executarFluxoPedido = async ({
       },
     );
 
-    // 🌟 Classificação rigorosa e padronizada da forma de entrega
+    // 🌟 Classificação rigorosa e padronizada da forma de entrega (Compatível com Site e PDV)
     const temFreteCarrinho = safeCart.some((item: any) => item.precisaFrete !== false);
     let dsFormaEntregaPadrao = 'transportadora';
 
-    if (!temFreteCarrinho) {
-      dsFormaEntregaPadrao = 'digital';
+    const formaEnviadaBruta = String(logistica?.dsFormaEntrega || logistica?.formaEnvio || "").toLowerCase();
+
+    if (formaEnviadaBruta === 'retirada' || formaEnviadaBruta === 'retirar_loja') {
+      dsFormaEntregaPadrao = 'retirada';
+    } else if (formaEnviadaBruta === 'entrega_local') {
+      dsFormaEntregaPadrao = 'entrega_local';
+    } else if (formaEnviadaBruta === 'transportadora') {
+      dsFormaEntregaPadrao = 'transportadora';
+    } else if (formaEnviadaBruta === 'digital' || !temFreteCarrinho) {
+      const temApenasDigital = safeCart.every((item: any) => item.precisaFrete === false);
+      dsFormaEntregaPadrao = temApenasDigital ? 'digital' : 'transportadora';
     } else if (
-      logistica?.formaEnvio === 'retirada' ||
       freteSel?.id === 'retirada' ||
       freteSel?.id === 'retirar_loja' ||
       String(freteSel?.name || "").toLowerCase().includes("retirada")
     ) {
       dsFormaEntregaPadrao = 'retirada';
     } else if (
-      logistica?.formaEnvio === 'entrega_local' ||
       freteSel?.id === 'entrega_local' ||
       String(freteSel?.name || "").toLowerCase().includes("entrega local")
     ) {
@@ -140,7 +145,6 @@ export const executarFluxoPedido = async ({
       dsFormaEntregaPadrao = 'transportadora';
     }
 
-    // 2. Montagem dos itens formatados com as respostas dos requisitos padronizadas
     const itensFormatados = safeCart.map((item: any, index: number) => {
       const chaveUnica = `${item.cartItemId || item.id || "prod"}_${index}`;
       const rawRespostas =
@@ -181,7 +185,6 @@ export const executarFluxoPedido = async ({
           item.sku ||
           (item.variacaoSelecionada ? item.variacaoSelecionada.sku : "SEM-SKU"),
 
-        // ✨ Salvando o prazo de produção e o tipo rigoroso do produto no banco
         nrDiasProducao: Number(item.nrDiasProducao || item.diasProducao || 0),
         dsTipoProduto: String(
           item.dsTipoProduto || item.tipoProduto || "Fisico_Sem",
@@ -233,43 +236,40 @@ export const executarFluxoPedido = async ({
     const novoPedidoRef = doc(collection(db, "lojistas", lojistaId, "pedidos"));
     const pedidoIdGerado = novoPedidoRef.id;
 
+    const origemIdentificada = (lojistaSlug === "pdv-balcao" || logistica?.origem === "Pdv") ? "Pdv" : "Site";
+
     const dadosDoPedidoParaSalvar = {
       Idpedido: pedidoIdGerado,
+      origemPedido: origemIdentificada,
       cliente: dadosCliente,
       endereco: dadosEnderecoCliente,
       numeroPedido: Number(numPedidoSequencial),
       data: new Date().toISOString(),
       timestamp: serverTimestamp(),
+      
       financeiro: {
         vlSubtotal: Number(valorSubtotalProdutos || 0),
         vlDesconto: Number(valorDesconto || 0),
         vlFrete: Number(logistica?.valorFrete || 0),
         vlTotal: Number(totalGeral || 0),
         dsCupom: cupomDigitado || null,
+        dsFormaPagamentoCarrinho: dsFormaPagamentoCarrinho, // 🌟 Salva a forma de pagamento selecionada (ex: 'pix', 'dinheiro', 'cartao_credito', etc)
       },
 
       logistica: {
         isRetirada: dsFormaEntregaPadrao === "retirada",
         dsFormaEntrega: dsFormaEntregaPadrao,
         isFreteGratis: freteGratisConfig?.atingido || false,
-
-        // 🚚 Seguindo o padrão string (ds)
         dsServico: logistica?.servico || logistica?.dsServico || "N/A",
-
-        // 💰 Valor do frete na logística (numérico)
         vlFrete: Number(logistica?.valorFrete || logistica?.vlFrete || 0),
-
-        // ⏱️ Prazo de entrega na logística (numérico)
         vlPrazo: Number(
           logistica?.prazoEntrega ||
             logistica?.prazo ||
             logistica?.vlPrazo ||
             0,
         ),
-
         dsFormaPagamentoEtiqueta:
           logistica?.formaPagamentoEtiqueta || "saldo_melhor_envio",
-
         dsTransportadoraId:
           dsFormaEntregaPadrao === 'transportadora' 
             ? (logistica?.transportadoraId || logistica?.dsTransportadoraId || null)
@@ -312,7 +312,6 @@ export const executarFluxoPedido = async ({
 
     await setDoc(novoPedidoRef, dadosDoPedidoParaSalvar);
 
-    // 5. Mensagem para o Lojista
     const msgLojista = `*NOVO PEDIDO #${numPedidoSequencial}*
 👤 *CLIENTE:* ${dadosCliente.nmNomeCliente}
 📱 *WHATSAPP:* ${dadosCliente.dsTelefoneCliente}
@@ -327,7 +326,6 @@ Acesse seu painel para processar este pedido!`;
     const urlLojista = `https://wa.me/${String(whatsappNumero || "").replace(/\D/g, "")}?text=${encodeURIComponent(msgLojista)}`;
     window.open(urlLojista, "_blank");
 
-    // 6. Mensagem para o Cliente
     let telefoneClienteLimpo = dadosCliente.dsTelefoneCliente.replace(
       /\D/g,
       "",

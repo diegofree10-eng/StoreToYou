@@ -6,6 +6,10 @@ import { db } from "@/lib/firebase";
 import { doc, updateDoc, getDoc, collection, onSnapshot, addDoc } from "firebase/firestore";
 // Como a pasta hooks está dentro de app:
 import { useDashboardInteligencia } from "@/hooks/useDashboardInteligencia";
+import { useGerenciarPedido } from "@/hooks/useGerenciarPedido";
+
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
 
 // --- IMPORTAÇÃO DAS TABS ---
 import { TabCatalogo } from "./_tabsDashBoardLogista/TabCatalogo";
@@ -17,6 +21,8 @@ import { TabFaturamentoCanais } from "./_tabsDashBoardLogista/TabFaturamentoCana
 import { TabDespesas } from "./_tabsDashBoardLogista/TabDespesas";
 import { TabRelatorioHistorico } from "./_tabsDashBoardLogista/TabRelatorioHistorico";
 import { TabVendas } from "./_tabsDashBoardLogista/TabVendas";
+
+import { Pedido } from "@/types/pedido";
 
 
 // ============================================================================
@@ -30,45 +36,25 @@ const VERSAO_SCHEMA_CODE = 2;
 // ============================================================================
 interface ItemPedido {
   id?: string;
+  idProduto?: string;
   nome?: string;
   qty: number;
+  quantidade?: number;
   preco?: number;
   variacao?: string;
   requisitos?: any[];
+  foto?: string;
+  imagem?: string;
+  image?: string;
+  url?: string;
+  urlOriginal?: string;
+  thumb?: string;
+  variacaoSelecionada?: {
+    foto?: string;
+  };
 }
 
-interface Pedido {
-  id: string;
-  data: string;
-  cliente: string | { nmNomeCliente?: string; nome?: string };
-  numeroPedido: string | number;
-  devolvido: boolean;
-  custoFreteLojista?: number;
-  freteCusto?: number;
-  financeiro: {
-    total?: number;
-    vlTotal?: number;
-    valorTotal?: number;
-    frete?: number;
-    vlFrete?: number;
-    subtotal?: number;
-    vlSubtotal?: number;
-    valorSubtotal?: number;
-    discount?: number;
-    vlDesconto?: number;
-    descontos?: number;
-    freteGratis?: boolean;
-    dsTransportadoraId?: string;
-  };
-  logistica?: {
-    vlFrete?: number;
-  };
-  StatusProducao?: {
-    dsStatusProducao?: string;
-  };
-  status?: string;
-  itens: ItemPedido[];
-}
+
 
 interface CanalRenda {
   canal: string;
@@ -89,7 +75,39 @@ interface DespesaLojista {
 const formatarMoeda = (valor: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
 
+const extrairFotoDoItem = (item: any): string => {
+  const chavesPossiveis = ['foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
+  for (const chave of chavesPossiveis) {
+    if (item[chave] && typeof item[chave] === 'string' && item[chave].startsWith('http')) return item[chave];
+  }
+  if (item.variacaoSelecionada?.foto) return item.variacaoSelecionada.foto;
+  return "";
+};
+
+const ItemResumido = React.memo(({ item }: { item: ItemPedido }) => {
+  const { theme } = useTheme();
+  const qtd = item.quantidade || item.qty || 1;
+  const fotoUrl = useMemo(() => extrairFotoDoItem(item), [item]);
+
+  return (
+    <li style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <img 
+        src={fotoUrl || "https://placehold.co/30x30?text=Prod"} 
+        alt="" 
+        style={{ width: '30px', height: '30px', borderRadius: '4px', objectFit: 'cover' }} 
+      />
+      <span style={{ color: theme.textMain }}>
+        {Number(qtd)}x {item.nome || "Produto"}
+        {item.variacao && <span style={{ color: '#0284c7' }}> ({item.variacao})</span>}
+      </span>
+    </li>
+  );
+});
+
+ItemResumido.displayName = "ItemResumido";
+
 const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dataFormatada }: any) => {
+  const { theme } = useTheme();
   const clienteObj = typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : {};
   const nomeExibicao = clienteObj.nmNomeCliente || clienteObj.nome || (typeof pedido.cliente === 'string' ? pedido.cliente : "Cliente Sem Nome");
 
@@ -107,13 +125,13 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
 
   return (
     <React.Fragment>
-      <tr style={{ ...styles.tr, background: expandido ? '#f0f7ff' : 'transparent', transition: '0.3s' }}>
-        <td style={styles.td}>{dataFormatada}</td>
-        <td style={styles.td}><span style={styles.pedidoBadge}>#{pedido.numeroPedido}</span></td>
+      <tr style={{ ...styles.tr, background: expandido ? theme.inputBg : 'transparent', transition: '0.3s', borderBottom: `1px solid ${theme.border}` }}>
+        <td style={{ ...styles.td, color: theme.textMain }}>{dataFormatada}</td>
+        <td style={styles.td}><span style={{ ...styles.pedidoBadge, backgroundColor: theme.inputBg, color: theme.textMain }}>#{pedido.numeroPedido}</span></td>
         <td style={{ ...styles.td, cursor: 'pointer', color: '#3498db', fontWeight: 'bold' }} onClick={() => onExpandir(pedido.id)}>
           👤 {nomeExibicao} {expandido ? '🔼' : '🔽'}
         </td>
-        <td style={styles.td}>{formatarMoeda(totalFinal)}</td>
+        <td style={{ ...styles.td, color: theme.textMain }}>{formatarMoeda(totalFinal)}</td>
         <td style={styles.td}>
           <button onClick={(e) => { e.stopPropagation(); onDevolver(pedido.id, pedido.devolvido); }} style={{ ...styles.btnDevolver, backgroundColor: pedido.devolvido ? '#e0f2fe' : '#fee2e2', color: pedido.devolvido ? '#0ea5e9' : '#ef4444' }}>
             {pedido.devolvido ? 'Restaurar' : 'Devolver'}
@@ -123,33 +141,30 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
 
       {expandido && (
         <tr>
-          <td colSpan={5} style={styles.detalheBox}>
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+          <td colSpan={5} style={{ ...styles.detalheBox, backgroundColor: theme.inputBg, borderBottom: `1px solid ${theme.border}` }}>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-              <div style={{ flex: 2, backgroundColor: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>Itens do Pedido:</strong>
-                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#333', marginBottom: '12px' }}>
+              <div style={{ flex: 2, backgroundColor: theme.bgCard, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
+                <strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px', color: theme.textMain }}>Itens do Pedido:</strong>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: theme.textMain, marginBottom: '12px', listStyleType: 'none' }}>
                   {(pedido.itens || []).map((it: ItemPedido, idx: number) => (
-                    <li key={idx} style={{ marginBottom: '4px' }}>
-                      {Number(it.qty || 1)}x {it.nome || "Produto"}
-                      {it.variacao && <span style={{ color: '#0284c7' }}> ({it.variacao})</span>}
-                    </li>
+                    <ItemResumido key={idx} item={it} />
                   ))}
                 </ul>
 
                 {/* 🛠️ ID do Pedido adicionado abaixo dos itens */}
-                <div style={{ fontSize: '13px', color: '#333', borderTop: '1px dashed #e2e8f0', paddingTop: '8px' }}>
-                  <strong>ID do Pedido:</strong> <span style={{ fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>{pedido.id}</span>
+                <div style={{ fontSize: '13px', color: theme.textMain, borderTop: `1px dashed ${theme.border}`, paddingTop: '8px' }}>
+                  <strong>ID do Pedido:</strong> <span style={{ fontFamily: 'monospace', backgroundColor: theme.inputBg, padding: '2px 4px', borderRadius: '4px', color: theme.textMain }}>{pedido.id}</span>
                 </div>
               </div>
 
-              <div style={{ flex: 1, backgroundColor: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <strong style={{ display: 'block', marginBottom: '10px', fontSize: '13px', color: '#1e293b' }}>Resumo Financeiro:</strong>
+              <div style={{ flex: 1, backgroundColor: theme.bgCard, padding: '15px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
+                <strong style={{ display: 'block', marginBottom: '10px', fontSize: '13px', color: theme.textMain }}>Resumo Financeiro:</strong>
 
                 <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={styles.finRow}>
+                  <div style={{ ...styles.finRow, color: theme.textSec }}>
                     <span>Total dos Produtos:</span>
-                    <span>{formatarMoeda(subtotalVal)}</span>
+                    <span style={{ color: theme.textMain }}>{formatarMoeda(subtotalVal)}</span>
                   </div>
 
                   {descontoVal > 0 ? (
@@ -158,26 +173,26 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
                       <span>- {formatarMoeda(descontoVal)}</span>
                     </div>
                   ) : (
-                    <div style={{ ...styles.finRow, color: '#94a3b8', fontStyle: 'italic' }}>
+                    <div style={{ ...styles.finRow, color: theme.textSec, fontStyle: 'italic' }}>
                       <span>Cupom de Desconto:</span>
                       <span>Não aplicado</span>
                     </div>
                   )}
 
-                  <div style={styles.finRow}>
+                  <div style={{ ...styles.finRow, color: theme.textSec }}>
                     <span>Sub total:</span>
-                    <span>{formatarMoeda(subtotalVal - descontoVal)}</span>
+                    <span style={{ color: theme.textMain }}>{formatarMoeda(subtotalVal - descontoVal)}</span>
                   </div>
 
-                  <div style={styles.finRow}>
+                  <div style={{ ...styles.finRow, color: theme.textSec }}>
                     <span>Total de Frete:</span>
-                    <strong>{freteGratisFlag ? "Grátis" : formatarMoeda(freteVal)}</strong>
+                    <strong style={{ color: theme.textMain }}>{freteGratisFlag ? "Grátis" : formatarMoeda(freteVal)}</strong>
                   </div>
 
-                  <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
+                  <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
                   <div style={{ ...styles.finRow, fontSize: '14px', fontWeight: 'bold', color: '#78350f' }}>
-                    <span>Pagamento total:</span> <span>{formatarMoeda(totalFinal)}</span>
+                    <span>Pagamento total:</span> <span style={{ color: theme.textMain }}>{formatarMoeda(totalFinal)}</span>
                   </div>
                 </div>
               </div>
@@ -197,6 +212,8 @@ LinhaPedido.displayName = "LinhaPedido";
 // ============================================================================
 export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], lojistaId?: string }) {
   const router = useRouter();
+  const { theme } = useTheme();
+
   const [abaAtiva, setAbaAtiva] = useState("vendas");
   const [buscaNome, setBuscaNome] = useState("");
   const [dataInicio, setDataInicio] = useState("");
@@ -217,6 +234,17 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
   const [calcMargemDesejada, setCalcMargemDesejada] = useState("40");
   const [calcImpostos, setCalcImpostos] = useState("6");
   const [calcTaxaMarketplace, setCalcTaxaMarketplace] = useState("0");
+
+  // Estado local de pedidos para sincronização otimista
+  const [localPedidos, setLocalPedidos] = useState<Pedido[]>(pedidos);
+  useEffect(() => { setLocalPedidos(pedidos); }, [pedidos]);
+
+  // 🛠️ Hook para gerenciar e estornar estoque de pedidos
+  const { estornarEstoqueDoPedido } = useGerenciarPedido({
+    db,
+    lojistaIdApp: lojistaId || "",
+    setLocalPedidos
+  });
 
 
   const carregarDadosTeste = async () => {
@@ -360,10 +388,28 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
   const alternarDevolucao = useCallback(async (id: string, statusAtual: boolean) => {
     if (!lojistaId) return;
-    if (confirm(statusAtual ? "Reativar este pedido?" : "Confirmar DEVOLUÇÃO?")) {
-      await updateDoc(doc(db, "lojistas", lojistaId, "pedidos", id), { devolvido: !statusAtual });
+    const vaiDevolver = !statusAtual;
+    const mensagem = vaiDevolver ? "Confirmar DEVOLUÇÃO? (Os itens retornarão ao estoque)" : "Reativar este pedido?";
+
+    if (confirm(mensagem)) {
+      try {
+        const pedidoRef = doc(db, "lojistas", lojistaId, "pedidos", id);
+        await updateDoc(pedidoRef, { devolvido: vaiDevolver });
+
+        // Se marcou como devolvido, executa o estorno automático para o estoque
+        if (vaiDevolver) {
+          const pedidoObj = localPedidos.find(p => p.id === id);
+          if (pedidoObj) {
+            await estornarEstoqueDoPedido(pedidoObj);
+          }
+        }
+
+        alert("✅ Status de devolução alterado com sucesso!");
+      } catch (e: any) {
+        alert("Erro ao processar devolução: " + e.message);
+      }
     }
-  }, [lojistaId]);
+  }, [lojistaId, localPedidos, estornarEstoqueDoPedido]);
 
   const inteligencia = useDashboardInteligencia(
     pedidos,
@@ -451,22 +497,22 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
   ];
 
   return (
-    <div style={styles.page} className="dashboard-page-container">
+    <div style={{ ...styles.page, backgroundColor: theme.bgMain, color: theme.textMain }} className="dashboard-page-container">
       {/* 1. BARRA DE METAS */}
-      <div style={styles.metaContainer}>
+      <div style={{ ...styles.metaContainer, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}` }}>
         <div style={styles.metaInfoRow}>
           <div>
-            <span style={styles.metaMiniTitle}>🎯 META DE FATURAMENTO MENSAL</span>
+            <span style={{ ...styles.metaMiniTitle, color: theme.textSec }}>🎯 META DE FATURAMENTO MENSAL</span>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "3px" }}>
               {editandoMeta ? (
                 <div style={{ display: "flex", gap: "5px" }}>
-                  <input type="number" value={inputMeta} onChange={e => setInputMeta(e.target.value)} style={styles.inputMetaEdit} />
+                  <input type="number" value={inputMeta} onChange={e => setInputMeta(e.target.value)} style={{ ...styles.inputMetaEdit, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }} />
                   <button onClick={handleSalvarMeta} style={styles.btnMetaSalvar}>Salvar</button>
-                  <button onClick={() => setEditandoMeta(false)} style={styles.btnMetaCancelar}>✕</button>
+                  <button onClick={() => setEditandoMeta(false)} style={{ ...styles.btnMetaCancelar, color: theme.textSec }}>✕</button>
                 </div>
               ) : (
                 <>
-                  <h3 style={styles.metaValores}>{formatarMoeda(inteligencia.faturamento)} / <span style={{ color: "#64748b" }}>{formatarMoeda(metaFaturamento)}</span></h3>
+                  <h3 style={{ ...styles.metaValores, color: theme.textMain }}>{formatarMoeda(inteligencia.faturamento)} / <span style={{ color: theme.textSec }}>{formatarMoeda(metaFaturamento)}</span></h3>
                   <button onClick={() => setEditandoMeta(true)} style={styles.btnMetaEdit}>✏️ Alterar Meta</button>
                 </>
               )}
@@ -474,44 +520,44 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
           </div>
           <span style={styles.metaPercentBadge}>{progressoMeta}% Atingido</span>
         </div>
-        <div style={styles.progressBarBg}><div style={{ ...styles.progressBarFill, width: `${progressoMeta}%` }} /></div>
+        <div style={{ ...styles.progressBarBg, backgroundColor: theme.inputBg }}><div style={{ ...styles.progressBarFill, width: `${progressoMeta}%` }} /></div>
       </div>
 
       {/* 2. CARDS DE RESUMO */}
       <div style={styles.grid}>
-        <div style={{ ...styles.card, borderLeft: '5px solid #2ecc71' }}><span style={styles.cardLabel}>Faturamento Omnichannel</span><h2 style={styles.cardVal}>{formatarMoeda(inteligencia.faturamento)}</h2></div>
-        <div style={{ ...styles.card, borderLeft: '5px solid #27ae60' }}><span style={styles.cardLabel}>Lucro Real Consolidado</span><h2 style={styles.cardVal}>{formatarMoeda(inteligencia.lucroReal)}</h2></div>
-        <div style={{ ...styles.card, borderLeft: '5px solid #3498db' }}><span style={styles.cardLabel}>Ticket Médio</span><h2 style={styles.cardVal}>{formatarMoeda(inteligencia.faturamentoInternoPuro / (inteligencia.totalPedidosValidos || 1))}</h2></div>
-        <div style={{ ...styles.card, borderLeft: '5px solid #e74c3c' }}><span style={styles.cardLabel}>Perda (Cancelados)</span><h2 style={styles.cardVal}>{formatarMoeda(inteligencia.perdaDevolucao)}</h2></div>
+        <div style={{ ...styles.card, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderLeft: '5px solid #2ecc71' }}><span style={{ ...styles.cardLabel, color: theme.textSec }}>Faturamento Omnichannel</span><h2 style={{ ...styles.cardVal, color: theme.textMain }}>{formatarMoeda(inteligencia.faturamento)}</h2></div>
+        <div style={{ ...styles.card, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderLeft: '5px solid #27ae60' }}><span style={{ ...styles.cardLabel, color: theme.textSec }}>Lucro Real Consolidado</span><h2 style={{ ...styles.cardVal, color: theme.textMain }}>{formatarMoeda(inteligencia.lucroReal)}</h2></div>
+        <div style={{ ...styles.card, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderLeft: '5px solid #3498db' }}><span style={{ ...styles.cardLabel, color: theme.textSec }}>Ticket Médio</span><h2 style={{ ...styles.cardVal, color: theme.textMain }}>{formatarMoeda(inteligencia.faturamentoInternoPuro / (inteligencia.totalPedidosValidos || 1))}</h2></div>
+        <div style={{ ...styles.card, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, borderLeft: '5px solid #e74c3c' }}><span style={{ ...styles.cardLabel, color: theme.textSec }}>Perda (Cancelados)</span><h2 style={{ ...styles.cardVal, color: theme.textMain }}>{formatarMoeda(inteligencia.perdaDevolucao)}</h2></div>
       </div>
 
       {/* 3. FILTROS E ABAS */}
       <header style={styles.header}>
-        <div style={styles.filtrosCard} className="filtro-container">
+        <div style={{ ...styles.filtrosCard, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}` }} className="filtro-container">
           <input
             type="text"
             placeholder="🔍 Buscar por nome do cliente ou número do pedido..."
             value={buscaNome}
             onChange={e => setBuscaNome(e.target.value)}
-            style={styles.input}
+            style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
           />
           <input
             type="date"
             value={dataInicio}
             onChange={e => setDataInicio(e.target.value)}
-            style={styles.inputDate}
+            style={{ ...styles.inputDate, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
           />
           <input
             type="date"
             value={dataFim}
             onChange={e => setDataFim(e.target.value)}
-            style={styles.inputDate}
+            style={{ ...styles.inputDate, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
           />
 
           <select
             value={itensPorPagina}
             onChange={(e) => setItensPorPagina(Number(e.target.value))}
-            style={styles.selectPaginacaoTopo}
+            style={{ ...styles.selectPaginacaoTopo, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
           >
             <option value={20}>20 por pág</option>
             <option value={40}>40 por pág</option>
@@ -526,9 +572,9 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
           </button>
         </div>
 
-        <div style={styles.tabBar}>
+        <div style={{ ...styles.tabBar, borderColor: theme.border }}>
           {abasDisponiveis.map(t => (
-            <button key={t.id} style={abaAtiva === t.id ? styles.tabActive : styles.tab} onClick={() => { setAbaAtiva(t.id); setPedidoExpandido(null); }}>
+            <button key={t.id} style={abaAtiva === t.id ? styles.tabActive : { ...styles.tab, backgroundColor: theme.inputBg, color: theme.textSec }} onClick={() => { setAbaAtiva(t.id); setPedidoExpandido(null); }}>
               {t.label}
             </button>
           ))}
@@ -536,9 +582,9 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
       </header>
 
       {/* 4. CONTEÚDO DAS ABAS */}
-      <section style={styles.section}>
-        <div style={styles.abaHeader}>
-          <h3 style={{ margin: 0, color: '#2c3e50' }}>
+      <section style={{ ...styles.section, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}` }}>
+        <div style={{ ...styles.abaHeader, borderBottom: `1px solid ${theme.border}` }}>
+          <h3 style={{ margin: 0, color: theme.textMain }}>
             {abaAtiva === 'lucro' ? '💰 DETALHAMENTO DE RESULTADO' : abaAtiva === 'canais' ? '📦 CENTRAL DE CANAIS OMNICHANNEL' : abaAtiva === 'precificacao' ? '🧮 SIMULADOR DE PRECIFICAÇÃO E MARGEM' : abaAtiva.toUpperCase()}
           </h3>
         </div>
@@ -604,30 +650,30 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
         {abaAtiva === 'precificacao' && (
           <div style={styles.precificacaoBox}>
-            <div style={styles.precificacaoInputsForm}>
-              <h4 style={{ margin: "0 0 15px 0", color: "#1e293b" }}>🔧 Componentes do Custo</h4>
+            <div style={{ ...styles.precificacaoInputsForm, backgroundColor: theme.inputBg, borderColor: theme.border }}>
+              <h4 style={{ margin: "0 0 15px 0", color: theme.textMain }}>🔧 Componentes do Custo</h4>
               <div style={styles.formRowSimulador}>
-                <label style={styles.labelSimulador}>Custo de Produção / Insumos (R$):</label>
-                <input type="number" value={calcCustoInsumo} onChange={e => setCalcCustoInsumo(e.target.value)} style={styles.inputSimulador} />
+                <label style={{ ...styles.labelSimulador, color: theme.textSec }}>Custo de Produção / Insumos (R$):</label>
+                <input type="number" value={calcCustoInsumo} onChange={e => setCalcCustoInsumo(e.target.value)} style={{ ...styles.inputSimulador, backgroundColor: theme.bgCard, color: theme.textMain, borderColor: theme.border }} />
               </div>
               <div style={styles.formRowSimulador}>
-                <label style={styles.labelSimulador}>Margem de Lucro Desejada (%):</label>
-                <input type="number" value={calcMargemDesejada} onChange={e => setCalcMargemDesejada(e.target.value)} style={styles.inputSimulador} />
+                <label style={{ ...styles.labelSimulador, color: theme.textSec }}>Margem de Lucro Desejada (%):</label>
+                <input type="number" value={calcMargemDesejada} onChange={e => setCalcMargemDesejada(e.target.value)} style={{ ...styles.inputSimulador, backgroundColor: theme.bgCard, color: theme.textMain, borderColor: theme.border }} />
               </div>
               <div style={styles.formRowSimulador}>
-                <label style={styles.labelSimulador}>Impostos Federais/Estaduais (%):</label>
-                <input type="number" value={calcImpostos} onChange={e => setCalcImpostos(e.target.value)} style={styles.inputSimulador} />
+                <label style={{ ...styles.labelSimulador, color: theme.textSec }}>Impostos Federais/Estaduais (%):</label>
+                <input type="number" value={calcImpostos} onChange={e => setCalcImpostos(e.target.value)} style={{ ...styles.inputSimulador, backgroundColor: theme.bgCard, color: theme.textMain, borderColor: theme.border }} />
               </div>
               <div style={styles.formRowSimulador}>
-                <label style={styles.labelSimulador}>Comissão do Marketplace (%):</label>
-                <input type="number" value={calcTaxaMarketplace} onChange={e => setCalcTaxaMarketplace(e.target.value)} style={styles.inputSimulador} />
+                <label style={{ ...styles.labelSimulador, color: theme.textSec }}>Comissão do Marketplace (%):</label>
+                <input type="number" value={calcTaxaMarketplace} onChange={e => setCalcTaxaMarketplace(e.target.value)} style={{ ...styles.inputSimulador, backgroundColor: theme.bgCard, color: theme.textMain, borderColor: theme.border }} />
               </div>
             </div>
 
-            <div style={styles.precificacaoResultCard}>
+            <div style={{ ...styles.precificacaoResultCard, backgroundColor: theme.bgCard, borderColor: theme.border }}>
               <span style={{ fontSize: "11px", fontWeight: "bold", color: "#4f46e5", textTransform: "uppercase" }}>💰 PREÇO DE VENDA RECOMENDADO</span>
-              <h2 style={styles.precoSugeridoGrande}>{simuladorPrecoSugerido > 0 ? formatarMoeda(simuladorPrecoSugerido) : "Ajuste as margens"}</h2>
-              <div style={{ borderTop: "1px dashed #cbd5e1", marginTop: "15px", paddingTop: "15px", fontSize: "13px", color: "#475569" }}>
+              <h2 style={{ ...styles.precoSugeridoGrande, color: theme.textMain }}>{simuladorPrecoSugerido > 0 ? formatarMoeda(simuladorPrecoSugerido) : "Ajuste as margens"}</h2>
+              <div style={{ borderTop: `1px dashed ${theme.border}`, marginTop: "15px", paddingTop: "15px", fontSize: "13px", color: theme.textSec }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
                   <span>Sobra Líquida ({calcMargemDesejada}%):</span>
                   <strong style={{ color: "#16a34a" }}>{formatarMoeda(simuladorPrecoSugerido * (Number(calcMargemDesejada) / 100))}</strong>
@@ -727,59 +773,59 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-  page: { padding: '0px 16px 24px 16px', fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', boxSizing: 'border-box' },
+  page: { padding: '0px 16px 24px 16px', fontFamily: 'system-ui, -apple-system, sans-serif', minHeight: '100vh', boxSizing: 'border-box' },
   header: { marginBottom: '24px' },
   btnVoltar: { padding: '8px 16px', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#334155' },
 
-  filtrosCard: { display: 'flex', gap: '12px', flexWrap: 'wrap', backgroundColor: '#fff', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px', alignItems: 'center' },
+  filtrosCard: { display: 'flex', gap: '12px', flexWrap: 'wrap', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px', alignItems: 'center' },
   input: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', flex: 1, minWidth: '240px', outline: 'none', boxSizing: 'border-box' },
-  inputDate: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', color: '#334155', boxSizing: 'border-box' },
-  selectPaginacaoTopo: { padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', backgroundColor: '#fff', color: '#334155', cursor: 'pointer', boxSizing: 'border-box', flexShrink: 0 },
+  inputDate: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' },
+  selectPaginacaoTopo: { padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', cursor: 'pointer', boxSizing: 'border-box', flexShrink: 0 },
   btnAtalho: { padding: '10px 16px', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#475569' },
   btnLimpar: { padding: '10px 16px', backgroundColor: '#fee2e2', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#ef4444', flexShrink: 0, boxSizing: 'border-box' },
 
-  tabBar: { display: 'flex', gap: '6px', flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' },
+  tabBar: { display: 'flex', gap: '6px', flexWrap: 'wrap', borderBottom: '1px solid', paddingBottom: '12px' },
 
-  tab: { padding: '8px 14px', border: 'none', background: '#f1f5f9', cursor: 'pointer', color: '#64748b', fontWeight: '600', fontSize: '12px', borderRadius: '8px' },
+  tab: { padding: '8px 14px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px', borderRadius: '8px' },
   tabActive: { padding: '8px 14px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontWeight: '600', fontSize: '12px', borderRadius: '8px' },
 
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' },
-  card: { backgroundColor: '#fff', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
-  cardLabel: { fontSize: '12px', color: '#64748b', fontWeight: '500', display: 'block', marginBottom: '4px' },
-  cardVal: { margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' },
-  section: { backgroundColor: '#fff', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflowX: 'auto' },
-  abaHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #f8fafc' },
+  card: { padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
+  cardLabel: { fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' },
+  cardVal: { margin: 0, fontSize: '20px', fontWeight: '800' },
+  section: { padding: '16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflowX: 'auto' },
+  abaHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '10px' },
   infoTooltip: { width: '28px', height: '28px', borderRadius: '50%', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#64748b' },
   table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
   thRow: { backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' },
-  th: { padding: '14px', fontSize: '13px', color: '#475569', fontWeight: '700' },
-  tr: { borderBottom: '1px solid #f8fafc' },
-  td: { padding: '14px', fontSize: '14px', color: '#334155' },
-  pedidoBadge: { backgroundColor: '#f1f5f9', padding: '4px 8px', borderRadius: '6px', fontWeight: '600', color: '#475569', fontSize: '13px' },
+  th: { padding: '14px', fontSize: '13px', fontWeight: '700' },
+  tr: { borderBottom: '1px solid' },
+  td: { padding: '14px', fontSize: '14px' },
+  pedidoBadge: { padding: '4px 8px', borderRadius: '6px', fontWeight: '600', fontSize: '13px' },
   btnDevolver: { padding: '6px 12px', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '12px', cursor: 'pointer' },
-  detalheBox: { padding: '16px', backgroundColor: '#f8fafc' },
+  detalheBox: { padding: '16px' },
   expandInfo: { backgroundColor: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' },
   expandHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px dashed #e2e8f0', fontSize: '14px' },
 
-  metaContainer: { backgroundColor: '#fff', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px', border: '1px solid #e2e8f0' },
+  metaContainer: { padding: '16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' },
   metaInfoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
-  metaMiniTitle: { fontSize: '11px', fontWeight: '800', color: '#64748b', letterSpacing: '0.5px' },
-  metaValores: { margin: 0, fontSize: '18px', fontWeight: '800', color: '#1e293b' },
+  metaMiniTitle: { fontSize: '11px', fontWeight: '800', letterSpacing: '0.5px' },
+  metaValores: { margin: 0, fontSize: '18px', fontWeight: '800' },
   metaPercentBadge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '9999px', fontSize: '11px', fontWeight: '700' },
-  progressBarBg: { width: '100%', height: '8px', backgroundColor: '#f1f5f9', borderRadius: '9999px', overflow: 'hidden' },
+  progressBarBg: { width: '100%', height: '8px', borderRadius: '9999px', overflow: 'hidden' },
   progressBarFill: { height: '100%', background: 'linear-gradient(90deg, #3b82f6, #06b6d4)', borderRadius: '9999px', transition: 'width 0.4s ease-in-out' },
   metaMotivationText: { margin: '12px 0 0 0', fontSize: '13px', fontWeight: '500', color: '#475569' },
   btnMetaEdit: { background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: 0, marginLeft: '10px' },
-  inputMetaEdit: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100px', fontSize: '13px', fontWeight: '600', outline: 'none' },
+  inputMetaEdit: { padding: '4px 8px', borderRadius: '6px', border: '1px solid', width: '100px', fontSize: '13px', fontWeight: '600', outline: 'none' },
   btnMetaSalvar: { backgroundColor: '#1e293b', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' },
-  btnMetaCancelar: { background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '14px', padding: '0 4px' },
+  btnMetaCancelar: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '0 4px' },
 
   precificacaoBox: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', padding: '4px 0' },
-  precificacaoInputsForm: { backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' },
+  precificacaoInputsForm: { padding: '16px', borderRadius: '12px', border: '1px solid' },
   formRowSimulador: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' },
-  labelSimulador: { fontSize: '12px', fontWeight: '600', color: '#475569' },
-  inputSimulador: { padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', fontWeight: '600', color: '#1e293b', outline: 'none', backgroundColor: '#fff', width: '100%', boxSizing: 'border-box' },
-  precificacaoResultCard: { backgroundColor: '#fff', padding: '20px', borderRadius: '14px', border: '2px solid #1e293b', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
-  precoSugeridoGrande: { fontSize: '32px', margin: '8px 0', fontWeight: '900', color: '#1e293b', letterSpacing: '-1px' },
-  finRow: { display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '13px' },
+  labelSimulador: { fontSize: '12px', fontWeight: '600' },
+  inputSimulador: { padding: '10px', borderRadius: '8px', border: '1px solid', fontSize: '14px', fontWeight: '600', outline: 'none', width: '100%', boxSizing: 'border-box' },
+  precificacaoResultCard: { padding: '20px', borderRadius: '14px', border: '2px solid', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
+  precoSugeridoGrande: { fontSize: '32px', margin: '8px 0', fontWeight: '900', letterSpacing: '-1px' },
+  finRow: { display: 'flex', justifyContent: 'space-between', fontSize: '13px' },
 };

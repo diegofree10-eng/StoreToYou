@@ -8,6 +8,9 @@ import { Pedido } from '@/types/pedido';
 import { descobrirAbaDoPedido } from '@/utils/classificarPedido';
 import { doc, onSnapshot } from 'firebase/firestore';
 
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
+
 import TabTodosPedidos from './_tabsGestaoPedidos/TabTodosPedidos';
 import TabCotarFrete from './_tabsGestaoPedidos/TabCotarFrete';
 import TabEmitirEtiquetas from './_tabsGestaoPedidos/TabEmitirEtiquetas';
@@ -38,6 +41,9 @@ export default function GestaoPedidos({
     pedidos = [], loading = false, lojistaIdApp, db, dadosLoja: dadosLojaIniciais
 }: GestaoPedidosProps) {
 
+    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+    const { theme } = useTheme();
+
     const [abaAtiva, setAbaAtiva] = useState<string>('pedidos');
     const [selecionados, setSelecionados] = useState<string[]>([]);
 
@@ -48,11 +54,11 @@ export default function GestaoPedidos({
     const [filtroLogistica, setFiltroLogistica] = useState("todos");
     const [ordenacao, setOrdenacao] = useState("recentes");
 
-    const funcaoCotarRef = useRef<() => void>(() => {});
-    const funcaoConcluirRetiradaRef = useRef<() => void>(() => {});
-    const funcaoConcluirEntregaLocalRef = useRef<() => void>(() => {});
-    const funcaoConcluirDigitalRef = useRef<() => void>(() => {});
-    const funcaoConfirmarRecebimentoRef = useRef<() => void>(() => {});
+    const funcaoCotarRef = useRef<() => void>(() => { });
+    const funcaoConcluirRetiradaRef = useRef<() => void>(() => { });
+    const funcaoConcluirEntregaLocalRef = useRef<() => void>(() => { });
+    const funcaoConcluirDigitalRef = useRef<() => void>(() => { });
+    const funcaoConfirmarRecebimentoRef = useRef<() => void>(() => { });
 
     useEffect(() => {
         const handler = setTimeout(() => setDebouncedBusca(busca), 300);
@@ -266,7 +272,7 @@ export default function GestaoPedidos({
     };
 
     return (
-        <div style={styles.contentArea}>
+        <div style={{ ...styles.contentArea, backgroundColor: theme.bgMain, color: theme.textMain }}>
             <style jsx>{`
                 @media (max-width: 768px) {
                     .gp-header-topo {
@@ -285,20 +291,20 @@ export default function GestaoPedidos({
                 }
             `}</style>
 
-            <div style={styles.headerFixoContainer}>
+            <div style={{ ...styles.headerFixoContainer, backgroundColor: theme.bgMain, borderColor: theme.border }}>
                 <div className="gp-header-topo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '0px' }}>
-                    <h2 style={{ fontSize: '20px', color: '#1e293b', margin: 0, fontWeight: 800 }}>📋 Gestão de Pedidos</h2>
+                    <h2 style={{ fontSize: '20px', color: theme.textMain, margin: 0, fontWeight: 800 }}>📋 Gestão de Pedidos</h2>
                 </div>
 
-                <div className="gp-filter-bar" style={styles.filterBar}>
-                    <select value={filtroLogistica} onChange={(e) => setFiltroLogistica(e.target.value)} style={styles.selectLogistica}>
+                <div className="gp-filter-bar" style={{ ...styles.filterBar, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                    <select value={filtroLogistica} onChange={(e) => setFiltroLogistica(e.target.value)} style={{ ...styles.selectLogistica, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>
                         <option value="todos">🗂️ Todas Logísticas</option>
                         <option value="pendentes">🏷️ Etiqueta Pendente</option>
                         <option value="freteGratis">🚚 Frete Grátis</option>
                         <option value="semFrete">📦 Sem Frete</option>
                         <option value="retirada">🏪 Retirada Loja</option>
                     </select>
-                    <select value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)} style={styles.selectOrdenacaoStyle}>
+                    <select value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)} style={{ ...styles.selectOrdenacaoStyle, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>
                         <option value="recentes">📅 Mais Recentes</option>
                         <option value="antigos">⏳ Mais Antigos</option>
                     </select>
@@ -310,7 +316,7 @@ export default function GestaoPedidos({
                                 placeholder="🔍 Digite para buscar (ex: Maria, nº pedido ou Id Pedido)..."
                                 value={busca}
                                 onChange={(e) => setBusca(e.target.value)}
-                                style={styles.searchInput}
+                                style={{ ...styles.searchInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                             />
 
                             {termoBuscaAtivo && (
@@ -320,8 +326,8 @@ export default function GestaoPedidos({
                                         setBusca("");
                                     }}
                                     style={{
-                                        backgroundColor: '#cbd5e1',
-                                        color: '#1e293b',
+                                        backgroundColor: theme.border,
+                                        color: theme.textMain,
                                         border: 'none',
                                         padding: '0 12px',
                                         borderRadius: '6px',
@@ -337,8 +343,8 @@ export default function GestaoPedidos({
                         </div>
 
                         {resultadosBuscaMenu.length > 0 && (
-                            <div style={styles.dropdownMenu}>
-                                <div style={styles.dropdownHeader}>
+                            <div style={{ ...styles.dropdownMenu, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                <div style={{ ...styles.dropdownHeader, backgroundColor: theme.inputBg, color: theme.textSec, borderColor: theme.border }}>
                                     <span>🔍 Total de {resultadosBuscaMenu.length} resultado(s) encontrado(s)</span>
                                 </div>
                                 <div style={styles.dropdownList}>
@@ -351,14 +357,14 @@ export default function GestaoPedidos({
                                             <div
                                                 key={p.id}
                                                 onClick={() => selecionarPedidoDoMenu(p)}
-                                                style={styles.dropdownItem}
-                                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#fff')}
+                                                style={{ ...styles.dropdownItem, borderColor: theme.border }}
+                                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.border)}
+                                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = theme.bgCard)}
                                             >
-                                                <div style={{ fontWeight: 'bold', color: '#2563eb', fontSize: '13px' }}>
-                                                    #{numPed} - <span style={{ color: '#1e293b' }}>{clienteNome}</span>
+                                                <div style={{ fontWeight: 'bold', color: theme.primary, fontSize: '13px' }}>
+                                                    #{numPed} - <span style={{ color: theme.textMain }}>{clienteNome}</span>
                                                 </div>
-                                                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                                <div style={{ fontSize: '11px', color: theme.textSec, marginTop: '2px' }}>
                                                     Etapa/Aba: <strong style={{ color: '#059669' }}>{infoAba.toUpperCase()}</strong>
                                                 </div>
                                             </div>
@@ -370,47 +376,47 @@ export default function GestaoPedidos({
                     </div>
                 </div>
 
-                <div style={styles.tabContainer}>
-                    <button onClick={lidarComCliqueAbaPedidos} style={{ ...styles.tabStyle, ...(abaAtiva === 'pedidos' ? styles.tabAtiva : {}) }}>
+                <div style={{ ...styles.tabContainer, borderColor: theme.border }}>
+                    <button onClick={lidarComCliqueAbaPedidos} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'pedidos' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
                         PEDIDOS
                         {novosPedidosCount > 0 && <span style={styles.badgeNovo}>{novosPedidosCount}</span>}
-                        <span style={styles.badgeTotal}>({contadoresAbas['pedidos'] || 0})</span>
+                        <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['pedidos'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('pendente'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'pendente' ? styles.tabAtiva : {}) }}>
-                        PENDENTE <span style={styles.badgeTotal}>({contadoresAbas['pendente'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('pendente'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'pendente' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        PENDENTE <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['pendente'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('producao'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'producao' ? styles.tabAtiva : {}) }}>
-                        produção <span style={styles.badgeTotal}>({contadoresAbas['producao'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('producao'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'producao' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        PRODUÇÃO <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['producao'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('cotar'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'cotar' ? styles.tabAtiva : {}) }}>
-                        COTAR FRETE <span style={styles.badgeTotal}>({contadoresAbas['cotar'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('cotar'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'cotar' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        COTAR FRETE <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['cotar'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('etiquetas'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'etiquetas' ? styles.tabAtiva : {}) }}>
-                        ETIQUETAS <span style={styles.badgeTotal}>({contadoresAbas['etiquetas'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('etiquetas'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'etiquetas' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        ETIQUETAS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['etiquetas'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('retirada'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'retirada' ? styles.tabAtiva : {}) }}>
-                        RETIRADA <span style={styles.badgeTotal}>({contadoresAbas['retirada'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('retirada'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'retirada' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        RETIRADA <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['retirada'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('entregalocal'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'entregalocal' ? styles.tabAtiva : {}) }}>
-                        ENTREGA LOCAL <span style={styles.badgeTotal}>({contadoresAbas['entregalocal'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('entregalocal'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'entregalocal' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        ENTREGA LOCAL <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['entregalocal'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('digital'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'digital' ? styles.tabAtiva : {}) }}>
-                        DIGITAL <span style={styles.badgeTotal}>({contadoresAbas['digital'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('digital'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'digital' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        DIGITAL <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['digital'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('enviados'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'enviados' ? styles.tabAtivaEnviados : {}) }}>
-                        ENVIADOS <span style={styles.badgeTotal}>({contadoresAbas['enviados'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('enviados'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'enviados' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        ENVIADOS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['enviados'] || 0})</span>
                     </button>
 
-                    <button onClick={() => { setAbaAtiva('concluidos'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, ...(abaAtiva === 'concluidos' ? styles.tabAtivaConcluidos : {}) }}>
-                        CONCLUÍDOS <span style={styles.badgeTotal}>({contadoresAbas['concluidos'] || 0})</span>
+                    <button onClick={() => { setAbaAtiva('concluidos'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'concluidos' ? { ...styles.tabAtivaConcluidos, color: '#059669', borderColor: '#059669' } : {}) }}>
+                        CONCLUÍDOS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['concluidos'] || 0})</span>
                     </button>
                 </div>
 
@@ -540,9 +546,9 @@ export default function GestaoPedidos({
 
             {pedidoParaDeletar && (
                 <div style={localStyles.modalOverlayCentroFix}>
-                    <div style={{ ...localStyles.modalContentCentroCard, borderTop: '5px solid #ef4444' }}>
+                    <div style={{ ...localStyles.modalContentCentroCard, backgroundColor: theme.bgCard, color: theme.textMain, borderTop: '5px solid #ef4444', borderColor: theme.border }}>
                         <h3 style={{ margin: '0 0 10px 0', color: '#ef4444' }}>⚠️ EXCLUSÃO DEFINITIVA (COM ESTORNO)</h3>
-                        <p style={{ fontSize: '13px', color: '#475569', marginBottom: '12px' }}>
+                        <p style={{ fontSize: '13px', color: theme.textSec, marginBottom: '12px' }}>
                             Ao excluir este pedido, os itens serão devolvidos para o estoque automaticamente.
                         </p>
                         <input
@@ -550,10 +556,10 @@ export default function GestaoPedidos({
                             placeholder={`Digite ${pedidoParaDeletar.numeroPedido || pedidoParaDeletar.id.slice(-4)}...`}
                             value={confirmacaoTexto}
                             onChange={(e) => setConfirmacaoTexto(e.target.value)}
-                            style={{ width: '100%', marginBottom: '20px', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                            style={{ width: '100%', marginBottom: '20px', padding: '10px', borderRadius: '6px', border: `1px solid ${theme.border}`, boxSizing: 'border-box', backgroundColor: theme.inputBg, color: theme.textMain }}
                         />
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button onClick={() => { setPedidoParaDeletar(null); setConfirmacaoTexto(""); }} style={{ padding: '8px 12px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
+                            <button onClick={() => { setPedidoParaDeletar(null); setConfirmacaoTexto(""); }} style={{ padding: '8px 12px', background: theme.border, color: theme.textMain, border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
                             <button onClick={executarExclusaoPermanente} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Confirmar e Excluir</button>
                         </div>
                     </div>
@@ -564,27 +570,28 @@ export default function GestaoPedidos({
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-    contentArea: { padding: '20px', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', boxSizing: 'border-box' },
+    // 🌟 Reduzimos o padding superior de '20px' para '5px' para colar no topo
+    contentArea: { padding: '5px 20px 20px 20px', fontFamily: 'system-ui, sans-serif', minHeight: '100vh', boxSizing: 'border-box' },
+
     headerFixoContainer: {
         position: 'relative',
-        backgroundColor: '#f8fafc',
-        paddingTop: '5px',
-        paddingBottom: '10px',
-        borderBottom: '1px solid #e2e8f0',
+        paddingTop: '0px', // 🌟 Zerado para remover qualquer folga interna
+        paddingBottom: '5px', // 🌟 Encurtado para aproximar o título das abas
+        borderBottom: '1px solid',
         zIndex: 10
     },
-    filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px', backgroundColor: '#fff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' },
-    selectLogistica: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' },
-    selectOrdenacaoStyle: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' },
-    searchInput: { padding: '7px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', flex: 1, backgroundColor: '#fff' },
+    
+    filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid' },
+    selectLogistica: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', outline: 'none', cursor: 'pointer' },
+    selectOrdenacaoStyle: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', outline: 'none', cursor: 'pointer' },
+    searchInput: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', flex: 1 },
 
     dropdownMenu: {
         position: 'absolute',
         top: 'calc(100% + 4px)',
         left: 0,
         right: 0,
-        backgroundColor: '#fff',
-        border: '1px solid #cbd5e1',
+        border: '1px solid',
         borderRadius: '8px',
         boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
         zIndex: 999,
@@ -595,9 +602,7 @@ const styles: { [key: string]: React.CSSProperties } = {
         padding: '10px 14px',
         fontSize: '12px',
         fontWeight: 'bold',
-        color: '#64748b',
-        borderBottom: '1px solid #f1f5f9',
-        backgroundColor: '#f8fafc'
+        borderBottom: '1px solid'
     },
     dropdownList: {
         display: 'flex',
@@ -605,7 +610,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     },
     dropdownItem: {
         padding: '10px 14px',
-        borderBottom: '1px solid #f1f5f9',
+        borderBottom: '1px solid',
         cursor: 'pointer',
         transition: 'background-color 0.15s ease'
     },
@@ -614,7 +619,7 @@ const styles: { [key: string]: React.CSSProperties } = {
         display: 'flex',
         gap: '16px',
         flexWrap: 'wrap',
-        borderBottom: '1px solid #e2e8f0',
+        borderBottom: '1px solid',
         marginTop: '14px',
         width: '100%',
         boxSizing: 'border-box',
@@ -630,7 +635,6 @@ const styles: { [key: string]: React.CSSProperties } = {
         padding: '8px 6px',
         fontSize: '13px',
         fontWeight: '600',
-        color: '#64748b',
         cursor: 'pointer',
         transition: 'all 0.2s',
         whiteSpace: 'nowrap',
@@ -640,18 +644,12 @@ const styles: { [key: string]: React.CSSProperties } = {
         marginBottom: '-1px'
     },
     tabAtiva: {
-        color: '#2563eb',
-        borderColor: '#2563eb',
         fontWeight: 'bold'
     },
     tabAtivaEnviados: {
-        color: '#2563eb',
-        borderColor: '#2563eb',
         fontWeight: 'bold'
     },
     tabAtivaConcluidos: {
-        color: '#059669',
-        borderColor: '#059669',
         fontWeight: 'bold'
     },
     badgeNovo: {
@@ -664,8 +662,6 @@ const styles: { [key: string]: React.CSSProperties } = {
         marginLeft: '2px'
     },
     badgeTotal: {
-        backgroundColor: '#e2e8f0',
-        color: '#475569',
         fontSize: '11px',
         fontWeight: '600',
         padding: '1px 5px',
@@ -678,5 +674,5 @@ const styles: { [key: string]: React.CSSProperties } = {
 
 const localStyles: { [key: string]: React.CSSProperties } = {
     modalOverlayCentroFix: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 },
-    modalContentCentroCard: { backgroundColor: '#fff', padding: '24px', borderRadius: '8px', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }
+    modalContentCentroCard: { padding: '24px', borderRadius: '8px', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', border: '1px solid' }
 };

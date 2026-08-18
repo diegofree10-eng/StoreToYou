@@ -8,6 +8,9 @@ import { FiDownload, FiMoreVertical } from "react-icons/fi";
 import { styles } from "../styles";
 import { excluirProdutoCompleto } from "@/utils/exclusao";
 
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
+
 interface ListaProdutosProps {
     produtos: any[];
     produtosFiltrados: any[];
@@ -42,6 +45,9 @@ export default function ListaProdutos({
     onEditar,
     onDuplicar
 }: ListaProdutosProps) {
+
+    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+    const { theme } = useTheme();
 
     const [modalPrecoMassaAberto, setModalPrecoMassaAberto] = useState(false);
     const [tipoAjustePreco, setTipoAjustePreco] = useState<"fixo" | "soma" | "porcentagem">("porcentagem");
@@ -197,11 +203,11 @@ export default function ListaProdutos({
     };
 
     return (
-        <div>
+        <div style={{ color: theme.textMain }}>
             {/* ORGANIZAÇÃO LIMPA E PROFISSIONAL EXCLUSIVA PARA O MOBILE */}
             <style jsx>{`
                 .menu-item-hover:hover {
-                    background-color: #f1f5f9 !important;
+                    background-color: ${theme.border} !important;
                 }
                 .menu-item-hover-danger:hover {
                     background-color: #fee2e2 !important;
@@ -243,14 +249,14 @@ export default function ListaProdutos({
                     }
 
                     /* Painel de Ações em Massa no Mobile exatamente como solicitado:
-                       Linha 1: Mostrar / Ocultar / Excluir (3 colunas iguais)
-                       Linha 2: Preço em Massa / Imprimir (2 colunas iguais) */
+                        Linha 1: Mostrar / Ocultar / Excluir (3 colunas iguais)
+                        Linha 2: Preço em Massa / Imprimir (2 colunas iguais) */
                     .mobile-mass-panel {
                         display: flex !important;
                         flex-direction: column !important;
                         gap: 8px !important;
-                        background: #fff !important;
-                        border: 1px solid #cbd5e1 !important;
+                        background: ${theme.bgCard} !important;
+                        border: 1px solid ${theme.border} !important;
                         border-radius: 8px !important;
                         padding: 10px !important;
                         margin-top: 10px !important;
@@ -298,14 +304,14 @@ export default function ListaProdutos({
 
             {modalPrecoMassaAberto && (
                 <div style={styles.modalOverlay}>
-                    <div style={{ ...styles.modalContent, width: '400px' }}>
-                        <h3 style={{ marginBottom: '10px', fontSize: '16px', fontWeight: 'bold' }}>💰 Ajustar Preços em Massa</h3>
-                        <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '15px' }}>
+                    <div style={{ ...styles.modalContent, width: '400px', background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}` }}>
+                        <h3 style={{ marginBottom: '10px', fontSize: '16px', fontWeight: 'bold', color: theme.textMain }}>💰 Ajustar Preços em Massa</h3>
+                        <p style={{ fontSize: '12px', color: theme.textSec, marginBottom: '15px' }}>
                             Aplicar alteração para os <b>{selecionados.length}</b> produtos selecionados:
                         </p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '15px' }}>
-                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>Tipo de Ajuste:</label>
+                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>Tipo de Ajuste:</label>
                             <select
                                 value={tipoAjustePreco}
                                 onChange={(e: any) => {
@@ -313,7 +319,7 @@ export default function ListaProdutos({
                                     setTipoAjustePreco(novoTipo);
                                     setValorAjustePreco(novoTipo === "porcentagem" ? "" : "0,00");
                                 }}
-                                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+                                style={{ padding: '8px', borderRadius: '6px', border: `1px solid ${theme.border}`, fontSize: '13px', background: theme.inputBg, color: theme.textMain }}
                             >
                                 <option value="porcentagem">📈 Aumentar / Diminuir por Porcentagem (%)</option>
                                 <option value="soma">➕ Somar / Subtrair Valor Fixo (R$)</option>
@@ -322,7 +328,7 @@ export default function ListaProdutos({
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
-                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>
                                 {tipoAjustePreco === "porcentagem" && "Percentual (Ex: 10 para +10% ou -10 para desconto):"}
                                 {tipoAjustePreco === "soma" && "Valor a somar/subtrair em Reais (Ex: 5,00 ou -2,50):"}
                                 {tipoAjustePreco === "fixo" && "Novo preço fixo para todos (Ex: 49,90):"}
@@ -339,13 +345,13 @@ export default function ListaProdutos({
                                         setValorAjustePreco(formatarCaixaEletronico(e.target.value));
                                     }
                                 }}
-                                style={{ ...styles.searchBar, width: '100%', margin: 0 }}
+                                style={{ ...styles.searchBar, width: '100%', margin: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                                 autoFocus
                             />
                         </div>
 
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button type="button" onClick={() => setModalPrecoMassaAberto(false)} style={{ ...styles.btnGeneric, background: '#cbd5e1', color: '#1e293b' }}>
+                            <button type="button" onClick={() => setModalPrecoMassaAberto(false)} style={{ ...styles.btnGeneric, background: theme.border, color: theme.textMain }}>
                                 Cancelar
                             </button>
                             <button type="button" onClick={aplicarPrecoEmMassa} style={{ ...styles.btnGeneric, background: '#10b981', color: '#fff', border: 'none' }}>
@@ -359,21 +365,21 @@ export default function ListaProdutos({
             <div style={styles.topHeader}>
                 <div className="mobile-filter-row" style={styles.filterRow}>
                     <input
-                        style={styles.searchBar}
+                        style={{ ...styles.searchBar, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                         placeholder="🔍 Buscar por nome..."
                         value={busca}
                         onChange={e => setBusca(e.target.value)}
                     />
-                    <select style={styles.selectTop} value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
+                    <select style={{ ...styles.selectTop, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }} value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
                         <option value="Todos">Categorias</option>
                         {listaCategorias.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
                     </select>
-                    <select style={styles.selectStatus} value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}>
+                    <select style={{ ...styles.selectStatus, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }} value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}>
                         <option value="Todos">Status</option>
                         <option value="Visíveis">✅ Visíveis</option>
                         <option value="Ocultos">🚫 Ocultos</option>
                     </select>
-                    <button type="button" onClick={() => setModoMassa(!modoMassa)} style={{ ...styles.btnGeneric, background: modoMassa ? '#3b82f6' : '#fff', color: modoMassa ? '#fff' : '#3b82f6' }}>
+                    <button type="button" onClick={() => setModoMassa(!modoMassa)} style={{ ...styles.btnGeneric, background: modoMassa ? theme.primary : theme.bgCard, color: modoMassa ? '#fff' : theme.textMain, border: `1px solid ${theme.border}` }}>
                         Editar em Massa
                     </button>
                     <button type="button" onClick={exportarProdutosCSV} style={{ ...styles.btnGeneric, background: '#10b981', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -382,22 +388,22 @@ export default function ListaProdutos({
                 </div>
 
                 {modoMassa && (
-                    <div className="mobile-mass-panel" style={styles.massPanel}>
+                    <div className="mobile-mass-panel" style={{ ...styles.massPanel, background: theme.bgCard, borderColor: theme.border }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <button type="button" onClick={() => setSelecionados(selecionados.length === produtosFiltrados.length ? [] : produtosFiltrados.map(p => p.id))} style={{ ...styles.btnMass, borderColor: '#cbd5e1' }}>
+                            <button type="button" onClick={() => setSelecionados(selecionados.length === produtosFiltrados.length ? [] : produtosFiltrados.map(p => p.id))} style={{ ...styles.btnMass, borderColor: theme.border, background: theme.inputBg, color: theme.textMain }}>
                                 {selecionados.length === produtosFiltrados.length ? "Desmarcar Todos" : "Selecionar Todos"}
                             </button>
-                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e40af' }}>{selecionados.length} itens selecionados</span>
+                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.primary }}>{selecionados.length} itens selecionados</span>
                         </div>
                         <div className="mobile-mass-actions-container" style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                             <div className="mobile-mass-row-1" style={{ display: 'contents' }}>
-                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: true }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: '#059669' }}>
+                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: true }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: '#059669', background: theme.inputBg, borderColor: theme.border }}>
                                     👁️ Mostrar
                                 </button>
-                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: false }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: '#64748b' }}>
+                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: false }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: theme.textSec, background: theme.inputBg, borderColor: theme.border }}>
                                     🚫 Ocultar
                                 </button>
-                                <button type="button" onClick={excluirEmMassa} style={{ ...styles.btnMass, color: '#dc2626' }}>
+                                <button type="button" onClick={excluirEmMassa} style={{ ...styles.btnMass, color: '#dc2626', background: theme.inputBg, borderColor: theme.border }}>
                                     🗑️ Excluir
                                 </button>
                             </div>
@@ -409,11 +415,11 @@ export default function ListaProdutos({
                                         setValorAjustePreco(tipoAjustePreco === "porcentagem" ? "" : "0,00"); 
                                         setModalPrecoMassaAberto(true); 
                                     }} 
-                                    style={{ ...styles.btnMass, color: '#2563eb' }}
+                                    style={{ ...styles.btnMass, color: theme.primary, background: theme.inputBg, borderColor: theme.border }}
                                 >
                                     💰 Preço em Massa
                                 </button>
-                                <button type="button" onClick={() => { const selecionadosObj = produtos.filter(p => selecionados.includes(p.id)); setListaParaImprimir(selecionadosObj); }} style={{ ...styles.btnMass, color: '#f59e0b' }}>
+                                <button type="button" onClick={() => { const selecionadosObj = produtos.filter(p => selecionados.includes(p.id)); setListaParaImprimir(selecionadosObj); }} style={{ ...styles.btnMass, color: '#f59e0b', background: theme.inputBg, borderColor: theme.border }}>
                                     🖨️ Imprimir
                                 </button>
                             </div>
@@ -425,7 +431,7 @@ export default function ListaProdutos({
             <div>
                 <div className="product-grid-mobile" style={styles.productGrid}>
                     {produtosFiltrados.length === 0 ? (
-                        <p style={{ textAlign: 'center', color: '#64748b', gridColumn: '1 / -1', padding: '30px' }}>Nenhum produto encontrado.</p>
+                        <p style={{ textAlign: 'center', color: theme.textSec, gridColumn: '1 / -1', padding: '30px' }}>Nenhum produto encontrado.</p>
                     ) : (
                         produtosFiltrados.map(p => {
                             const lucro = calcularLucro(p.precoBasico, p.custoUnitario);
@@ -436,6 +442,9 @@ export default function ListaProdutos({
                                     key={p.id}
                                     style={{
                                         ...styles.card,
+                                        background: theme.bgCard,
+                                        borderColor: theme.border,
+                                        color: theme.textMain,
                                         opacity: p.ativo ? 1 : 0.6,
                                         position: 'relative',
                                         zIndex: isOpen ? 50 : 1,
@@ -485,8 +494,8 @@ export default function ListaProdutos({
                                                 setMenuAbertoId(isOpen ? null : p.id);
                                             }}
                                             style={{
-                                                background: 'rgba(255,255,255,0.95)',
-                                                border: '1px solid #cbd5e1',
+                                                background: theme.bgCard,
+                                                border: `1px solid ${theme.border}`,
                                                 borderRadius: '50%',
                                                 width: '28px',
                                                 height: '28px',
@@ -497,7 +506,7 @@ export default function ListaProdutos({
                                                 boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
                                             }}
                                         >
-                                            <FiMoreVertical size={14} color="#334155" />
+                                            <FiMoreVertical size={14} color={theme.textMain} />
                                         </button>
 
                                         {isOpen && (
@@ -505,8 +514,8 @@ export default function ListaProdutos({
                                                 position: 'absolute',
                                                 top: '32px',
                                                 right: 0,
-                                                background: '#fff',
-                                                border: '1px solid #e2e8f0',
+                                                background: theme.bgCard,
+                                                border: `1px solid ${theme.border}`,
                                                 borderRadius: '8px',
                                                 boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
                                                 width: '160px',
@@ -526,7 +535,7 @@ export default function ListaProdutos({
                                                         }
                                                     }}
                                                     className="menu-item-hover"
-                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
                                                 >
                                                     {p.destaque ? "⭐ Remover Destaque" : "⭐ Destacar"}
                                                 </button>
@@ -534,7 +543,7 @@ export default function ListaProdutos({
                                                     type="button"
                                                     onClick={(e) => { e.stopPropagation(); setMenuAbertoId(null); onEditar(p); }}
                                                     className="menu-item-hover"
-                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: theme.primary, display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
                                                 >
                                                     ✏️ Editar
                                                 </button>
@@ -556,7 +565,7 @@ export default function ListaProdutos({
                                                         }
                                                     }}
                                                     className="menu-item-hover"
-                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
+                                                    style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: theme.textSec, display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
                                                 >
                                                     {p.ativo ? "🚫 Ocultar" : "👁️ Mostrar"}
                                                 </button>
@@ -568,7 +577,7 @@ export default function ListaProdutos({
                                                 >
                                                     🖨️ Etiqueta
                                                 </button>
-                                                <div style={{ height: '1px', background: '#f1f5f9', margin: '3px 0' }} />
+                                                <div style={{ height: '1px', background: theme.border, margin: '3px 0' }} />
                                                 <button
                                                     type="button"
                                                     onClick={(e) => { e.stopPropagation(); setMenuAbertoId(null); handleExcluirIndividual(p); }}
@@ -586,9 +595,9 @@ export default function ListaProdutos({
                                     </div>
 
                                     <div style={styles.cardBody}>
-                                        <h4 style={styles.cardTitle}>{p.nome}</h4>
+                                        <h4 style={{ ...styles.cardTitle, color: theme.textMain }}>{p.nome}</h4>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 'auto' }}>
-                                            <span style={styles.cardPrice}>R$ {p.precoBasico || "0,00"}</span>
+                                            <span style={{ ...styles.cardPrice, color: theme. primary }}>R$ {p.precoBasico || "0,00"}</span>
                                             {lucro && <span style={styles.markupTag}>+{lucro}%</span>}
                                         </div>
                                     </div>

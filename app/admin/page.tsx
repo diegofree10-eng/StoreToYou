@@ -1,3 +1,4 @@
+// app/admin/page.tsx
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
@@ -6,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { doc, onSnapshot, collection, query, orderBy, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { FiMenu, FiPlus } from "react-icons/fi";
+import { FiMenu } from "react-icons/fi";
 
 import { getPlanoEfetivo } from "@/utils/planoAtivo";
 
@@ -19,7 +20,14 @@ import PaginaEstoque from "./estoque/page";
 import AdminConfig from "./config/page";
 import DashboardMaster from "./_tabDashBoardMaster/DashboardMaster";
 
+// 🌟 Importando o hook de tema para usar as cores dinâmicas reais
+import { useTheme } from "@/context/ThemeContext";
+
+const PaginaPDV = dynamic(() => import("./pdv/page"), { ssr: false });
+
 function AdminLayoutGridDefinitivo() {
+  const { theme, isModoNoturno } = useTheme(); // 🌟 Consumindo o tema global aqui também!
+
   const [telaAtiva, setTelaAtiva] = useState('dash');
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +45,19 @@ function AdminLayoutGridDefinitivo() {
   const unsubPlanosRef = useRef<(() => void) | null>(null);
 
   const planoEfetivo = (dadosLojista && planosConfig) ? getPlanoEfetivo(dadosLojista, planosConfig) : null;
+
+  const masterLiberou = (feature: string) => {
+    if (!planoEfetivo) return false;
+
+    const liberado = Boolean(
+      (planoEfetivo as Record<string, any>)?.[feature] ??
+      (planoEfetivo as Record<string, any>)?.configs?.[feature] ??
+      (planoEfetivo as Record<string, any>)?.dadosPlano?.[feature] ??
+      false
+    );
+
+    return liberado;
+  };
 
   useEffect(() => {
     if (isLoggingOut) return;
@@ -79,14 +100,12 @@ function AdminLayoutGridDefinitivo() {
               }
             });
 
-            // 🛡️ Blindagem: Só inicializa o snapshot de pedidos se o ID da loja for válido
             if (userData.lojaId) {
               const qPedidos = query(collection(db, "lojistas", userData.lojaId, "pedidos"), orderBy("numeroPedido", "desc"));
               unsubPedidosRef.current = onSnapshot(qPedidos, (snapPedidos) => {
                 setPedidos(snapPedidos.docs.map(d => ({ id: d.id, ...d.data() })));
                 setLoading(false);
               }, (error) => {
-                console.warn("Aviso de permissão em pedidos (será re-tentado):", error);
                 setLoading(false);
               });
             } else {
@@ -99,7 +118,6 @@ function AdminLayoutGridDefinitivo() {
           setLoading(false);
         }
       } catch (e) {
-        console.error("Erro na carga de dados:", e);
         setLoading(false);
       }
     });
@@ -128,9 +146,8 @@ function AdminLayoutGridDefinitivo() {
   }
 
   return (
-    <div className="admin-layout-wrapper">
+    <div className="admin-layout-wrapper" style={{ backgroundColor: theme.bgApp }}>
 
-      {/* Sidebar na Esquerda */}
       <div className="sidebar-area">
         <Sidebar
           telaAtiva={telaAtiva}
@@ -138,32 +155,29 @@ function AdminLayoutGridDefinitivo() {
           onLogout={handleLogout}
           isOpenMobile={menuMobileAberto}
           onCloseMobile={() => setMenuMobileAberto(false)}
+          planoEfetivo={planoEfetivo}
+          masterLiberou={masterLiberou}
         />
       </div>
 
-      {/* Conteúdo Principal na Direita */}
-      <main className="main-content-area">
+      <main className="main-content-area" style={{ backgroundColor: theme.bgApp, color: theme.textMain }}>
 
-        {/* Barra superior mobile ajustada com menu sanduíche e botão novo */}
-        <div className="mobile-header-bar">
+        <div className="mobile-header-bar" style={{ background: theme.bgCard, borderBottom: `1px solid ${theme.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
               onClick={() => setMenuMobileAberto(true)}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '5px' }}
               aria-label="Abrir menu"
             >
-              <FiMenu size={24} color="#1e293b" />
+              <FiMenu size={24} color={theme.textMain} />
             </button>
-            <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e293b' }}>Painel Administrativo</span>
+            <span style={{ fontSize: '15px', fontWeight: 'bold', color: theme.textMain }}>Painel Administrativo</span>
           </div>
-
-
         </div>
 
-        {/* Telas e Dashboards */}
         <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
           {telaAtiva === 'dash' && planoEfetivo && (
-            planoEfetivo.configs.tipoDashboard === 'gestao' ? (
+            planoEfetivo.configs?.tipoDashboard === 'gestao' ? (
               <DashboardGestao pedidos={pedidos} lojistaId={lojistaIdReal || undefined} />
             ) : (
               <DashboardBronze pedidos={pedidos} dadosLojista={dadosLojista || undefined} />
@@ -172,7 +186,8 @@ function AdminLayoutGridDefinitivo() {
 
           {telaAtiva === 'produtos' && <CadastroProdutos />}
           {telaAtiva === 'pedidos' && lojistaIdReal && <Pedidos pedidos={pedidos} db={db} lojistaIdApp={lojistaIdReal} />}
-          {telaAtiva === 'estoque' && <PaginaEstoque />} {/* <--- Adicione esta linha aqui */}
+          {telaAtiva === 'pdv' && <PaginaPDV />}
+          {telaAtiva === 'estoque' && <PaginaEstoque />}
           {telaAtiva === 'config' && <AdminConfig />}
           {telaAtiva === 'gestao-geral' && userRole === 'master' && <DashboardMaster />}
         </div>
@@ -186,7 +201,8 @@ function AdminLayoutGridDefinitivo() {
         html, body, #__next {
           margin: 0 !important;
           padding: 0 !important;
-          background-color: #f8fafc !important;
+          background-color: ${theme.bgApp} !important;
+          color: ${theme.textMain} !important;
           overflow-x: hidden !important;
           width: 100%;
           min-height: 100vh;
@@ -197,7 +213,7 @@ function AdminLayoutGridDefinitivo() {
           grid-template-columns: 260px 1fr;
           min-height: 100vh;
           width: 100vw;
-          background-color: #f8fafc;
+          background-color: ${theme.bgApp};
           margin: 0;
           padding: 0;
           overflow-x: hidden;
@@ -213,7 +229,7 @@ function AdminLayoutGridDefinitivo() {
         }
 
         .main-content-area {
-          background-color: #f8fafc;
+          background-color: ${theme.bgApp};
           min-height: 100vh;
           width: 100%;
           max-width: 100%;
@@ -227,7 +243,6 @@ function AdminLayoutGridDefinitivo() {
           display: none;
         }
 
-        /* Responsividade para Dispositivos Móveis com espaçamento superior aumentado */
         @media (max-width: 768px) {
           .admin-layout-wrapper {
             grid-template-columns: 1fr;
@@ -242,7 +257,7 @@ function AdminLayoutGridDefinitivo() {
             width: 100vw;
             max-width: 100vw;
             padding: 12px;
-            padding-top: 80px; /* Aumentado o espaçamento do topo para afastar a listagem da barra */
+            padding-top: 80px;
             padding-bottom: 10px;
             overflow-y: auto;
           }
@@ -254,8 +269,8 @@ function AdminLayoutGridDefinitivo() {
             left: 0;
             right: 0;
             height: 60px;
-            background: #ffffff;
-            border-bottom: 1px solid #e2e8f0;
+            background: ${theme.bgCard};
+            border-bottom: 1px solid ${theme.border};
             align-items: center;
             padding: 0 15px;
             z-index: 900;

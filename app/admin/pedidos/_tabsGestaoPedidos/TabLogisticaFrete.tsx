@@ -233,7 +233,7 @@ export default function TabLogisticaFrete({
                                         R$ {Number(p.financeiro?.vlTotal || 0).toFixed(2).replace('.', ',')}
                                     </div>
                                     <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
-                                        {formatarData(p.data || p.cliente?.data)}
+                                        {formatarData(p.data || (typeof p.cliente === 'object' ? (p.cliente as any)?.data : ""))}
                                     </div>
                                 </div>
 

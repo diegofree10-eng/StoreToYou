@@ -6,13 +6,24 @@ export interface TabVendasProps {
   pedidos: any[];
   formatarDataExibicao: (data: any) => string;
   formatarMoeda: (valor: any) => string;
-  alternarDevolucao: (id: string, statusAtual: boolean) => void; // <--- Atualize aqui
+  alternarDevolucao: (id: string, statusAtual: boolean) => void;
   pedidoExpandido: string | null;
   setPedidoExpandido: React.Dispatch<React.SetStateAction<string | null>>;
   LinhaPedido: React.ComponentType<any>;
   styles: { [key: string]: React.CSSProperties };
   itensPorPagina: number;
+  theme?: any;
+  isModoNoturno?: boolean;
 }
+
+const DEFAULT_THEME = {
+  bgApp: "#f8fafc",
+  bgCard: "#ffffff",
+  textMain: "#1e293b",
+  textSec: "#64748b",
+  border: "#e2e8f0",
+  inputBg: "#ffffff"
+};
 
 export const TabVendas = ({
   pedidos,
@@ -23,7 +34,9 @@ export const TabVendas = ({
   setPedidoExpandido,
   LinhaPedido,
   styles,
-  itensPorPagina
+  itensPorPagina,
+  theme = DEFAULT_THEME,
+  isModoNoturno = false
 }: TabVendasProps) => {
 
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -42,14 +55,14 @@ export const TabVendas = ({
 
   return (
     <>
-      <table style={styles.table}>
+      <table style={{ ...styles.table, color: theme.textMain }}>
         <thead>
-          <tr style={styles.thRow}>
-            <th style={styles.th}>Data</th>
-            <th style={styles.th}>Pedido</th>
-            <th style={styles.th}>Cliente</th>
-            <th style={styles.th}>Total</th>
-            <th style={styles.th}>Ação</th>
+          <tr style={{ ...styles.thRow, borderBottomColor: theme.border, backgroundColor: isModoNoturno ? '#1e293b' : theme.primary}}>
+            <th style={{ ...styles.th, color: theme.textSec }}>Data</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>Pedido</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>Cliente</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>Total</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>Ação</th>
           </tr>
         </thead>
         <tbody>
@@ -62,11 +75,13 @@ export const TabVendas = ({
                 expandido={pedidoExpandido === p.id}
                 onExpandir={(id: string) => setPedidoExpandido(pedidoExpandido === id ? null : id)}
                 onDevolver={alternarDevolucao}
+                theme={theme}
+                isModoNoturno={isModoNoturno}
               />
             ))
           ) : (
             <tr>
-              <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+              <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: theme.textSec }}>
                 Nenhum pedido encontrado com estes filtros.
               </td>
             </tr>
@@ -80,15 +95,15 @@ export const TabVendas = ({
           <button
             disabled={paginaAtual === 1}
             onClick={() => setPaginaAtual(prev => prev - 1)}
-            style={styles.btnAtalho}
+            style={{ ...styles.btnAtalho, backgroundColor: isModoNoturno ? '#334155' : '#f1f5f9', color: isModoNoturno ? '#f1f5f9' : '#475569', opacity: paginaAtual === 1 ? 0.5 : 1 }}
           >
             Anterior
           </button>
-          <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Pág {paginaAtual} de {totalPaginas}</span>
+          <span style={{ fontSize: '14px', fontWeight: 'bold', color: theme.textMain }}>Pág {paginaAtual} de {totalPaginas}</span>
           <button
             disabled={paginaAtual >= totalPaginas}
             onClick={() => setPaginaAtual(prev => prev + 1)}
-            style={styles.btnAtalho}
+            style={{ ...styles.btnAtalho, backgroundColor: isModoNoturno ? '#334155' : '#f1f5f9', color: isModoNoturno ? '#f1f5f9' : '#475569', opacity: paginaAtual >= totalPaginas ? 0.5 : 1 }}
           >
             Próxima
           </button>

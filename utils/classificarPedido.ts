@@ -24,7 +24,8 @@ export const descobrirAbaDoPedido = (p: Pedido): { idAba: string; nomeAba: strin
     }
 
     const statusProdObj = (p as any).StatusProducao || {};
-    const statusProdAtual = String(statusProdObj.dsStatusProdução || p.statusProducao || '').toLowerCase();
+    // 🌟 CORREÇÃO CIRÚRGICA: Removido o acento para ler exatamente 'dsStatusProducao' do Firebase
+    const statusProdAtual = String(statusProdObj.dsStatusProducao || p.statusProducao || '').toLowerCase();
     const isPago = Boolean(statusProdObj.isPago !== undefined ? statusProdObj.isPago : p.pago);
 
     // 3. Pedidos (Não pagos e não prontos)

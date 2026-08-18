@@ -4,7 +4,7 @@ export const getPlanoEfetivo = (lojaDados: any, planosDoBanco: any) => {
     return {
       nome: "Bronze",
       isTesteAtivo: false,
-      configs: { tipoDashboard: 'bronze', limiteProdutos: 10, limiteCategorias: 3, temRelatorioAvancado: false }
+      configs: { tipoDashboard: 'bronze', limiteProdutos: 10, limiteCategorias: 3, temRelatorioAvancado: false, temPdv: false }
     };
   }
 
@@ -20,7 +20,8 @@ export const getPlanoEfetivo = (lojaDados: any, planosDoBanco: any) => {
   const dados = planosDoBanco[nomePlano] || planosDoBanco["Bronze"] || { 
     produtos: 10, 
     categorias: 3, 
-    modeloDash: "bronze" 
+    modeloDash: "bronze",
+    temPdv: false
   };
 
   // 3. Lógica do Dashboard:
@@ -30,6 +31,7 @@ export const getPlanoEfetivo = (lojaDados: any, planosDoBanco: any) => {
     nome: nomePlano,
     isTesteAtivo,
     configs: {
+      ...dados, // 🚀 Repassa todas as chaves do plano direto do banco (incluindo temPdv, temCupons, etc.)
       tipoDashboard: eGestao ? 'gestao' : 'bronze',
       limiteProdutos: Number(dados.produtos ?? 10),
       limiteCategorias: Number(dados.categorias ?? 3),

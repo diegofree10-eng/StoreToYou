@@ -10,16 +10,23 @@ export default function SistemaTab({
     masterLiberou,
     setShowCupomModal,
     showToken,
-    setShowToken
+    setShowToken,
+    theme
 }: any) {
     const [mostrarAjudaCupom, setMostrarAjudaCupom] = useState(false);
     const [mostrarAjudaFreteGratis, setMostrarAjudaFreteGratis] = useState(false);
-    const [mostrarAjudaTransp, setMostrarAjudaTransp] = useState(false);
-    const [mostrarAjudaLocal, setMostrarAjudaLocal] = useState(false);
-    const [mostrarAjudaRetirada, setMostrarAjudaRetirada] = useState(false);
-    const [mostrarAjudaStatusLoja, setMostrarAjudaStatusLoja] = useState(false);
-    const [mostrarAjudaAutomacao, setMostrarAjudaAutomacao] = useState(false);
     const [showTokenSandbox, setShowTokenSandbox] = useState(false);
+
+    const currentTheme = theme || {
+        bgCard: "#ffffff",
+        textMain: "#1e293b",
+        textSec: "#64748b",
+        border: "#e2e8f0",
+        inputBg: "#ffffff",
+        primary: "#2563eb"
+    };
+
+    const isDark = currentTheme.inputBg !== "#ffffff";
 
     // Verifica se o plano atual do lojista possui liberação para o Sandbox
     const permiteSandbox = masterLiberou("temSandbox");
@@ -72,11 +79,11 @@ export default function SistemaTab({
             {masterLiberou("temCupons") && (
                 <div style={{ marginBottom: '25px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <h3 style={{ ...styles.h3, marginTop: 0, marginBottom: 0 }}>Marketing</h3>
+                        <h3 style={{ ...styles.h3, marginTop: 0, marginBottom: 0, color: currentTheme.textMain }}>Marketing</h3>
                         <button type="button" onClick={() => setMostrarAjudaCupom(!mostrarAjudaCupom)} style={styles.btnInfo}>ℹ️</button>
                     </div>
-                    {mostrarAjudaCupom && <div style={styles.tooltipBox}>💡 Crie códigos promocionais para oferecer descontos.</div>}
-                    <button type="button" onClick={() => setShowCupomModal(true)} style={styles.btnCupom}>🎟️ Gerenciar Cupons de Desconto</button>
+                    {mostrarAjudaCupom && <div style={{ ...styles.tooltipBox, background: isDark ? '#1e293b' : '#e0f2fe', color: isDark ? '#38bdf8' : '#0369a1', border: `1px solid ${currentTheme.border}` }}>💡 Crie códigos promocionais para oferecer descontos.</div>}
+                    <button type="button" onClick={() => setShowCupomModal(true)} style={{ ...styles.btnCupom, background: isDark ? '#1e293b' : '#f5f3ff', color: isDark ? '#c084fc' : '#8b5cf6', border: `1px solid ${currentTheme.border}` }}>🎟️ Gerenciar Cupons de Desconto</button>
                 </div>
             )}
 
@@ -84,13 +91,13 @@ export default function SistemaTab({
             {masterLiberou("temFreteGratis") && (
                 <div style={{ marginBottom: '25px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <h3 style={{ ...styles.h3, marginTop: 0, marginBottom: 0 }}>Configuração de Frete Grátis</h3>
+                        <h3 style={{ ...styles.h3, marginTop: 0, marginBottom: 0, color: currentTheme.textMain }}>Configuração de Frete Grátis</h3>
                         <button type="button" onClick={() => setMostrarAjudaFreteGratis(!mostrarAjudaFreteGratis)} style={styles.btnInfo}>ℹ️</button>
                     </div>
-                    {mostrarAjudaFreteGratis && <div style={styles.tooltipBox}>💡 Defina um valor mínimo para frete grátis.</div>}
-                    <div style={{ background: config.sistema.isFreteGratisAtivo ? '#f0f9ff' : '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                    {mostrarAjudaFreteGratis && <div style={{ ...styles.tooltipBox, background: isDark ? '#1e293b' : '#e0f2fe', color: isDark ? '#38bdf8' : '#0369a1', border: `1px solid ${currentTheme.border}` }}>💡 Defina um valor mínimo para frete grátis.</div>}
+                    <div style={{ background: config.sistema.isFreteGratisAtivo ? (isDark ? '#0c4a6e' : '#f0f9ff') : (isDark ? '#0f172a' : '#f8fafc'), padding: '15px', borderRadius: '12px', border: `1px solid ${currentTheme.border}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Ativar Frete Grátis</span>
+                            <span style={{ fontSize: '13px', fontWeight: '600', color: currentTheme.textMain }}>Ativar Frete Grátis</span>
                             <input
                                 type="checkbox"
                                 checked={!!config.sistema.isFreteGratisAtivo}
@@ -99,9 +106,9 @@ export default function SistemaTab({
                         </div>
                         {config.sistema.isFreteGratisAtivo && (
                             <div style={{ marginTop: '10px' }}>
-                                <label style={styles.label}>Valor Mínimo (R$)</label>
+                                <label style={{ ...styles.label, color: currentTheme.textSec }}>Valor Mínimo (R$)</label>
                                 <input
-                                    style={styles.input}
+                                    style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
                                     value={config.sistema.vlFreteGratisMinimo || ""}
                                     onChange={e => setConfig({ ...config, sistema: { ...config.sistema, vlFreteGratisMinimo: aplicarMascara(e.target.value, 'dinheiro') } })}
                                 />
@@ -112,16 +119,15 @@ export default function SistemaTab({
             )}
 
             {/* LOGÍSTICA E ENTREGA */}
-            <h3 style={{ ...styles.h3, marginTop: '25px' }}>Logística e Entrega</h3>
+            <h3 style={{ ...styles.h3, marginTop: '25px', color: currentTheme.textMain }}>Logística e Entrega</h3>
             <div style={{ opacity: masterLiberou("temLogistica") ? 1 : 0.6 }}>
                 
-                {/* SE O PLANO DO LOJISTA TEM DIREITO AO SANDBOX (ex: Diamante), EXIBE O SELECT E OS DOIS TOKENS */}
                 {permiteSandbox ? (
                     <>
-                        <div style={{ marginBottom: '15px', background: isSandboxAtivo ? '#fefce8' : '#f0fdf4', padding: '12px', borderRadius: '10px', border: isSandboxAtivo ? '1px solid #fde047' : '1px solid #bbf7d0' }}>
-                            <label style={{ ...styles.label, color: isSandboxAtivo ? '#854d0e' : '#166534', fontWeight: 'bold' }}>Ambiente do Melhor Envio</label>
+                        <div style={{ marginBottom: '15px', background: isSandboxAtivo ? (isDark ? '#422006' : '#fefce8') : (isDark ? '#064e3b' : '#f0fdf4'), padding: '12px', borderRadius: '10px', border: `1px solid ${currentTheme.border}` }}>
+                            <label style={{ ...styles.label, color: isSandboxAtivo ? '#facc15' : '#4ade80', fontWeight: 'bold' }}>Ambiente do Melhor Envio</label>
                             <select
-                                style={{ ...styles.input, fontWeight: 'bold', color: isSandboxAtivo ? '#ca8a04' : '#16a34a' }}
+                                style={{ ...styles.input, fontWeight: 'bold', background: currentTheme.inputBg, color: isSandboxAtivo ? '#facc15' : '#4ade80', border: `1px solid ${currentTheme.border}` }}
                                 disabled={!masterLiberou("temLogistica")}
                                 value={String(isSandboxAtivo)}
                                 onChange={e => {
@@ -136,21 +142,21 @@ export default function SistemaTab({
                                     });
                                 }}
                             >
-                                <option value="false">🟢 PRODUÇÃO (Oficial - Clientes Reais)</option>
-                                <option value="true">🟡 SANDBOX (Testes - Homologação)</option>
+                                <option value="false" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>🟢 PRODUÇÃO (Oficial - Clientes Reais)</option>
+                                <option value="true" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>🟡 SANDBOX (Testes - Homologação)</option>
                             </select>
                         </div>
 
                         {/* TOKEN DE PRODUÇÃO */}
                         <div style={{ marginBottom: '15px', opacity: isSandboxAtivo ? 0.4 : 1, transition: 'opacity 0.2s' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <label style={styles.label}>Token Melhor Envio (Produção)</label>
+                                <label style={{ ...styles.label, color: currentTheme.textSec }}>Token Melhor Envio (Produção)</label>
                                 <button type="button" onClick={() => setShowToken(!showToken)} style={styles.btnToggleToken}>
                                     {showToken ? "Ocultar" : "Mostrar"}
                                 </button>
                             </div>
                             <input
-                                style={styles.input}
+                                style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
                                 type={showToken ? "text" : "password"}
                                 disabled={!masterLiberou("temLogistica")}
                                 value={config.sistema.dsTokenMelhorEnvio || ""}
@@ -162,13 +168,13 @@ export default function SistemaTab({
                         {/* TOKEN DE SANDBOX */}
                         <div style={{ marginBottom: '15px', opacity: !isSandboxAtivo ? 0.4 : 1, transition: 'opacity 0.2s' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <label style={styles.label}>Token Melhor Envio (Sandbox)</label>
+                                <label style={{ ...styles.label, color: currentTheme.textSec }}>Token Melhor Envio (Sandbox)</label>
                                 <button type="button" onClick={() => setShowTokenSandbox(!showTokenSandbox)} style={styles.btnToggleToken}>
                                     {showTokenSandbox ? "Ocultar" : "Mostrar"}
                                 </button>
                             </div>
                             <input
-                                style={styles.input}
+                                style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
                                 type={showTokenSandbox ? "text" : "password"}
                                 disabled={!masterLiberou("temLogistica")}
                                 value={config.sistema.dsTokenMelhorEnvioSandbox || ""}
@@ -178,10 +184,9 @@ export default function SistemaTab({
                         </div>
                     </>
                 ) : (
-                    /* SE O PLANO NÃO TEM DIREITO, MOSTRA APENAS O CAMPO ÚNICO DE PRODUÇÃO */
                     <div style={{ marginBottom: '15px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <label style={styles.label}>Token Melhor Envio</label>
+                            <label style={{ ...styles.label, color: currentTheme.textSec }}>Token Melhor Envio</label>
                             <button
                                 type="button"
                                 onClick={() => setShowToken(!showToken)}
@@ -191,7 +196,7 @@ export default function SistemaTab({
                             </button>
                         </div>
                         <input
-                            style={styles.input}
+                            style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
                             type={showToken ? "text" : "password"}
                             disabled={!masterLiberou("temLogistica")}
                             value={config.sistema.dsTokenMelhorEnvio || ""}
@@ -203,9 +208,9 @@ export default function SistemaTab({
 
                 {/* AUTOMAÇÃO COMPLETA MELHOR ENVIO */}
                 {masterLiberou("temAutomacaoFrete") && (
-                    <div style={{ marginTop: '15px', background: config.sistema.isAutomacaoCompletaMelhorEnvio ? '#f0fdf4' : '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ marginTop: '15px', background: config.sistema.isAutomacaoCompletaMelhorEnvio ? (isDark ? '#064e3b' : '#f0fdf4') : (isDark ? '#0f172a' : '#f8fafc'), padding: '15px', borderRadius: '12px', border: `1px solid ${currentTheme.border}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Automação Completa de Etiquetas</span>
+                            <span style={{ fontSize: '13px', fontWeight: '600', color: currentTheme.textMain }}>Automação Completa de Etiquetas</span>
                             <input
                                 type="checkbox"
                                 checked={!!config.sistema.isAutomacaoCompletaMelhorEnvio}
@@ -216,9 +221,9 @@ export default function SistemaTab({
                 )}
 
                 {/* TRANSPORTADORAS ATIVAS */}
-                <div style={{ marginTop: '15px', background: config.sistema.isTransportadoraAtivo ? '#f0f9ff' : '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ marginTop: '15px', background: config.sistema.isTransportadoraAtivo ? (isDark ? '#0c4a6e' : '#f0f9ff') : (isDark ? '#0f172a' : '#f8fafc'), padding: '15px', borderRadius: '12px', border: `1px solid ${currentTheme.border}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Ativar Cotação por Transportadoras</span>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: currentTheme.textMain }}>Ativar Cotação por Transportadoras</span>
                         <input
                             type="checkbox"
                             disabled={!masterLiberou("temLogistica")}
@@ -228,9 +233,9 @@ export default function SistemaTab({
                     </div>
                     {config.sistema.isTransportadoraAtivo && (
                         <div style={{ marginTop: '12px' }}>
-                            <div style={styles.gridTransp}>
+                            <div style={{ ...styles.gridTransp, background: currentTheme.inputBg, border: `1px solid ${currentTheme.border}` }}>
                                 {["azul", "correios", "jadlog", "latam"].map(t => (
-                                    <label key={t} style={styles.transpItem}>
+                                    <label key={t} style={{ ...styles.transpItem, color: currentTheme.textMain }}>
                                         <input
                                             type="checkbox"
                                             checked={!!(config.sistema.dsTransportadoras?.[t])}
@@ -251,9 +256,9 @@ export default function SistemaTab({
                 </div>
 
                 {/* ENTREGA LOCAL */}
-                <div style={{ marginTop: '15px', background: config.sistema.isFreteLocal ? '#f0f9ff' : '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ marginTop: '15px', background: config.sistema.isFreteLocal ? (isDark ? '#0c4a6e' : '#f0f9ff') : (isDark ? '#0f172a' : '#f8fafc'), padding: '15px', borderRadius: '12px', border: `1px solid ${currentTheme.border}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Entrega Local (Taxa Fixa)</span>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: currentTheme.textMain }}>Entrega Local (Taxa Fixa)</span>
                         <input
                             type="checkbox"
                             checked={!!config.sistema.isFreteLocal}
@@ -262,9 +267,9 @@ export default function SistemaTab({
                     </div>
                     {config.sistema.isFreteLocal && (
                         <div style={{ marginTop: '10px' }}>
-                            <label style={styles.label}>Valor do Frete Fixo (R$)</label>
+                            <label style={{ ...styles.label, color: currentTheme.textSec }}>Valor do Frete Fixo (R$)</label>
                             <input
-                                style={styles.input}
+                                style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
                                 value={config.sistema.vlFreteLocal || ""}
                                 onChange={e => setConfig({ ...config, sistema: { ...config.sistema, vlFreteLocal: aplicarMascara(e.target.value, 'dinheiro') } })}
                             />
@@ -273,9 +278,9 @@ export default function SistemaTab({
                 </div>
 
                 {/* RETIRADA NA LOJA */}
-                <div style={{ marginTop: '15px', background: config.sistema.isRetiradaLoja ? '#f0f9ff' : '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ marginTop: '15px', background: config.sistema.isRetiradaLoja ? (isDark ? '#0c4a6e' : '#f0f9ff') : (isDark ? '#0f172a' : '#f8fafc'), padding: '15px', borderRadius: '12px', border: `1px solid ${currentTheme.border}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>Retirada na Loja (Gratuita)</span>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: currentTheme.textMain }}>Retirada na Loja (Gratuita)</span>
                         <input
                             type="checkbox"
                             checked={!!config.sistema.isRetiradaLoja}
@@ -287,31 +292,31 @@ export default function SistemaTab({
 
             {/* STATUS DA LOJA */}
             <div style={{ marginTop: '25px', marginBottom: '8px' }}>
-                <h3 style={styles.h3}>Status da Loja</h3>
+                <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Status da Loja</h3>
             </div>
             <select
-                style={styles.input}
+                style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
                 value={String(config.sistema?.isLojaAberta ?? true)}
                 onChange={e => {
                     const valor = e.target.value === "true";
                     setConfig((prev: any) => ({ ...prev, sistema: { ...(prev.sistema || {}), isLojaAberta: valor } }));
                 }}
             >
-                <option value="true">🟢 ABERTA PARA PEDIDOS</option>
-                <option value="false">🔴 VITRINE (CATÁLOGO)</option>
+                <option value="true" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>🟢 ABERTA PARA PEDIDOS</option>
+                <option value="false" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>🔴 VITRINE (CATÁLOGO)</option>
             </select>
         </section>
     );
 }
 
 const styles: any = {
-    h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
-    label: { fontSize: "11px", fontWeight: "600", color: "#64748b", marginBottom: "4px", display: 'block' },
-    input: { width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px", outline: 'none', background: '#fff' },
-    btnCupom: { width: '100%', padding: '15px', background: '#f5f3ff', color: '#8b5cf6', border: '1px solid #ddd6fe', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
-    gridTransp: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' },
-    transpItem: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#334155' },
+    h3: { fontSize: "11px", fontWeight: "800", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
+    label: { fontSize: "11px", fontWeight: "600", marginBottom: "4px", display: 'block' },
+    input: { width: "100%", padding: "12px", borderRadius: "10px", fontSize: "14px", outline: 'none', boxSizing: 'border-box', transition: 'background 0.3s' },
+    btnCupom: { width: '100%', padding: '15px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
+    gridTransp: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '12px', borderRadius: '8px' },
+    transpItem: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' },
     btnToggleToken: { background: 'none', border: 'none', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', padding: 0 },
     btnInfo: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', padding: 0 },
-    tooltipBox: { marginTop: '8px', marginBottom: '10px', padding: '10px', background: '#e0f2fe', color: '#0369a1', borderRadius: '8px', fontSize: '11px', lineHeight: '1.4', border: '1px solid #bae6fd' }
+    tooltipBox: { marginTop: '8px', marginBottom: '10px', padding: '10px', borderRadius: '8px', fontSize: '11px', lineHeight: '1.4' }
 };

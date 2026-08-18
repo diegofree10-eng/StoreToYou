@@ -11,6 +11,9 @@ import { ref, uploadBytes, getDownloadURL, uploadString } from "firebase/storage
 import { onAuthStateChanged } from "firebase/auth";
 import { FiChevronLeft, FiChevronRight, FiMenu, FiX, FiPlus } from "react-icons/fi";
 
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
+
 import FormularioProduto from "./_components/FormularioProduto";
 import ListaProdutos from "./_components/ListaProdutos";
 import { duplicarProduto } from "@/utils/duplicarProduto";
@@ -39,6 +42,9 @@ const converterParaNumeroBanco = (valor: any): number => {
 };
 
 export default function CadastroProdutos() {
+    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+    const { theme } = useTheme();
+
     const [uid, setUid] = useState<string | null>(null);
     const [planoLojista, setPlanoLojista] = useState("Bronze");
     const [planosMaster, setPlanosMaster] = useState<any>(null);
@@ -466,7 +472,7 @@ export default function CadastroProdutos() {
     const produtosPaginados = produtosFiltrados.slice(indicePrimeiroItem, indiceUltimoItem);
 
     return (
-        <div style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', background: '#f8fafc', position: 'relative', boxSizing: 'border-box' }}>
+        <div style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', background: theme.bgApp, color: theme.textMain, position: 'relative', boxSizing: 'border-box', transition: 'background 0.3s, color 0.3s' }}>
 
             {/* Importação global da fonte Amaranth para uso isolado no modal de descrição */}
             <style jsx global>{`
@@ -490,18 +496,21 @@ export default function CadastroProdutos() {
             <div style={{ position: 'relative', zIndex: 5000 }}>
                 {showDescModal && (
                     <div style={{ ...styles.modalOverlay, zIndex: 5000 }}>
-                        <div style={styles.modalContent}>
-                            <h3 style={{ marginBottom: '10px', fontFamily: "'Amaranth', sans-serif" }}>Editar Descrição</h3>
+                        <div style={{ ...styles.modalContent, background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}` }}>
+                            <h3 style={{ marginBottom: '10px', fontFamily: "'Amaranth', sans-serif", color: theme.textMain }}>Editar Descrição</h3>
                             <textarea
                                 style={{
                                     ...styles.modalTextarea,
-                                    fontFamily: "'Amaranth', sans-serif"
+                                    fontFamily: "'Amaranth', sans-serif",
+                                    background: theme.inputBg,
+                                    color: theme.textMain,
+                                    borderColor: theme.border
                                 }}
                                 value={descricao}
                                 onChange={e => setDescricao(e.target.value)}
                                 autoFocus
                             />
-                            <button type="button" onClick={() => setShowDescModal(false)} style={styles.btnSave}>Concluir</button>
+                            <button type="button" onClick={() => setShowDescModal(false)} style={{ ...styles.btnSave, background: theme.primary }}>Concluir</button>
                         </div>
                     </div>
                 )}
@@ -536,10 +545,10 @@ export default function CadastroProdutos() {
             {/* TELA PRINCIPAL */}
             <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: '100vh', padding: '15px', boxSizing: 'border-box' }}>
 
-                <div className="mobile-header-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div className="mobile-header-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: theme.bgCard, padding: '15px 20px', borderRadius: '12px', border: `1px solid ${theme.border}` }}>
                     <div>
-                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>📦 Gerenciamento de Produtos</h2>
-                        <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748b' }}>Total de produtos no plano: {produtos.length} / {limites.produtos}</p>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: theme.textMain }}>📦 Gerenciamento de Produtos</h2>
+                        <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: theme.textSec }}>Total de produtos no plano: {produtos.length} / {limites.produtos}</p>
                     </div>
                     <button
                         type="button"
@@ -547,13 +556,13 @@ export default function CadastroProdutos() {
                             limparForm();
                             setIsPainelAberto(true);
                         }}
-                        style={{ background: '#10b981', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        style={{ background: theme.primary, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
                         <FiPlus size={16} /> Novo Produto
                     </button>
                 </div>
 
-                <div style={{ flex: 1, background: '#fff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div style={{ flex: 1, background: theme.bgCard, padding: '15px', borderRadius: '12px', border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <ListaProdutos
                         produtos={produtos}
                         produtosFiltrados={produtosPaginados}
@@ -569,19 +578,19 @@ export default function CadastroProdutos() {
                         onDuplicar={handleDuplicar}
                     />
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: '1px solid #e2e8f0', marginTop: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px', borderTop: `1px solid ${theme.border}`, marginTop: '15px' }}>
                         <div style={{ width: '60px' }}></div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
-                            <button type="button" disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => Math.max(p - 1, 1))} style={{ padding: '6px 10px', background: paginaAtual === 1 ? '#cbd5e1' : '#334155', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                            <button type="button" disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => Math.max(p - 1, 1))} style={{ padding: '6px 10px', background: paginaAtual === 1 ? theme.border : theme.primary, color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
                                 <FiChevronLeft size={14} />
                             </button>
-                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>{paginaAtual} / {totalPaginas}</span>
-                            <button type="button" disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => Math.min(p + 1, totalPaginas))} style={{ padding: '6px 10px', background: paginaAtual === totalPaginas ? '#cbd5e1' : '#334155', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>{paginaAtual} / {totalPaginas}</span>
+                            <button type="button" disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => Math.min(p + 1, totalPaginas))} style={{ padding: '6px 10px', background: paginaAtual === totalPaginas ? theme.border : theme.primary, color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
                                 <FiChevronRight size={14} />
                             </button>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', width: '60px' }}>
-                            <select value={itensPorPagina} onChange={e => setItensPorPagina(Number(e.target.value))} style={{ padding: '6px 4px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                            <select value={itensPorPagina} onChange={e => setItensPorPagina(Number(e.target.value))} style={{ padding: '6px 4px', fontSize: '11px', borderRadius: '6px', border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain }}>
                                 <option value={10}>10</option>
                                 <option value={20}>20</option>
                                 <option value={40}>40</option>
@@ -606,20 +615,21 @@ export default function CadastroProdutos() {
                 width: '650px',
                 maxWidth: '90vw',
                 height: '100vh',
-                background: '#fff',
+                background: theme.bgCard,
+                color: theme.textMain,
                 zIndex: 4001,
                 boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
                 display: 'flex',
                 flexDirection: 'column',
                 boxSizing: 'border-box',
-                transition: 'transform 0.3s ease-in-out',
+                transition: 'transform 0.3s ease-in-out, background 0.3s, color 0.3s',
                 transform: isPainelAberto ? 'translateX(0)' : 'translateX(100%)'
             }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 25px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                    <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 25px', borderBottom: `1px solid ${theme.border}`, background: theme.bgApp }}>
+                    <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: theme.textMain }}>
                         {editId ? "📝 Editar Produto" : "📦 Cadastrar Novo Produto"}
                     </h2>
-                    <button type="button" onClick={() => setIsPainelAberto(false)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#64748b' }}>
+                    <button type="button" onClick={() => setIsPainelAberto(false)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: theme.textSec }}>
                         <FiX />
                     </button>
                 </div>
@@ -659,11 +669,11 @@ export default function CadastroProdutos() {
                     />
                 </div>
 
-                <div style={{ padding: '15px 25px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', gap: '15px' }}>
-                    <button type="button" onClick={salvar} style={{ ...styles.btnSave, flex: 2, padding: '12px', fontSize: '14px', borderRadius: '8px' }}>
+                <div style={{ padding: '15px 25px', borderTop: `1px solid ${theme.border}`, background: theme.bgApp, display: 'flex', gap: '15px' }}>
+                    <button type="button" onClick={salvar} style={{ ...styles.btnSave, flex: 2, padding: '12px', fontSize: '14px', borderRadius: '8px', background: theme.primary }}>
                         {loading ? "Aguarde..." : editId ? "Atualizar Produto" : "Salvar Produto"}
                     </button>
-                    <button type="button" onClick={() => { limparForm(); setIsPainelAberto(false); }} style={{ ...styles.btnCancel, flex: 1, padding: '12px', fontSize: '14px', borderRadius: '8px' }}>
+                    <button type="button" onClick={() => { limparForm(); setIsPainelAberto(false); }} style={{ ...styles.btnCancel, flex: 1, padding: '12px', fontSize: '14px', borderRadius: '8px', background: theme.border, color: theme.textMain }}>
                         Cancelar
                     </button>
                 </div>

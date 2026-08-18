@@ -103,7 +103,8 @@ export function useGerenciarPedido({ db, lojistaIdApp, setLocalPedidos }: UseGer
     return {
         processando,
         alterarStatusPedido,
-        excluirPedidoComEstorno
+        excluirPedidoComEstorno,
+        estornarEstoqueDoPedido
     };
 }
 

@@ -225,6 +225,12 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
             <div style={styles.recursosSection}>
               <p style={styles.recursosTitle}>RECURSOS ADICIONAIS HABILITADOS</p>
 
+              {/* PDV (Ponto de Venda / Caixa) Adicionado Aqui */}
+              <label style={styles.checkRow}>
+                <div style={styles.checkLabel}><FiDollarSign color="#10b981" /> Módulo PDV (Caixa Presencial)</div>
+                <input type="checkbox" checked={!!planos[key].temPdv} onChange={() => toggleRecurso(key, 'temPdv')} />
+              </label>
+
               <label style={styles.checkRow}>
                 <div style={styles.checkLabel}><FiPieChart /> Canais de Renda (CSV)</div>
                 <input type="checkbox" checked={!!planos[key].temCanaisRenda} onChange={() => toggleRecurso(key, 'temCanaisRenda')} />
@@ -250,7 +256,6 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
                 <input type="checkbox" checked={!!planos[key].temAutomacaoFrete} onChange={() => toggleRecurso(key, 'temAutomacaoFrete')} />
               </label>
 
-              {/* OPÇÃO DE SANDBOX EXCLUSIVA DO PLANO DIAMANTE (ALINHADA) */}
               {isDiamante && (
                 <label style={styles.checkRow}>
                   <div style={{ ...styles.checkLabel, color: '#ca8a04' }}>

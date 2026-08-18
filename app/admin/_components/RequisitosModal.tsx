@@ -1,3 +1,4 @@
+// app/admin/_components/RequisitosModal.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -5,60 +6,8 @@ import { Plus, Trash2, Save, Trash, Edit2, XCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
 
-const modalStyles: { [key: string]: React.CSSProperties } = {
-  overlay: { 
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-    background: 'rgba(0,0,0,0.6)', display: 'flex', 
-    justifyContent: 'center', alignItems: 'center', zIndex: 2000 
-  },
-  content: { 
-    background: '#fff', padding: '25px', borderRadius: '12px', 
-    width: '95%', maxWidth: '500px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-    maxHeight: '90vh', overflowY: 'auto'
-  },
-  title: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', color: '#1e293b', textAlign: 'center' },
-  headerSection: { 
-    padding: '12px', background: '#f1f5f9', borderRadius: '8px', 
-    marginBottom: '20px', border: '1px solid #e2e8f0' 
-  },
-  modelSelectContainer: {
-    display: 'flex', gap: '8px', marginTop: '8px'
-  },
-  modelSelect: {
-    flex: 1, padding: '10px', borderRadius: '6px', 
-    border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none'
-  },
-  btnActionIcon: {
-    padding: '10px', background: '#fee2e2', color: '#ef4444', 
-    border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer'
-  },
-  fieldCard: {
-    background: '#f8fafc', padding: '12px', borderRadius: '8px', 
-    marginBottom: '10px', border: '1px solid #e2e8f0', position: 'relative'
-  },
-  input: {
-    width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1',
-    marginBottom: '8px', fontSize: '14px', outline: 'none'
-  },
-  btnAdd: {
-    width: '100%', padding: '10px', background: '#f0f9ff', color: '#0369a1',
-    border: '1px dashed #0369a1', borderRadius: '8px', fontWeight: '600',
-    cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-  },
-  btnSave: { 
-    width: '100%', padding: '12px', background: '#d946ef', color: '#fff', 
-    border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' 
-  },
-  btnRemoveCustom: {
-    width: '100%', padding: '10px', background: '#fef2f2', color: '#ef4444',
-    border: '1px dashed #fca5a5', borderRadius: '8px', fontWeight: '600',
-    cursor: 'pointer', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-  },
-  btnDeleteField: {
-    position: 'absolute', top: '10px', right: '10px', color: '#ef4444', cursor: 'pointer',
-    background: 'none', border: 'none'
-  }
-};
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
 
 interface CampoPersonalizado {
   id: string;
@@ -76,6 +25,8 @@ interface Props {
 }
 
 export default function RequisitosModal({ lojistaId, config, onSave, onClose }: Props) {
+  const { theme, isModoNoturno } = useTheme();
+
   const [campos, setCampos] = useState<CampoPersonalizado[]>([]);
   const [modelos, setModelos] = useState<any[]>([]);
   const [nomeModelo, setNomeModelo] = useState("");
@@ -86,8 +37,6 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
     if (config) {
       if (Array.isArray(config)) {
         setCampos(config);
-        // Se já vier com campos salvos ao abrir, podemos manter recolhido por padrão se desejar, 
-        // ou aberto se preferir ver direto. Aqui se houver campos, deixamos recolhido se não for vazio.
         if (config.length > 0) {
           setExpandido(false);
         }
@@ -132,12 +81,11 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
     setCampos(prev => prev.filter(c => c.id !== id));
   };
 
-  // 🔥 NOVA FUNÇÃO: Remove totalmente a personalização do produto
   const removerPersonalizacaoTotal = () => {
     setCampos([]);
     setIdModeloSelecionado("");
     setExpandido(true);
-    onSave([]); // Salva vazio imediatamente ou ao aplicar
+    onSave([]);
   };
 
   const aplicarMascaraHora = (valorBruto: string): string => {
@@ -221,16 +169,34 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
   };
 
   return (
-    <div style={modalStyles.overlay}>
-      <div style={modalStyles.content} onClick={e => e.stopPropagation()}>
-        <h3 style={modalStyles.title}>🎯 Personalização Inteligente</h3>
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+      background: 'rgba(0,0,0,0.6)', display: 'flex', 
+      justifyContent: 'center', alignItems: 'center', zIndex: 2000
+    }}>
+      <div style={{
+        background: theme.bgCard, color: theme.textMain, padding: '25px', borderRadius: '12px', 
+        width: '95%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+        maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${theme.border}`
+      }} onClick={e => e.stopPropagation()}>
+        
+        <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: theme.textMain, textAlign: 'center' }}>
+          🎯 Personalização Inteligente
+        </h3>
 
         {/* SELEÇÃO DE MODELO PRONTO */}
-        <div style={modalStyles.headerSection}>
-          <label style={{fontSize: '11px', fontWeight: 'bold', color: '#64748b'}}>USAR MODELO SALVO:</label>
-          <div style={modalStyles.modelSelectContainer}>
+        <div style={{ 
+          padding: '14px', background: theme.bgApp, borderRadius: '8px', 
+          marginBottom: '20px', border: `1px solid ${theme.border}` 
+        }}>
+          <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec }}>USAR MODELO SALVO:</label>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
             <select 
-              style={modalStyles.modelSelect}
+              style={{
+                flex: 1, padding: '10px', borderRadius: '6px', 
+                border: `1px solid ${theme.border}`, fontSize: '13px', outline: 'none',
+                backgroundColor: theme.inputBg, color: theme.textMain
+              }}
               value={idModeloSelecionado}
               onChange={(e) => {
                 const id = e.target.value;
@@ -251,7 +217,15 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
             </select>
             
             {idModeloSelecionado && (
-              <button type="button" title="Excluir Modelo" style={modalStyles.btnActionIcon} onClick={excluirModelo}>
+              <button 
+                type="button" 
+                title="Excluir Modelo" 
+                style={{
+                  padding: '10px', background: theme.inputBg, color: '#ef4444', 
+                  border: `1px solid ${theme.border}`, borderRadius: '6px', cursor: 'pointer'
+                }} 
+                onClick={excluirModelo}
+              >
                 <Trash size={16} />
               </button>
             )}
@@ -260,15 +234,18 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
 
         {/* SE HOUVER CAMPOS CONFIGURADOS E ESTIVER RECOLHIDO */}
         {campos.length > 0 && !expandido ? (
-          <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px', marginBottom: '20px', textAlign: 'center' }}>
-            <p style={{ fontSize: '13px', color: '#334155', fontWeight: '600', marginBottom: '8px' }}>
+          <div style={{ 
+            background: theme.bgApp, border: `1px solid ${theme.border}`, 
+            borderRadius: '8px', padding: '15px', marginBottom: '20px', textAlign: 'center' 
+          }}>
+            <p style={{ fontSize: '13px', color: theme.textMain, fontWeight: '600', marginBottom: '8px' }}>
               Personalização ativa ({campos.length} campos configurados).
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '10px' }}>
               <button 
                 type="button" 
                 onClick={() => setExpandido(true)} 
-                style={{ background: 'none', border: 'none', color: '#d946ef', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                style={{ background: 'none', border: 'none', color: theme.primary, fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
               >
                 <Edit2 size={14} /> Ver / Editar campos
               </button>
@@ -285,29 +262,47 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
           /* MODO DE CRIAÇÃO / EDIÇÃO LIVRE */
           <div style={{ marginBottom: '20px' }}>
             {campos.length > 0 && (
-              <button type="button" style={modalStyles.btnRemoveCustom} onClick={removerPersonalizacaoTotal}>
+              <button 
+                type="button" 
+                style={{
+                  width: '100%', padding: '10px', background: theme.bgApp, color: '#ef4444',
+                  border: `1px dashed ${theme.border}`, borderRadius: '8px', fontWeight: '600',
+                  cursor: 'pointer', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                }} 
+                onClick={removerPersonalizacaoTotal}
+              >
                 <XCircle size={16} /> Remover / Cancelar Personalização deste Produto
               </button>
             )}
 
             {campos.length === 0 && (
-              <p style={{textAlign: 'center', fontSize: '13px', color: '#94a3b8', margin: '20px 0'}}>
+              <p style={{ textAlign: 'center', fontSize: '13px', color: theme.textSec, margin: '20px 0' }}>
                 Nenhum campo adicionado. O produto não terá campos de personalização.
               </p>
             )}
 
             {campos.map((campo, index) => (
-              <div key={campo.id} style={modalStyles.fieldCard}>
-                <button type="button" style={modalStyles.btnDeleteField} onClick={() => removerCampo(campo.id)}>
+              <div key={campo.id} style={{
+                background: theme.bgApp, padding: '14px', borderRadius: '8px', 
+                marginBottom: '10px', border: `1px solid ${theme.border}`, position: 'relative'
+              }}>
+                <button 
+                  type="button" 
+                  style={{ position: 'absolute', top: '10px', right: '10px', color: '#ef4444', cursor: 'pointer', background: 'none', border: 'none' }} 
+                  onClick={() => removerCampo(campo.id)}
+                >
                   <Trash2 size={18} />
                 </button>
                 
-                <label style={{fontSize: '11px', fontWeight: '700', color: '#64748b', display: 'block', marginBottom: '4px'}}>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: theme.textSec, display: 'block', marginBottom: '4px' }}>
                   PERGUNTA #{index + 1}
                 </label>
                 
                 <input 
-                  style={modalStyles.input}
+                  style={{
+                    width: '100%', padding: '9px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`,
+                    marginBottom: '8px', fontSize: '14px', outline: 'none', background: theme.inputBg, color: theme.textMain
+                  }}
                   placeholder="Ex: Horário da Cerimônia"
                   value={campo.label}
                   onChange={(e) => atualizarSubCampo(campo.id, 'label', e.target.value)}
@@ -315,17 +310,23 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
 
                 {campo.tipo === "time" && (
                   <input
-                    style={{ ...modalStyles.input, background: '#fff', borderColor: '#d946ef' }}
-                    placeholder="Teste a máscara de hora aqui (Ex: 14:30)"
+                    style={{
+                      width: '100%', padding: '9px 12px', borderRadius: '6px', border: `1px solid ${theme.primary}`,
+                      marginBottom: '8px', fontSize: '14px', outline: 'none', background: theme.inputBg, color: theme.textMain
+                    }}
+                    placeholder="Ex: 14:30"
                     maxLength={5}
                     value={campo.defaultValue || ""}
                     onChange={(e) => atualizarSubCampo(campo.id, 'defaultValue', e.target.value)}
                   />
                 )}
 
-                <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                   <select 
-                    style={{...modalStyles.input, marginBottom: 0, flex: 1}}
+                    style={{
+                      width: '100%', padding: '9px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`,
+                      fontSize: '14px', outline: 'none', background: theme.inputBg, color: theme.textMain, flex: 1, marginBottom: 0
+                    }}
                     value={campo.tipo}
                     onChange={(e) => {
                       const novoTipo = e.target.value;
@@ -341,11 +342,11 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
 
                   <div 
                     onClick={() => atualizarSubCampo(campo.id, 'obrigatorio', !campo.obrigatorio)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', userSelect: 'none' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', color: theme.textMain, userSelect: 'none' }}
                   >
                      <div style={{
-                       width: '16px', height: '16px', border: '2px solid #d946ef', 
-                       borderRadius: '4px', background: campo.obrigatorio ? '#d946ef' : 'transparent',
+                       width: '16px', height: '16px', border: `2px solid ${theme.primary}`, 
+                       borderRadius: '4px', background: campo.obrigatorio ? theme.primary : 'transparent',
                        transition: '0.2s'
                      }} />
                      Obrigatório
@@ -354,7 +355,15 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
               </div>
             ))}
 
-            <button type="button" style={modalStyles.btnAdd} onClick={adicionarCampo}>
+            <button 
+              type="button" 
+              style={{
+                width: '100%', padding: '10px', background: theme.bgApp, color: theme.primary,
+                border: `1px dashed ${theme.primary}`, borderRadius: '8px', fontWeight: '600',
+                cursor: 'pointer', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+              }} 
+              onClick={adicionarCampo}
+            >
               <Plus size={18} /> Adicionar Campo Manual
             </button>
           </div>
@@ -362,13 +371,16 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
 
         {/* OPÇÃO DE SALVAR COMO NOVO MODELO */}
         {campos.length > 0 && expandido && (
-          <div style={{ marginBottom: '20px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-             <label style={{fontSize: '11px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '5px'}}>
+          <div style={{ marginBottom: '20px', padding: '12px', border: `1px solid ${theme.border}`, borderRadius: '8px', background: theme.bgApp }}>
+             <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '5px' }}>
                SALVAR ESTA CONFIGURAÇÃO COMO MODELO:
              </label>
              <div style={{ display: 'flex', gap: '8px' }}>
               <input 
-                style={{...modalStyles.input, marginBottom: 0, flex: 1}} 
+                style={{
+                  width: '100%', padding: '9px 12px', borderRadius: '6px', border: `1px solid ${theme.border}`,
+                  fontSize: '14px', outline: 'none', background: theme.inputBg, color: theme.textMain, flex: 1, marginBottom: 0
+                }} 
                 placeholder="Nome do modelo (ex: Convites)" 
                 value={nomeModelo}
                 onChange={e => setNomeModelo(e.target.value)}
@@ -384,13 +396,20 @@ export default function RequisitosModal({ lojistaId, config, onSave, onClose }: 
           </div>
         )}
 
-        <button type="button" style={modalStyles.btnSave} onClick={handleAplicarAoProduto}>
+        <button 
+          type="button" 
+          style={{ 
+            width: '100%', padding: '12px', background: theme.primary, color: '#fff', 
+            border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' 
+          }} 
+          onClick={handleAplicarAoProduto}
+        >
           Aplicar ao Produto
         </button>
         
         <button 
           type="button"
-          style={{ width: '100%', padding: '10px', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '13px', marginTop: '5px'}} 
+          style={{ width: '100%', padding: '10px', background: 'none', border: 'none', color: theme.textSec, cursor: 'pointer', fontSize: '13px', marginTop: '5px'}} 
           onClick={onClose}
         >
           Cancelar

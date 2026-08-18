@@ -3,8 +3,20 @@
 export default function AssinaturaTab({
   config,
   planosConfig,
-  setShowUpgradeModal
+  setShowUpgradeModal,
+  theme
 }: any) {
+  const currentTheme = theme || {
+    bgCard: "#ffffff",
+    textMain: "#1e293b",
+    textSec: "#64748b",
+    border: "#e2e8f0",
+    inputBg: "#ffffff",
+    primary: "#2563eb"
+  };
+
+  const isDark = currentTheme.inputBg !== "#ffffff";
+
   const planoAtualNome = config.dadosLoja?.dsPlanoLoja || 'Bronze';
   const planoInfo = planosConfig?.[planoAtualNome] || {};
 
@@ -16,15 +28,15 @@ export default function AssinaturaTab({
   const historico = config.historicoPagamentos || [];
 
   return (
-    <section style={{ padding: '20px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-      <h3 style={{ ...styles.h3, margin: '0 0 15px 0' }}>Gerenciamento de Assinatura</h3>
+    <section style={{ padding: '20px', background: currentTheme.bgCard, borderRadius: '12px', border: `1px solid ${currentTheme.border}`, transition: 'background 0.3s' }}>
+      <h3 style={{ ...styles.h3, margin: '0 0 15px 0', color: currentTheme.textMain }}>Gerenciamento de Assinatura</h3>
 
       {/* Cabeçalho do Plano */}
-      <div style={styles.planoCard}>
+      <div style={{ ...styles.planoCard, background: isDark ? '#0f172a' : '#f8fafc', border: `1px solid ${currentTheme.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: '700' }}>Plano Atual</div>
-            <div style={{ fontSize: '22px', fontWeight: '900', color: '#1e293b', marginTop: '2px' }}>
+            <div style={{ fontSize: '12px', color: currentTheme.textSec, textTransform: 'uppercase', fontWeight: '700' }}>Plano Atual</div>
+            <div style={{ fontSize: '22px', fontWeight: '900', color: currentTheme.textMain, marginTop: '2px' }}>
               {planoAtualNome}
             </div>
 
@@ -32,7 +44,7 @@ export default function AssinaturaTab({
               R$ {planoInfo.preco || '0'},00 / mês
             </div>
 
-            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '12px', lineHeight: '1.6' }}>
+            <div style={{ fontSize: '12px', color: currentTheme.textSec, marginTop: '12px', lineHeight: '1.6' }}>
               ✅ {planoInfo.produtos || 0} produtos permitidos
               <br />
               ✅ {planoInfo.categorias || 0} categorias permitidas
@@ -40,7 +52,7 @@ export default function AssinaturaTab({
           </div>
 
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: '700' }}>Vencimento</div>
+            <div style={{ fontSize: '12px', color: currentTheme.textSec, textTransform: 'uppercase', fontWeight: '700' }}>Vencimento</div>
             <div style={{ fontWeight: '800', color: '#ef4444', fontSize: '15px', marginTop: '2px' }}>
               {dataVencimentoStr}
             </div>
@@ -48,7 +60,7 @@ export default function AssinaturaTab({
         </div>
       </div>
 
-      <h3 style={{ ...styles.h3, marginTop: '25px' }}>Histórico de Pagamentos</h3>
+      <h3 style={{ ...styles.h3, marginTop: '25px', color: currentTheme.textMain }}>Histórico de Pagamentos</h3>
 
       <div style={styles.msgContainer}>
         {historico.length > 0 ? (
@@ -61,18 +73,22 @@ export default function AssinaturaTab({
             const isAtivacao = status === 'Ativação' || status === 'Pago';
 
             return (
-              <div key={pag.id} style={styles.historicoItem}>
+              <div key={pag.id} style={{ 
+                ...styles.historicoItem, 
+                background: isDark ? '#0f172a' : '#f8fafc', 
+                border: `1px solid ${currentTheme.border}` 
+              }}>
                 <div>
-                  <div style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                  <div style={{ fontWeight: '700', fontSize: '13px', color: currentTheme.textMain }}>
                     {pag.dsMesReferencia || 'Referência não informada'}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                  <div style={{ fontSize: '11px', color: currentTheme.textSec, marginTop: '2px' }}>
                     {dataPagamento}
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: '800', fontSize: '13px', color: '#1e293b' }}>
+                  <div style={{ fontWeight: '800', fontSize: '13px', color: currentTheme.textMain }}>
                     R$ {Number(pag.vlAssinaturaLojista || 0).toFixed(2)}
                   </div>
                   <span style={{
@@ -83,8 +99,8 @@ export default function AssinaturaTab({
                     fontWeight: '800',
                     display: 'inline-block',
                     marginTop: '4px',
-                    background: isAtivacao ? '#dcfce7' : '#fee2e2',
-                    color: isAtivacao ? '#166534' : '#991b1b'
+                    background: isAtivacao ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#7f1d1d' : '#fee2e2'),
+                    color: isAtivacao ? (isDark ? '#6ee7b7' : '#166534') : (isDark ? '#f87171' : '#991b1b')
                   }}>
                     {status}
                   </span>
@@ -93,14 +109,14 @@ export default function AssinaturaTab({
             );
           })
         ) : (
-          <div style={styles.noMsg}>Nenhum histórico encontrado.</div>
+          <div style={{ ...styles.noMsg, color: currentTheme.textSec }}>Nenhum histórico encontrado.</div>
         )}
       </div>
 
       <button
         type="button"
         onClick={() => setShowUpgradeModal(true)}
-        style={styles.btnUpgrade}
+        style={{ ...styles.btnUpgrade, background: currentTheme.primary }}
       >
         VER COMPARATIVO DE PLANOS E UPGRADE
       </button>
@@ -109,15 +125,14 @@ export default function AssinaturaTab({
 }
 
 const styles: any = {
-  h3: { fontSize: "11px", fontWeight: "800", color: "#475569", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
-  planoCard: { background: '#f8fafc', padding: '20px', borderRadius: '14px', border: '1px solid #e2e8f0' },
+  h3: { fontSize: "11px", fontWeight: "800", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
+  planoCard: { padding: '20px', borderRadius: '14px' },
   msgContainer: { display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px', maxHeight: '250px', overflowY: 'auto' },
-  historicoItem: { display: 'flex', justifyContent: 'space-between', padding: '12px 15px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9', alignItems: 'center' },
-  noMsg: { textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '12px' },
+  historicoItem: { display: 'flex', justifyContent: 'space-between', padding: '12px 15px', borderRadius: '10px', alignItems: 'center' },
+  noMsg: { textAlign: 'center', padding: '20px', fontSize: '12px' },
   btnUpgrade: {
     marginTop: '25px',
     width: '100%',
-    background: '#2563eb',
     color: '#fff',
     padding: '14px',
     borderRadius: '12px',

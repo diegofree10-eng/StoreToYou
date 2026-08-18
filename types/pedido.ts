@@ -1,17 +1,23 @@
+// types/pedido.ts
+
 export interface Cliente {
-  dsNome: string;
-  dsTelefone: string;
-  dsEmail: string;
-  dsCpf: string;
+  dsNome?: string;
+  dsTelefone?: string;
+  dsEmail?: string;
+  dsCpf?: string;
+  nmNomeCliente?: string;
+  nome?: string;
+  [key: string]: any;
 }
 
 export interface Endereco {
-  dsRua: string;
-  dsNumero: string;
-  dsCep: string;
-  dsBairro: string;
-  dsCidade: string;
-  dsUf: string;
+  dsRua?: string;
+  dsNumero?: string;
+  dsCep?: string;
+  dsBairro?: string;
+  dsCidade?: string;
+  dsUf?: string;
+  [key: string]: any;
 }
 
 export interface Financeiro {
@@ -21,23 +27,42 @@ export interface Financeiro {
   vlFrete?: number;
   vlSubtotal?: number;
   vlTotal?: number;
+  subtotal?: number;
+  valorSubtotal?: number;
+  descontos?: number;
+  discount?: number;
+  frete?: number;
+  total?: number;
+  valorTotal?: number;
+  freteGratis?: boolean;
   dsTransportadoraId?: string;
   metodo?: string;
   prazoEntrega?: number;
-  [key: string]: any; // Permite flexibilidade caso outras chaves existam
+  [key: string]: any;
 }
 
 export interface ItemPedido {
-  dsFoto?: string;
+  id?: string;
   idProduto?: string;
+  dsFoto?: string;
   dsNomeProduto?: string;
+  nome?: string;
   isPrecisaFrete?: boolean;
   vlPreco?: number;
+  preco?: number;
   nrQty?: number;
+  quantidade?: number;
+  qty?: number;
   dsSku?: string;
+  sku?: string;
   dsVariacao?: string;
+  variacao?: string;
   respostasFormatadas?: Record<string, any>;
-  personalizacao?: any; // <--- Adicione esta linha
+  personalizacao?: any;
+  variacaoSelecionada?: {
+    foto?: string;
+    [key: string]: any;
+  };
   [key: string]: any;
 }
 
@@ -50,25 +75,34 @@ export interface Logistica {
   tsCriacaoPedido?: string;
   dsTransportadoraId?: string | null;
   dsMetodoPagamento?: string;
-  isFreteGratis?: boolean; // <--- Adicione esta linha
+  isFreteGratis?: boolean;
+  vlFrete?: number;
   [key: string]: any;
 }
 
 export interface Pedido {
-  id: string; // <--- Garanta que seja string obrigatória
-  etiquetaGerada?: boolean;
-  status?: string;
-  statusProducao?: string;
+  id: string;
+  data: string; // 👈 Necessário para a ordenação e filtros do Dashboard
+  cliente: string | Cliente; // 👈 Compatível com string ou objeto de cliente
+  devolvido: boolean; // 👈 Necessário para a aba de devoluções e filtros de vendas
   numeroPedido?: number | string;
   numero?: number | string;
+  status?: string;
+  statusProducao?: string;
+  StatusProducao?: {
+    dsStatusProducao?: string;
+    [key: string]: any;
+  };
   pago?: boolean;
   retirada?: boolean;
   retirarNaLoja?: boolean;
   endereco?: any;
-  dscliente: Cliente;
-  dsEndereco: Endereco;
+  dscliente?: Cliente;
+  dsEndereco?: Endereco;
   financeiro: Financeiro;
   itens: ItemPedido[];
   logistica: Logistica;
+  custoFreteLojista?: number;
+  freteCusto?: number;
   [key: string]: any;
 }

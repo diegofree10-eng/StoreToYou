@@ -6,6 +6,9 @@ import { FiSettings, FiCamera, FiSliders, FiGrid, FiInfo } from "react-icons/fi"
 import { styles } from "../styles";
 import { formatarPeso, formatarMedida } from "@/utils/formatters";
 
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
+
 interface FormularioProdutoProps {
   nome: string;
   setNome: (v: string) => void;
@@ -89,6 +92,9 @@ export default function FormularioProduto({
   setPesosDiferentesPorVariacao = () => {}
 }: FormularioProdutoProps) {
 
+  // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+  const { theme } = useTheme();
+
   const [indiceArrastado, setIndiceArrastado] = useState<number | null>(null);
 
   const totalImagensCount = imagens.length + files.length;
@@ -128,7 +134,7 @@ export default function FormularioProduto({
   const precisaDeFrete = tipoProduto !== 'digital_download' && tipoProduto !== 'Digital_Personalizado';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', color: theme.textMain }}>
       
       {/* Importação isolada da fonte Amaranth apenas para uso na descrição */}
       <style jsx global>{`
@@ -162,7 +168,7 @@ export default function FormularioProduto({
 
       {/* 1. SEÇÃO DE IMAGENS */}
       <div>
-        <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '8px', display: 'block' }}>
+        <label style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain, marginBottom: '8px', display: 'block' }}>
           Imagens do Produto (A 1ª foto é a Capa — Toque para definir)
         </label>
         <div className="imagens-container-mobile" style={{ display: 'flex', gap: '10px', alignItems: 'center', overflowX: 'auto', paddingBottom: '5px' }}>
@@ -188,13 +194,13 @@ export default function FormularioProduto({
               minWidth: '100px',
               width: '100px',
               height: '100px',
-              border: '2px dashed #cbd5e1',
+              border: `2px dashed ${theme.border}`,
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative',
-              background: '#f8fafc',
+              background: theme.inputBg,
               overflow: 'hidden',
               cursor: totalImagensCount > 0 ? 'pointer' : 'default'
             }}
@@ -221,7 +227,7 @@ export default function FormularioProduto({
                 </button>
               </>
             ) : (
-              <span style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>Capa Principal</span>
+              <span style={{ fontSize: '11px', color: theme.textSec, textAlign: 'center' }}>Capa Principal</span>
             )}
           </div>
 
@@ -259,13 +265,13 @@ export default function FormularioProduto({
                   minWidth: '70px',
                   width: '70px',
                   height: '70px',
-                  border: indiceArrastado === slotIndex ? '2px solid #2563eb' : '1px dashed #cbd5e1',
+                  border: indiceArrastado === slotIndex ? `2px solid ${theme.primary}` : `1px dashed ${theme.border}`,
                   borderRadius: '6px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   position: 'relative',
-                  background: indiceArrastado === slotIndex ? '#eff6ff' : '#f8fafc',
+                  background: indiceArrastado === slotIndex ? `${theme.primary}15` : theme.inputBg,
                   overflow: 'hidden',
                   cursor: temImagem ? 'pointer' : 'default'
                 }}
@@ -290,7 +296,7 @@ export default function FormularioProduto({
                     </button>
                   </>
                 ) : (
-                  <span style={{ fontSize: '10px', color: '#cbd5e1' }}>+{slotIndex + 1}</span>
+                  <span style={{ fontSize: '10px', color: theme.textSec }}>+{slotIndex + 1}</span>
                 )}
               </div>
             );
@@ -305,17 +311,17 @@ export default function FormularioProduto({
           width: '100%',
           marginTop: '10px',
           padding: '10px 16px',
-          background: '#f1f5f9',
-          border: '1px solid #cbd5e1',
+          background: theme.bgCard,
+          border: `1px solid ${theme.border}`,
           borderRadius: '8px',
-          color: '#334155',
+          color: theme.textMain,
           fontSize: '13px',
           fontWeight: 'bold',
           cursor: 'pointer',
           transition: 'all 0.2s ease',
           boxSizing: 'border-box'
         }}>
-          <FiCamera size={16} color="#0284c7" />
+          <FiCamera size={16} color={theme.primary} />
           <span>{uploading ? "Enviando..." : "Adicionar Fotos"}</span>
           <input
             type="file"
@@ -331,14 +337,14 @@ export default function FormularioProduto({
         </label>
       </div>
 
-      <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
+      <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
       {/* 2. INFORMAÇÕES BÁSICAS DO PRODUTO */}
       <div>
-        <h3 style={styles.sideTitle}>📦 Informações Básicas do Produto</h3>
+        <h3 style={{ ...styles.sideTitle, color: theme.textMain }}>📦 Informações Básicas do Produto</h3>
 
         <input
-          style={{ ...styles.input, marginBottom: '10px' }}
+          style={{ ...styles.input, marginBottom: '10px', background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
           value={nome}
           onChange={e => setNome(e.target.value)}
           placeholder="Nome do Produto *"
@@ -346,20 +352,20 @@ export default function FormularioProduto({
 
         <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
           <select
-            style={{ ...styles.input, marginBottom: 0, flex: 1 }}
+            style={{ ...styles.input, marginBottom: 0, flex: 1, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
             value={categoria}
             onChange={e => { setCategoria(e.target.value); setSubcategoria(""); }}
           >
             <option value="">Categoria... *</option>
             {listaCategorias.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
           </select>
-          <button type="button" onClick={() => setShowCatManager(true)} style={styles.btnActionSmall}>
+          <button type="button" onClick={() => setShowCatManager(true)} style={{ ...styles.btnActionSmall, background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}` }}>
             <FiSettings />
           </button>
         </div>
 
         {categoria && listaCategorias.find(c => c.nome === categoria)?.subcategorias?.length > 0 && (
-          <select style={{ ...styles.input, marginBottom: '10px' }} value={subcategoria} onChange={e => setSubcategoria(e.target.value)}>
+          <select style={{ ...styles.input, marginBottom: '10px', background: theme.inputBg, color: theme.textMain, borderColor: theme.border }} value={subcategoria} onChange={e => setSubcategoria(e.target.value)}>
             <option value="">Subcategoria (Opcional)</option>
             {listaCategorias.find(c => c.nome === categoria).subcategorias.map((sub: string, i: number) => (
               <option key={i} value={sub}>{sub}</option>
@@ -372,7 +378,10 @@ export default function FormularioProduto({
           style={{ 
             ...styles.textarea, 
             marginBottom: '10px', 
-            fontFamily: "'Amaranth', sans-serif" 
+            fontFamily: "'Amaranth', sans-serif",
+            background: theme.inputBg,
+            color: theme.textMain,
+            borderColor: theme.border
           }}
           value={descricao}
           onClick={() => setShowDescModal(true)}
@@ -392,17 +401,17 @@ export default function FormularioProduto({
               justifyContent: 'center',
               gap: '6px',
               padding: '10px 12px',
-              background: '#fff',
-              border: '1px solid #cbd5e1',
+              background: theme.bgCard,
+              border: `1px solid ${theme.border}`,
               borderRadius: '8px',
-              color: '#334155',
+              color: theme.textMain,
               fontSize: '12px',
               fontWeight: 'bold',
               cursor: 'pointer',
               transition: 'all 0.2s ease'
             }}
           >
-            <FiGrid size={15} color="#2563eb" />
+            <FiGrid size={15} color={theme.primary} />
             <span>{temVariaveisComPreco ? "Editar Variações" : "Variações"}</span>
           </button>
 
@@ -417,10 +426,10 @@ export default function FormularioProduto({
               justifyContent: 'center',
               gap: '6px',
               padding: '10px 12px',
-              background: '#fff',
-              border: '1px solid #cbd5e1',
+              background: theme.bgCard,
+              border: `1px solid ${theme.border}`,
               borderRadius: '8px',
-              color: '#334155',
+              color: theme.textMain,
               fontSize: '12px',
               fontWeight: 'bold',
               cursor: 'pointer',
@@ -434,13 +443,13 @@ export default function FormularioProduto({
       </div>
 
       {/* 3. TIPO DE PRODUTO E PRAZO DE PRODUÇÃO */}
-      <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
-        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+      <div style={{ background: theme.bgCard, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}`, marginBottom: '15px' }}>
+        <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '6px' }}>
           Tipo e Comportamento do Produto
         </label>
         
         <select
-          style={{ ...styles.input, marginBottom: '10px' }}
+          style={{ ...styles.input, marginBottom: '10px', background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
           value={tipoProduto}
           onChange={e => {
             const novoTipo = e.target.value;
@@ -465,7 +474,7 @@ export default function FormularioProduto({
             ⏱️ Dias necessários para produzir / preparar o produto:
           </label>
           <input
-            style={{ ...styles.input, marginBottom: 0, borderColor: '#f59e0b', background: '#fffbeb' }}
+            style={{ ...styles.input, marginBottom: 0, borderColor: '#f59e0b', background: theme.inputBg, color: theme.textMain }}
             value={diasProducao}
             onChange={e => {
               const cleanValue = e.target.value.replace(/\D/g, "");
@@ -476,29 +485,29 @@ export default function FormularioProduto({
         </div>
       </div>
 
-      <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
+      <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
       {/* 4. VALORES E ESTOQUE */}
-      <div style={{ ...styles.boxGray, opacity: temVariaveisComPreco ? 0.6 : 1, marginBottom: '15px' }}>
-        <label style={styles.miniLabel}>Valores e Estoque</label>
+      <div style={{ opacity: temVariaveisComPreco ? 0.6 : 1, marginBottom: '15px' }}>
+        <label style={{ ...styles.miniLabel, color: theme.textSec }}>Valores e Estoque</label>
         <div style={{ display: 'flex', gap: '5px' }}>
           <input
             disabled={temVariaveisComPreco}
-            style={{ ...styles.input, marginBottom: 0 }}
+            style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
             value={temVariaveisComPreco ? "Grade" : (precoBasico || "")}
             onChange={e => formatInput(e.target.value, setPrecoBasico)}
             placeholder="Venda (R$)"
           />
           <input
             disabled={temVariaveisComPreco}
-            style={{ ...styles.input, marginBottom: 0 }}
+            style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
             value={temVariaveisComPreco ? "Grade" : (custoUnitario || "")}
             onChange={e => formatInput(e.target.value, setCustoUnitario)}
             placeholder="Custo (R$)"
           />
           <input
             disabled={temVariaveisComPreco}
-            style={{ ...styles.input, marginBottom: 0 }}
+            style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
             value={temVariaveisComPreco ? "Grade" : (estoque || "")}
             onChange={e => {
               const cleanValue = e.target.value.replace(/\D/g, "");
@@ -509,13 +518,13 @@ export default function FormularioProduto({
         </div>
       </div>
 
-      <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
+      <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
       {/* 5. CONFIGURAÇÕES DE LOGÍSTICA E FRETE */}
       {precisaDeFrete ? (
         <div style={{ opacity: temVariaveisComPreco && !pesosDiferentesPorVariacao ? 0.6 : 1 }}>
-          <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '10px 12px', borderRadius: '8px', marginBottom: '12px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
+          <div style={{ background: theme.bgCard, border: `1px solid ${theme.border}`, padding: '10px 12px', borderRadius: '8px', marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 'bold', color: theme.textMain, cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={pesosDiferentesPorVariacao}
@@ -532,33 +541,33 @@ export default function FormularioProduto({
             </label>
           </div>
 
-          <h3 style={styles.sideTitle}>🚚 Medidas para Cálculo de Frete (Melhor Envio)</h3>
+          <h3 style={{ ...styles.sideTitle, color: theme.textMain }}>🚚 Medidas para Cálculo de Frete (Melhor Envio)</h3>
           
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', marginBottom: '10px', opacity: pesosDiferentesPorVariacao ? 0.4 : 1, pointerEvents: pesosDiferentesPorVariacao ? 'none' : 'auto' }}>
             <input
               disabled={pesosDiferentesPorVariacao}
-              style={{ ...styles.input, marginBottom: 0 }}
+              style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
               value={pesosDiferentesPorVariacao ? "Definido na Grade" : peso}
               onChange={e => setPeso(formatarPeso(e.target.value))}
               placeholder="Peso kg"
             />
             <input
               disabled={pesosDiferentesPorVariacao}
-              style={{ ...styles.input, marginBottom: 0 }}
+              style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
               value={pesosDiferentesPorVariacao ? "Definido na Grade" : comprimento}
               onChange={e => setComprimento(formatarMedida(e.target.value))}
               placeholder="Comp cm"
             />
             <input
               disabled={pesosDiferentesPorVariacao}
-              style={{ ...styles.input, marginBottom: 0 }}
+              style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
               value={pesosDiferentesPorVariacao ? "Definido na Grade" : largura}
               onChange={e => setLargura(formatarMedida(e.target.value))}
               placeholder="Larg cm"
             />
             <input
               disabled={pesosDiferentesPorVariacao}
-              style={{ ...styles.input, marginBottom: 0 }}
+              style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
               value={pesosDiferentesPorVariacao ? "Definido na Grade" : altura}
               onChange={e => setAltura(formatarMedida(e.target.value))}
               placeholder="Alt cm"
@@ -567,8 +576,8 @@ export default function FormularioProduto({
         </div>
       ) : (
         <div style={{ 
-          background: '#f0fdf4', 
-          border: '1px solid #bbf7d0', 
+          background: theme.bgCard, 
+          border: `1px solid ${theme.border}`, 
           borderRadius: '8px', 
           padding: '12px 15px', 
           display: 'flex', 
@@ -578,23 +587,23 @@ export default function FormularioProduto({
         }}>
           <FiInfo size={18} color="#16a34a" style={{ flexShrink: 0 }} />
           <div>
-            <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', color: '#166534' }}>Produto sem frete / Envio Digital</h4>
-            <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#15803d' }}>
+            <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>Produto sem frete / Envio Digital</h4>
+            <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: theme.textSec }}>
               Este produto não requer cálculo de frete ou dimensões postais no carrinho.
             </p>
           </div>
         </div>
       )}
 
-      <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
+      <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
       {/* 📦 ALERTA DE ESTOQUE MÍNIMO */}
       <div>
-        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px', display: 'block' }}>
+        <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, marginBottom: '5px', display: 'block' }}>
           ⚠️ Alerta de Estoque Mínimo (Aviso quando atingir X unidades)
         </label>
         <input
-          style={{ ...styles.input, marginBottom: 0 }}
+          style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
           value={estoqueMinimo}
           onChange={e => {
             const cleanValue = e.target.value.replace(/\D/g, "");
@@ -604,17 +613,17 @@ export default function FormularioProduto({
         />
       </div>
 
-      <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '5px 0' }} />
+      <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
       {/* 6. SKU (CÓDIGO) */}
       <div style={{ opacity: temVariaveisComPreco ? 0.6 : 1 }}>
-        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px', display: 'block' }}>
+        <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, marginBottom: '5px', display: 'block' }}>
           SKU (Código Base) {temVariaveisComPreco && "— Gerenciado na Grade"}
         </label>
         <div style={{ display: 'flex', gap: '5px' }}>
           <input
             disabled={temVariaveisComPreco}
-            style={{ ...styles.input, marginBottom: 0, backgroundColor: temVariaveisComPreco ? '#f1f5f9' : '#fff' }}
+            style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
             value={temVariaveisComPreco ? "Gerenciado na Grade de Variações" : sku}
             onChange={e => setSku(e.target.value.toUpperCase())}
             placeholder="Ex: CAM-AZU-G"
@@ -625,7 +634,7 @@ export default function FormularioProduto({
             onClick={() => setIsModalSKUOpen(true)}
             style={{ 
               padding: '0 15px', 
-              background: temVariaveisComPreco ? '#cbd5e1' : '#334155', 
+              background: temVariaveisComPreco ? theme.border : theme.primary, 
               color: '#fff', 
               border: 'none', 
               borderRadius: '4px', 

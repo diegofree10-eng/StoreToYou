@@ -7,6 +7,10 @@ import { Pedido } from "@/types/pedido";
 export const criarEstruturaPedido = (dados: any): Pedido => {
   return {
     id: dados.id || "",
+    data: dados.data || dados.tsCriacaoPedido || new Date().toISOString(), // 👈 Adicionado
+    cliente:
+      dados.cliente || dados.dsNome || dados.dscliente?.dsNome || "Cliente", // 👈 Adicionado
+    devolvido: !!dados.devolvido, // 👈 Adicionado
     dscliente: {
       dsNome: String(dados.dsNome || ""),
       dsTelefone: String(dados.dsTelefone || ""),

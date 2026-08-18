@@ -8,7 +8,10 @@ import { storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
 import ImageCropperModal from "@/utils/ImageCropperModalProduto";
 import ModalGeradorSkuVariacoes from "@/app/admin/_components/ModalGeradorSkuVariaçoes";
-import { formatarPeso, formatarMedida } from "@/utils/formatters"; // ✨ Importando as funções de formatação
+import { formatarPeso, formatarMedida } from "@/utils/formatters";
+
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
 
 // Formatação fluida tipo caixa eletrônico (0,01 -> 0,12 -> 1,23)
 const formatarCaixaEletronico = (texto: string) => {
@@ -18,8 +21,26 @@ const formatarCaixaEletronico = (texto: string) => {
   return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
 };
 
+// 🌟 Converte "1.234,56" para formato numérico padrão ("1234.56") para salvar no banco/carrinho sem quebrar
+const converterParaPadraoMonetario = (textoFormatado: string) => {
+  if (!textoFormatado) return "";
+  const limpo = textoFormatado.toString().replace(/\./g, "").replace(",", ".");
+  const num = parseFloat(limpo);
+  return isNaN(num) ? "" : num.toFixed(2);
+};
+
+// Converte do padrão do banco ("1234.56") para a visualização do caixa eletrônico ("1.234,56") ao abrir o modal
+const converterDoPadraoParaCaixa = (valorBanco: any) => {
+  if (!valorBanco && valorBanco !== 0) return "";
+  const str = valorBanco.toString().replace(",", ".");
+  const num = parseFloat(str);
+  if (isNaN(num)) return "";
+  const centavos = Math.round(num * 100).toString();
+  return formatarCaixaEletronico(centavos);
+};
+
 /**
- * Função inteligente para gerar sufixos para nomes compostos (ex: "Bandeirinha PARABENS" -> "BAN-PARA")
+ * Função inteligente para gerar sufixos para nomes compostos
  */
 const gerarSufixoInteligente = (texto: string) => {
   if (!texto) return "";
@@ -68,6 +89,8 @@ export default function VariacoesModal({
   lojistaId
 }: VariacoesModalProps) {
 
+  const { theme, isModoNoturno } = useTheme();
+
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [precoGlobal, setPrecoGlobal] = useState("");
   const [custoGlobal, setCustoGlobal] = useState("");
@@ -91,9 +114,20 @@ export default function VariacoesModal({
 
   useEffect(() => {
     if (showVarModal) {
-      setDraftTabela(tabelaPrecos);
+      const tabelaFormatada: any = {};
+      if (tabelaPrecos) {
+        Object.keys(tabelaPrecos).forEach((k) => {
+          const item = tabelaPrecos[k];
+          tabelaFormatada[k] = {
+            ...item,
+            preco: converterDoPadraoParaCaixa(item.preco),
+            custo: converterDoPadraoParaCaixa(item.custo),
+          };
+        });
+      }
+      setDraftTabela(tabelaFormatada);
     }
-  }, [showVarModal]);
+  }, [showVarModal, tabelaPrecos]);
 
   if (!showVarModal) return null;
 
@@ -118,49 +152,85 @@ export default function VariacoesModal({
     }));
   };
 
+  const handleSalvarGrade = () => {
+    const tabelaParaSalvar: any = {};
+    
+    Object.keys(draftTabela).forEach((k) => {
+      const item = draftTabela[k];
+      tabelaParaSalvar[k] = {
+        ...item,
+        preco: converterParaPadraoMonetario(item.preco),
+        custo: converterParaPadraoMonetario(item.custo),
+      };
+    });
+
+    onSave(tabelaParaSalvar);
+    setShowVarModal(false);
+  };
+
   return (
     <div style={shopeeStyles.overlay}>
       <div style={{
         ...shopeeStyles.modal,
+        backgroundColor: theme.bgCard,
+        color: theme.textMain,
+        border: `1px solid ${theme.border}`,
         width: isMobile ? '95%' : shopeeStyles.modal.width,
         maxWidth: isMobile ? '100%' : (pesosDiferentesPorVariacao ? '1200px' : '950px'),
         maxHeight: isMobile ? '90vh' : '95vh',
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'max-width 0.3s ease'
+        transition: 'max-width 0.3s ease',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)'
       }}>
         {/* Cabeçalho */}
-        <div style={{ ...shopeeStyles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <h3 style={shopeeStyles.title}>Grade de Variações</h3>
+        <div style={{ ...shopeeStyles.header, borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <h3 style={{ ...shopeeStyles.title, color: theme.textMain }}>Grade de Variações</h3>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {temVariaçõesVisiveis && (
               <button
                 type="button"
                 onClick={() => setShowModalGeradorSkuVar(true)}
-                style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
               >
                 ⚡ Gerar SKUs
               </button>
             )}
-            <button onClick={() => setShowVarModal(false)} style={shopeeStyles.closeBtn}>✕</button>
+            <button onClick={() => setShowVarModal(false)} style={{ ...shopeeStyles.closeBtn, color: theme.textMain }}>✕</button>
           </div>
         </div>
 
-        <div style={{ ...shopeeStyles.content, overflowY: 'auto', flex: 1, padding: isMobile ? '10px' : '15px' }}>
+        <div style={{ ...shopeeStyles.content, overflowY: 'auto', flex: 1, padding: isMobile ? '10px' : '20px' }}>
+          
           {/* VARIAÇÃO 1 */}
           <div style={shopeeStyles.section}>
-            <label style={shopeeStyles.label}>Variação 1 (ex: Cor)</label>
-            <div style={shopeeStyles.varBox}>
-              <input style={styles.input} value={nomeVar1} onChange={e => setNomeVar1(e.target.value)} placeholder="Ex: Cor" />
-              <div style={shopeeStyles.tagsContainer}>
+            <label style={{ ...shopeeStyles.label, color: theme.textSec }}>Variação 1 (ex: Cor)</label>
+            <div style={{ backgroundColor: theme.bgApp, border: `1px solid ${theme.border}`, padding: '14px', borderRadius: '8px' }}>
+              <input 
+                style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, marginBottom: '12px' }} 
+                value={nomeVar1} 
+                onChange={e => setNomeVar1(e.target.value)} 
+                placeholder="Ex: Cor" 
+              />
+              
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {opcoesVar1.map((op, idx) => (
-                  <div key={idx} style={shopeeStyles.tagInputWrapper}>
-                    <input style={shopeeStyles.tagInput} value={op} onChange={e => { const n = [...opcoesVar1]; n[idx] = e.target.value; setOpcoesVar1(n); }} />
-                    <button style={shopeeStyles.delTag} onClick={() => setOpcoesVar1(opcoesVar1.filter((_, i) => i !== idx))}>✕</button>
+                  <div key={idx} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    backgroundColor: theme.inputBg, 
+                    border: `1px solid ${theme.border}`, 
+                    borderRadius: '4px', 
+                    padding: '6px 10px',
+                    width: 'auto',
+                    minWidth: '140px'
+                  }}>
+                    <input style={{ border: 'none', backgroundColor: 'transparent', color: theme.textMain, outline: 'none', width: '100%', fontSize: '13px' }} value={op} onChange={e => { const n = [...opcoesVar1]; n[idx] = e.target.value; setOpcoesVar1(n); }} placeholder="Opção" />
+                    <button style={{ border: 'none', background: 'transparent', color: theme.textSec, cursor: 'pointer', fontSize: '12px', marginLeft: '6px' }} onClick={() => setOpcoesVar1(opcoesVar1.filter((_, i) => i !== idx))}>✕</button>
                   </div>
                 ))}
-                <button style={shopeeStyles.addBtn} onClick={() => setOpcoesVar1([...opcoesVar1, ""])}>+ Opção</button>
+                <button style={{ padding: '6px 14px', backgroundColor: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }} onClick={() => setOpcoesVar1([...opcoesVar1, ""])}>+ Adicionar</button>
               </div>
             </div>
           </div>
@@ -168,37 +238,47 @@ export default function VariacoesModal({
           {/* VARIAÇÃO 2 */}
           <div style={shopeeStyles.section}>
             {!showVar2 ? (
-              <button onClick={() => setShowVar2(true)} style={{ ...shopeeStyles.addBtn, padding: '10px 20px', border: '1px dashed #1e293b', color: '#1e293b', width: isMobile ? '100%' : 'auto' }}>
+              <button onClick={() => setShowVar2(true)} style={{ padding: '10px 16px', border: `1px dashed ${theme.border}`, color: theme.textMain, backgroundColor: theme.bgApp, borderRadius: '6px', cursor: 'pointer', fontSize: '13px', width: isMobile ? '100% ' : 'auto', fontWeight: '500' }}>
                 + Adicionar Variação 2
               </button>
             ) : (
-              <div style={{ ...shopeeStyles.varBox, border: '1px solid #e2e8f0', padding: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={shopeeStyles.label}>Variação 2</label>
-                  <button onClick={() => { setShowVar2(false); setNomeVar2(""); setOpcoesVar2([]); }} style={{ border: 'none', background: 'none', color: '#ef4444', fontSize: '12px', cursor: 'pointer' }}>Remover</button>
+              <div style={{ backgroundColor: theme.bgApp, border: `1px solid ${theme.border}`, padding: '14px', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ ...shopeeStyles.label, color: theme.textSec }}>Variação 2</label>
+                  <button onClick={() => { setShowVar2(false); setNomeVar2(""); setOpcoesVar2([]); }} style={{ border: 'none', background: 'none', color: '#ef4444', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}>Remover</button>
                 </div>
-                <input style={styles.input} value={nomeVar2} onChange={e => setNomeVar2(e.target.value)} placeholder="Ex: Tamanho" />
-                <div style={shopeeStyles.tagsContainer}>
+                <input style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, marginBottom: '12px' }} value={nomeVar2} onChange={e => setNomeVar2(e.target.value)} placeholder="Ex: Tamanho" />
+                
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {opcoesVar2.map((op, idx) => (
-                    <div key={idx} style={shopeeStyles.tagInputWrapper}>
-                      <input style={shopeeStyles.tagInput} value={op} onChange={e => { const n = [...opcoesVar2]; n[idx] = e.target.value; setOpcoesVar2(n); }} />
-                      <button style={shopeeStyles.delTag} onClick={() => setOpcoesVar2(opcoesVar2.filter((_, i) => i !== idx))}>✕</button>
+                    <div key={idx} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      backgroundColor: theme.inputBg, 
+                      border: `1px solid ${theme.border}`, 
+                      borderRadius: '4px', 
+                      padding: '6px 10px',
+                      width: 'auto',
+                      minWidth: '140px'
+                    }}>
+                      <input style={{ border: 'none', backgroundColor: 'transparent', color: theme.textMain, outline: 'none', width: '100%', fontSize: '13px' }} value={op} onChange={e => { const n = [...opcoesVar2]; n[idx] = e.target.value; setOpcoesVar2(n); }} placeholder="Opção" />
+                      <button style={{ border: 'none', background: 'transparent', color: theme.textSec, cursor: 'pointer', fontSize: '12px', marginLeft: '6px' }} onClick={() => setOpcoesVar2(opcoesVar2.filter((_, i) => i !== idx))}>✕</button>
                     </div>
                   ))}
-                  <button style={shopeeStyles.addBtn} onClick={() => setOpcoesVar2([...opcoesVar2, ""])}>+ Opção</button>
+                  <button style={{ padding: '6px 14px', backgroundColor: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }} onClick={() => setOpcoesVar2([...opcoesVar2, ""])}>+ Adicionar</button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* SELETOR DE PESOS E MEDIDAS */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
+          {/* SELETOR DE PESOS E MEDIDAS (Checkbox isolado e sem quadro em volta) */}
+          <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '500', color: theme.textMain, cursor: 'default' }}>
               <input
                 type="checkbox"
                 checked={pesosDiferentesPorVariacao}
                 onChange={e => setPesosDiferentesPorVariacao(e.target.checked)}
-                style={{ transform: 'scale(1.1)', cursor: 'pointer' }}
+                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: theme.primary }}
               />
               Pesos/dimensões diferentes por variação (Para cálculo de frete específico)
             </label>
@@ -206,10 +286,10 @@ export default function VariacoesModal({
 
           {/* PAINEL DE AÇÃO EM MASSA */}
           <div style={{
-            background: '#fff',
-            border: '1px solid #1e293b',
-            padding: '12px',
-            borderRadius: '4px',
+            backgroundColor: theme.bgApp,
+            border: `1px solid ${theme.border}`,
+            padding: '14px',
+            borderRadius: '8px',
             marginBottom: '20px',
             display: 'flex',
             flexDirection: isMobile ? 'column' : 'row',
@@ -217,22 +297,22 @@ export default function VariacoesModal({
             gap: '10px'
           }}>
             <input
-              placeholder="Preço (0,00)"
+              placeholder="Preço global (0,00)"
               value={precoGlobal}
               onChange={(e) => setPrecoGlobal(formatarCaixaEletronico(e.target.value))}
-              style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
+              style={{ padding: '9px 12px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, flex: 1, borderRadius: '4px', outline: 'none' }}
             />
             <input
-              placeholder="Custo (0,00)"
+              placeholder="Custo global (0,00)"
               value={custoGlobal}
               onChange={(e) => setCustoGlobal(formatarCaixaEletronico(e.target.value))}
-              style={{ padding: '8px', border: '1px solid #dcdcdc', flex: 1, borderRadius: '4px' }}
+              style={{ padding: '9px 12px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, flex: 1, borderRadius: '4px', outline: 'none' }}
             />
             <input
               placeholder="Estoque"
               value={estoqueGlobal}
               onChange={(e) => setEstoqueGlobal(e.target.value.replace(/\D/g, ""))}
-              style={{ padding: '8px', border: '1px solid #dcdcdc', width: isMobile ? '100%' : '90px', borderRadius: '4px' }}
+              style={{ padding: '9px 12px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, width: isMobile ? '100%' : '100px', borderRadius: '4px', outline: 'none' }}
             />
             <button
               onClick={() => {
@@ -250,7 +330,7 @@ export default function VariacoesModal({
                   return novaTabela;
                 });
               }}
-              style={{ background: '#1e293b', color: '#fff', border: 'none', padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold', borderRadius: '4px' }}
+              style={{ background: theme.primary, color: '#fff', border: 'none', padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold', borderRadius: '4px' }}
             >
               Aplicar a todos
             </button>
@@ -274,13 +354,13 @@ export default function VariacoesModal({
                     const valorAltura = draftTabela[c.key]?.altura || "";
 
                     return (
-                      <div key={`${c.key}-${idx}`} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#334155', fontSize: '13px' }}>
+                      <div key={`${c.key}-${idx}`} style={{ background: theme.bgApp, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.border}`, paddingBottom: '8px' }}>
+                          <span style={{ fontWeight: 'bold', color: theme.textMain, fontSize: '13px' }}>
                             {v1} {c.v2 ? `/ ${c.v2}` : ""}
                           </span>
                           {idx === 0 && (
-                            <div style={{ width: '45px', height: '45px', border: temFoto ? '1px solid #3b82f6' : '1px dashed #cbd5e1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', background: '#fff' }}>
+                            <div style={{ width: '45px', height: '45px', border: temFoto ? `1px solid ${theme.primary}` : `1px dashed ${theme.border}`, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', background: theme.inputBg }}>
                               {temFoto ? (
                                 <>
                                   <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
@@ -291,14 +371,14 @@ export default function VariacoesModal({
                                         await handleDraftInput(comb.key, "foto", "");
                                       }
                                     }}
-                                    style={{ position: 'absolute', top: 0, right: 0, background: 'red', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '9px', padding: '1px 3px' }}
+                                    style={{ position: 'absolute', top: 0, right: 0, background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '9px', padding: '1px 3px' }}
                                   >
                                     ✕
                                   </button>
                                 </>
                               ) : (
                                 <>
-                                  <span style={{ fontSize: '14px', color: '#cbd5e1' }}>+</span>
+                                  <span style={{ fontSize: '14px', color: theme.textSec }}>+</span>
                                   <input 
                                     type="file" 
                                     accept="image/*" 
@@ -319,32 +399,32 @@ export default function VariacoesModal({
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <div>
-                            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>SKU</label>
-                            <input style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" />
+                            <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>SKU</label>
+                            <input style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" />
                           </div>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Preço (R$)</label>
+                              <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>Preço (R$)</label>
                               <input
-                                style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }}
+                                style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
                                 value={valorPreco}
                                 onChange={(e) => handleDraftInput(c.key, "preco", formatarCaixaEletronico(e.target.value))}
                                 placeholder="0,00"
                               />
                             </div>
                             <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Custo (R$)</label>
+                              <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>Custo (R$)</label>
                               <input
-                                style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }}
+                                style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
                                 value={valorCusto}
                                 onChange={(e) => handleDraftInput(c.key, "custo", formatarCaixaEletronico(e.target.value))}
                                 placeholder="0,00"
                               />
                             </div>
                             <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Estoque</label>
+                              <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>Estoque</label>
                               <input
-                                style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }}
+                                style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
                                 value={valorEstoque}
                                 onChange={e => handleDraftInput(c.key, "estoque", e.target.value.replace(/\D/g, ""))}
                                 placeholder="0"
@@ -353,11 +433,11 @@ export default function VariacoesModal({
                           </div>
 
                           {pesosDiferentesPorVariacao && (
-                            <div style={{ background: '#fff', padding: '8px', borderRadius: '6px', border: '1px dashed #cbd5e1', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ background: theme.inputBg, padding: '8px', borderRadius: '6px', border: `1px dashed ${theme.border}`, marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <div>
-                                <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Peso (kg)</label>
+                                <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Peso (kg)</label>
                                 <input 
-                                  style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                  style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
                                   value={valorPeso} 
                                   onChange={e => handleDraftInput(c.key, "peso", formatarPeso(e.target.value))} 
                                   placeholder="0.00" 
@@ -365,27 +445,27 @@ export default function VariacoesModal({
                               </div>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
                                 <div>
-                                  <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Comp (cm)</label>
+                                  <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Comp (cm)</label>
                                   <input 
-                                    style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
                                     value={valorComprimento} 
                                     onChange={e => handleDraftInput(c.key, "comprimento", formatarMedida(e.target.value))} 
                                     placeholder="0" 
                                   />
                                 </div>
                                 <div>
-                                  <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Larg (cm)</label>
+                                  <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Larg (cm)</label>
                                   <input 
-                                    style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
                                     value={valorLargura} 
                                     onChange={e => handleDraftInput(c.key, "largura", formatarMedida(e.target.value))} 
                                     placeholder="0" 
                                   />
                                 </div>
                                 <div>
-                                  <label style={{ fontSize: '10px', color: '#b45309', fontWeight: 'bold', display: 'block' }}>Alt (cm)</label>
+                                  <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Alt (cm)</label>
                                   <input 
-                                    style={{ ...shopeeStyles.tableInput, width: '100%', boxSizing: 'border-box' }} 
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
                                     value={valorAltura} 
                                     onChange={e => handleDraftInput(c.key, "altura", formatarMedida(e.target.value))} 
                                     placeholder="0" 
@@ -401,24 +481,23 @@ export default function VariacoesModal({
                 })}
               </div>
             ) : (
-              <table
-                style={{ ...shopeeStyles.table, width: '100%', marginTop: '20px' }}>
+              <table style={{ ...shopeeStyles.table, width: '100%', marginTop: '20px', color: theme.textMain }}>
                 <thead>
-                  <tr style={{ background: '#f6f6f6' }}>
-                    <th style={{ ...shopeeStyles.th, width: '150px', textAlign: 'center' }}>Var 1</th>
+                  <tr style={{ background: theme.bgApp }}>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, width: '150px', textAlign: 'center' }}>Var 1</th>
                     {showVar2 && (
-                      <th style={{ ...shopeeStyles.th, width: '100px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <th style={{ ...shopeeStyles.th, color: theme.textSec, width: '100px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         Var 2
                       </th>
                     )}
-                    <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>SKU</th>
-                    <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Preço</th>
-                    <th style={{ ...shopeeStyles.th, textAlign: 'center' }}>Custo</th>
-                    <th style={{ ...shopeeStyles.th, textAlign: 'center', width: '90px' }}>Estoque</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center' }}>SKU</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center' }}>Preço</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center' }}>Custo</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '90px' }}>Estoque</th>
                     {pesosDiferentesPorVariacao && (
                       <>
-                        <th style={{ ...shopeeStyles.th, textAlign: 'center', width: '90px' }}>Peso (kg)</th>
-                        <th style={{ ...shopeeStyles.th, textAlign: 'center', width: '220px' }}>Dimensões (CxLxA cm)</th>
+                        <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '90px' }}>Peso (kg)</th>
+                        <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '220px' }}>Dimensões (CxLxA cm)</th>
                       </>
                     )}
                   </tr>
@@ -439,11 +518,11 @@ export default function VariacoesModal({
                       const valorAltura = draftTabela[c.key]?.altura || "";
 
                       return (
-                        <tr key={`${c.key}-${idx}`}>
+                        <tr key={`${c.key}-${idx}`} style={{ borderBottom: `1px solid ${theme.border}` }}>
                           {idx === 0 && (
-                            <td rowSpan={combsDesteGrupo.length} style={{ ...shopeeStyles.td, textAlign: 'center', backgroundColor: '#f8fafc', width: '150px', verticalAlign: 'middle' }}>
-                              <div style={{ fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>{v1}</div>
-                              <div style={{ width: '60px', height: '60px', margin: '0 auto', border: temFoto ? '1px solid #3b82f6' : '1px dashed #cbd5e1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+                            <td rowSpan={combsDesteGrupo.length} style={{ ...shopeeStyles.td, textAlign: 'center', backgroundColor: theme.bgApp, width: '150px', verticalAlign: 'middle', borderRight: `1px solid ${theme.border}` }}>
+                              <div style={{ fontWeight: 'bold', marginBottom: '8px', textAlign: 'center', color: theme.textMain }}>{v1}</div>
+                              <div style={{ width: '60px', height: '60px', margin: '0 auto', border: temFoto ? `1px solid ${theme.primary}` : `1px dashed ${theme.border}`, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', backgroundColor: theme.inputBg }}>
                                 {temFoto ? (
                                   <>
                                     <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
@@ -458,7 +537,7 @@ export default function VariacoesModal({
                                         position: 'absolute',
                                         top: 0,
                                         right: 0,
-                                        background: 'red',
+                                        background: '#ef4444',
                                         color: '#fff',
                                         border: 'none',
                                         cursor: 'pointer',
@@ -470,7 +549,7 @@ export default function VariacoesModal({
                                   </>
                                 ) : (
                                   <>
-                                    <span style={{ fontSize: '18px', color: '#cbd5e1' }}>+</span>
+                                    <span style={{ fontSize: '18px', color: theme.textSec }}>+</span>
                                     <input 
                                       type="file" 
                                       accept="image/*" 
@@ -489,11 +568,11 @@ export default function VariacoesModal({
                             </td>
                           )}
 
-                          {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '100px' }}> {c.v2 || "-"}</td>)}
-                          <td style={shopeeStyles.td}><input style={shopeeStyles.tableInput} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" /></td>
+                          {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '100px', color: theme.textMain }}> {c.v2 || "-"}</td>)}
+                          <td style={shopeeStyles.td}><input style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" /></td>
                           <td style={shopeeStyles.td}>
                             <input
-                              style={shopeeStyles.tableInput}
+                              style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                               value={valorPreco}
                               onChange={(e) => handleDraftInput(c.key, "preco", formatarCaixaEletronico(e.target.value))}
                               placeholder="0,00"
@@ -501,7 +580,7 @@ export default function VariacoesModal({
                           </td>
                           <td style={shopeeStyles.td}>
                             <input
-                              style={shopeeStyles.tableInput}
+                              style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                               value={valorCusto}
                               onChange={(e) => handleDraftInput(c.key, "custo", formatarCaixaEletronico(e.target.value))}
                               placeholder="0,00"
@@ -509,7 +588,7 @@ export default function VariacoesModal({
                           </td>
                           <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
                             <input
-                              style={{ ...shopeeStyles.tableInput, width: '70px', textAlign: 'center' }}
+                              style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '70px', textAlign: 'center' }}
                               value={valorEstoque}
                               onChange={e => handleDraftInput(c.key, "estoque", e.target.value.replace(/\D/g, ""))}
                               placeholder="0"
@@ -520,7 +599,7 @@ export default function VariacoesModal({
                             <>
                               <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
                                 <input
-                                  style={{ ...shopeeStyles.tableInput, width: '70px', textAlign: 'center' }}
+                                  style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '70px', textAlign: 'center' }}
                                   value={valorPeso}
                                   onChange={e => handleDraftInput(c.key, "peso", formatarPeso(e.target.value))}
                                   placeholder="0.00"
@@ -529,21 +608,21 @@ export default function VariacoesModal({
                               <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
                                 <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
                                   <input
-                                    style={{ ...shopeeStyles.tableInput, width: '55px', textAlign: 'center' }}
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '55px', textAlign: 'center' }}
                                     value={valorComprimento}
                                     onChange={e => handleDraftInput(c.key, "comprimento", formatarMedida(e.target.value))}
                                     placeholder="Comp"
                                   />
-                                  <span>x</span>
+                                  <span style={{ color: theme.textSec }}>x</span>
                                   <input
-                                    style={{ ...shopeeStyles.tableInput, width: '55px', textAlign: 'center' }}
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '55px', textAlign: 'center' }}
                                     value={valorLargura}
                                     onChange={e => handleDraftInput(c.key, "largura", formatarMedida(e.target.value))}
                                     placeholder="Larg"
                                   />
-                                  <span>x</span>
+                                  <span style={{ color: theme.textSec }}>x</span>
                                   <input
-                                    style={{ ...shopeeStyles.tableInput, width: '55px', textAlign: 'center' }}
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '55px', textAlign: 'center' }}
                                     value={valorAltura}
                                     onChange={e => handleDraftInput(c.key, "altura", formatarMedida(e.target.value))}
                                     placeholder="Alt"
@@ -563,7 +642,7 @@ export default function VariacoesModal({
         </div>
 
         {/* FOOTER */}
-        <div style={{ display: 'flex', justifyContent: isMobile ? 'stretch' : 'flex-end', gap: '10px', padding: '15px', borderTop: '1px solid #e2e8f0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: isMobile ? 'stretch' : 'flex-end', gap: '10px', padding: '15px 20px', borderTop: `1px solid ${theme.border}`, flexShrink: 0, backgroundColor: theme.bgCard }}>
           <button
             onClick={() => {
               setPrecoGlobal("");
@@ -572,13 +651,13 @@ export default function VariacoesModal({
               setDraftTabela(tabelaPrecos);
               setShowVarModal(false);
             }}
-            style={{ padding: '10px 20px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', cursor: 'pointer', flex: isMobile ? 1 : 'unset' }}
+            style={{ padding: '10px 20px', borderRadius: '4px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, cursor: 'pointer', flex: isMobile ? 1 : 'unset', fontWeight: '500' }}
           >
             Cancelar
           </button>
           <button
-            onClick={() => { onSave(draftTabela); setShowVarModal(false); }}
-            style={{ padding: '10px 40px', borderRadius: '4px', backgroundColor: '#1e293b', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold', flex: isMobile ? 1 : 'unset' }}
+            onClick={handleSalvarGrade}
+            style={{ padding: '10px 40px', borderRadius: '4px', backgroundColor: theme.primary, color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold', flex: isMobile ? 1 : 'unset' }}
           >
             Salvar Grade
           </button>
@@ -604,7 +683,7 @@ export default function VariacoesModal({
         />
       )}
 
-      {/* CHAMADA DO MODAL DEDICADO DE SKU PARA VARIAÇÕES (Com suporte a nomes compostos) */}
+      {/* CHAMADA DO MODAL DEDICADO DE SKU PARA VARIAÇÕES */}
       {showModalGeradorSkuVar && (
         <ModalGeradorSkuVariacoes
           lojistaId={lojistaId}

@@ -1,8 +1,10 @@
+// components/_tabsGestaoPedidos/TabEnviados.tsx
 'use client';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Pedido } from '@/types/pedido';
-import useSWR from 'swr';
-import { doc, getDoc } from 'firebase/firestore';
+
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
 
 interface TabEnviadosProps {
     pedidos: Pedido[];
@@ -33,13 +35,6 @@ const extrairFotoDoItem = (item: any): string => {
     return "";
 };
 
-const fetchProduto = async (path: string, db: any) => {
-    const [_, lojistaId, __, idProd] = path.split('/');
-    const docRef = doc(db, "lojistas", lojistaId, "produtos", idProd);
-    const snap = await getDoc(docRef);
-    return snap.exists() ? snap.data() : null;
-};
-
 const obterSeloItem = (item: any, pedidoLogistica: any) => {
     const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
     const isRetirada = pedidoLogistica?.isRetirada === true || formaItem === 'retirada';
@@ -50,55 +45,12 @@ const obterSeloItem = (item: any, pedidoLogistica: any) => {
     return { texto: "Envio", cor: "#10b981" };
 };
 
-const ItemResumido = React.memo(({ item, lojistaId, pedidoLogistica, db }: any) => {
-    const idProd = item.idProduto || item.id;
-    const { data: produtoData } = useSWR(
-        idProd && lojistaId ? `lojistas/${lojistaId}/produtos/${idProd}` : null,
-        (key) => fetchProduto(key, db),
-        { revalidateOnFocus: false }
-    );
-
-    const selo = obterSeloItem(item, pedidoLogistica);
-    const qtd = item.quantidade || item.qty || 1;
-
-    const fotoUrl = useMemo(() => {
-        const fotoDireta = extrairFotoDoItem(item);
-        if (fotoDireta) return fotoDireta;
-        if (produtoData) {
-            if (item.variacao && Array.isArray(produtoData.variacoes)) {
-                const match = produtoData.variacoes.find((v: any) => v.nome === item.variacao);
-                if (match?.foto) return match.foto;
-            }
-            return produtoData.capa || "";
-        }
-        return "";
-    }, [item, produtoData]);
-
-    return (
-        <div style={localStyles.itemLinhaResumida}>
-            <img src={fotoUrl || "https://placehold.co/40x40?text=Prod"} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', backgroundColor: selo.cor, color: '#fff' }}>
-                        {selo.texto}
-                    </span>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
-                        {qtd}x {item.nome || item.title}
-                    </span>
-                </div>
-                {item.variacao && (
-                    <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '2px' }}>
-                        Variação: {item.variacao}
-                    </span>
-                )}
-            </div>
-        </div>
-    );
-});
-
 export default function TabPedidosEnviados({
     pedidos, loading, lojistaIdApp, db, mudarStatusDireto, setLocalPedidos, selecionados = [], setSelecionados = () => { }, registrarFuncaoConfirmarRecebimento
 }: TabEnviadosProps) {
+    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+    const { theme } = useTheme();
+
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
     const [paginaAtual, setPaginaAtual] = useState(1);
@@ -190,7 +142,7 @@ export default function TabPedidosEnviados({
     }, [selecionados, pedidosEnviados]);
 
     return (
-        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px' }}>
+        <div style={{ background: theme.bgCard, color: theme.textMain, padding: '16px', borderRadius: '12px', border: `1px solid ${theme.border}` }}>
             <style jsx>{`
                 @media (max-width: 768px) {
                     .card-header-linha {
@@ -226,13 +178,13 @@ export default function TabPedidosEnviados({
                     .mobile-id-badge {
                         font-size: 11px !important;
                         font-family: monospace !important;
-                        background-color: #e2e8f0 !important;
-                        color: #1e293b !important;
+                        background-color: ${theme.border} !important;
+                        color: ${theme.textMain} !important;
                         padding: 4px 8px !important;
                         border-radius: 4px !important;
                         font-weight: 600 !important;
                         cursor: pointer !important;
-                        border: 1px solid #cbd5e1 !important;
+                        border: 1px solid ${theme.border} !important;
                         white-space: nowrap !important;
                         display: inline-block !important;
                     }
@@ -257,16 +209,16 @@ export default function TabPedidosEnviados({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', minHeight: '52px', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
-                    <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>🚚 Pedidos Enviados / Em Trânsito ({pedidosEnviados.length})</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Acompanhe o rastreio e atualize para concluído assim que forem entregues.</p>
+                    <h3 style={{ margin: 0, color: theme.textMain, fontSize: '18px' }}>🚚 Pedidos Enviados / Em Trânsito ({pedidosEnviados.length})</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: theme.textSec }}>Acompanhe o rastreio e atualize para concluído assim que forem entregues.</p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: 'bold', marginLeft: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: theme.textSec, fontWeight: 'bold', marginLeft: 'auto' }}>
                     <span>Mostrar:</span>
                     <select
                         value={itensPorPagina}
                         onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
-                        style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ padding: '6px 10px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, cursor: 'pointer', fontWeight: 'bold' }}
                     >
                         <option value={20}>20</option>
                         <option value={40}>40</option>
@@ -277,9 +229,9 @@ export default function TabPedidosEnviados({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {loading ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Carregando pedidos enviados...</div>
+                    <div style={{ textAlign: 'center', padding: '40px', color: theme.textSec }}>Carregando pedidos enviados...</div>
                 ) : pedidosEnviados.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#64748b', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ textAlign: 'center', padding: '40px', color: theme.textSec, background: theme.inputBg, borderRadius: '8px', border: `1px solid ${theme.border}` }}>
                         Nenhum pedido enviado ou em trânsito no momento. 🎉
                     </div>
                 ) : (
@@ -322,11 +274,11 @@ export default function TabPedidosEnviados({
                         const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
 
                         return (
-                            <div key={pedido.id} style={{ ...localStyles.cardContainer, border: `1.5px solid ${corBordaCard}` }}>
+                            <div key={pedido.id} style={{ ...localStyles.cardContainer, backgroundColor: theme.bgCard, border: `1.5px solid ${corBordaCard}` }}>
                                 <div
                                     onClick={(e) => toggleExpandir(e, pedido.id)}
                                     className="card-header-linha"
-                                    style={localStyles.cardHeaderLinha}
+                                    style={{ ...localStyles.cardHeaderLinha, backgroundColor: theme.inputBg, borderColor: theme.border }}
                                 >
                                     <div className="pc-bloco-linha-unica">
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
@@ -336,16 +288,16 @@ export default function TabPedidosEnviados({
                                                 onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
                                                 style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
                                             />
-                                            <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
-                                            <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
-                                            <span style={{ fontSize: '12px', color: '#16181b', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', width: '220px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
+                                            <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                            <span style={{ fontWeight: 'bold', color: theme.textMain, fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            <span style={{ fontSize: '12px', color: theme.textMain, fontFamily: 'monospace', backgroundColor: theme.border, padding: '2px 6px', borderRadius: '4px', width: '220px', flexShrink: 0, wordBreak: 'break-all' }} title={idPedidoExibicao}>ID Pedido: {idPedidoExibicao}</span>
                                         </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
-                                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+                                            <span style={{ fontSize: '12px', color: theme.textSec, fontWeight: '500' }}>
                                                 {formatarData(pedido.data || (pedido.cliente as any)?.data)}
                                             </span>
-                                            <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                            <span style={{ fontSize: '12px', color: theme.textSec }}>{expandido ? '▲' : '▼'}</span>
                                         </div>
                                     </div>
 
@@ -358,8 +310,8 @@ export default function TabPedidosEnviados({
                                                     onChange={() => setSelecionados(prev => (prev || []).includes(pedido.id) ? (prev || []).filter(i => i !== pedido.id) : [...(prev || []), pedido.id])}
                                                     style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
                                                 />
-                                                <span style={{ fontWeight: '800', color: '#2563eb', fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
-                                                <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                                <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                                <span style={{ fontWeight: 'bold', color: theme.textMain, fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
                                             </div>
                                         </div>
 
@@ -373,10 +325,10 @@ export default function TabPedidosEnviados({
                                             </span>
 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                                                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
+                                                <span style={{ fontSize: '11px', color: theme.textSec, fontWeight: '500' }}>
                                                     {formatarData(pedido.data || (pedido.cliente as any)?.data)}
                                                 </span>
-                                                <span style={{ fontSize: '12px', color: '#64748b' }}>{expandido ? '▲' : '▼'}</span>
+                                                <span style={{ fontSize: '12px', color: theme.textSec }}>{expandido ? '▲' : '▼'}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -384,14 +336,14 @@ export default function TabPedidosEnviados({
 
                                 <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {pedido.itens?.map((item: any, idx: number) => (
-                                        <ItemResumido key={idx} item={item} lojistaId={lojistaIdApp} pedidoLogistica={pedidoLogistica} db={db} />
+                                        <ItemResumido key={idx} item={item} pedidoLogistica={pedidoLogistica} />
                                     ))}
                                 </div>
 
                                 {expandido && (
-                                    <div style={localStyles.conteudoExpandido}>
+                                    <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
                                         <div className="grid-expandido" style={localStyles.gridExpandido}>
-                                            <div style={localStyles.caixaPersonalizacao}>
+                                            <div style={{ ...localStyles.caixaPersonalizacao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                 <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
                                                     ✨ Personalização:
                                                 </div>
@@ -400,7 +352,7 @@ export default function TabPedidosEnviados({
                                                         const resp = item.respostasFormatadas || item.personalizacao;
                                                         if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
                                                         return (
-                                                            <div key={idx} style={{ fontSize: '12px', color: '#78350f', lineHeight: '1.4', marginBottom: '4px' }}>
+                                                            <div key={idx} style={{ fontSize: '12px', color: theme.textMain, lineHeight: '1.4', marginBottom: '4px' }}>
                                                                 {typeof resp === 'object' ? (
                                                                     Object.entries(resp).map(([k, v]) => (
                                                                         <div key={k}>{k}: <strong>{String(v)}</strong></div>
@@ -412,13 +364,13 @@ export default function TabPedidosEnviados({
                                                         );
                                                     })
                                                 ) : (
-                                                    <div style={{ fontSize: '12px', color: '#92400e', fontStyle: 'italic' }}>Este pedido não tem personalização.</div>
+                                                    <div style={{ fontSize: '12px', color: theme.textSec, fontStyle: 'italic' }}>Este pedido não tem personalização.</div>
                                                 )}
                                             </div>
 
-                                            <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
-                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
+                                                <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
                                                     <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
                                                     <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
                                                     <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
@@ -427,11 +379,11 @@ export default function TabPedidosEnviados({
                                                 </div>
                                             </div>
 
-                                            <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
-                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
+                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
+                                                <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
                                                     {!precisaFrete ? (
-                                                        <div style={{ color: '#64748b', fontStyle: 'italic' }}>Pedido sem Frete</div>
+                                                        <div style={{ color: theme.textSec, fontStyle: 'italic' }}>Pedido sem Frete</div>
                                                     ) : isRetirada ? (
                                                         <div>
                                                             <div><strong>Forma:</strong> Retirada na Loja</div>
@@ -456,8 +408,8 @@ export default function TabPedidosEnviados({
                                                 </div>
                                             </div>
 
-                                            <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '4px', fontSize: '12px' }}>🏷️ Rastreio e Ação</div>
+                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🏷️ Rastreio e Ação</div>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                     <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
                                                         <div><b>Código Rastreio:</b> {codigoRastreio}</div>
@@ -481,18 +433,30 @@ export default function TabPedidosEnviados({
                                                 </div>
                                             </div>
 
-                                            <div style={localStyles.caixaBlocoPadrao}>
-                                                <div style={{ fontWeight: 'bold', color: '#475569', marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
-                                                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
-                                                    <div><strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
+                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
+                                                <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
+
+                                                    {/* 🌟 Exibição da Forma de Pagamento salva no pedido */}
+                                                    <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
+                                                        <strong>Forma de Pagamento:</strong> {
+                                                            pedido.financeiro?.dsFormaPagamentoCarrinho
+                                                                ? pedido.financeiro.dsFormaPagamentoCarrinho.replace('_', ' ').toUpperCase()
+                                                                : 'PIX'
+                                                        }
+                                                    </div>
+
+
+                                                    <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
+                                                        <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
                                                     <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
                                                     <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
                                                         <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
                                                     </div>
                                                     <div><strong>Cupom:</strong> {cupomStr}</div>
 
-                                                    <div style={{ marginTop: '3px', borderTop: '1px solid #e2e8f0', paddingTop: '3px' }}>
-                                                        <strong>Total:</strong> <span style={{ color: '#059669', fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
+                                                    <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
+                                                        <strong>Total:</strong> <span style={{ color: theme.primary, fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -507,26 +471,60 @@ export default function TabPedidosEnviados({
 
             {totalPaginas > 1 && (
                 <div style={styles.paginationContainer}>
-                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} style={styles.pageBtn}>Anterior</button>
-                    <span style={{ margin: '0 15px', fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>Página {paginaAtual} de {totalPaginas}</span>
-                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} style={styles.pageBtn}>Próxima</button>
+                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} style={{ ...styles.pageBtn, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>Anterior</button>
+                    <span style={{ margin: '0 15px', fontSize: '13px', fontWeight: 'bold', color: theme.textSec }}>Página {paginaAtual} de {totalPaginas}</span>
+                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} style={{ ...styles.pageBtn, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>Próxima</button>
                 </div>
             )}
         </div>
     );
 }
 
+const ItemResumido = React.memo(({ item, pedidoLogistica }: any) => {
+    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO ITEM RESUMIDO
+    const { theme } = useTheme();
+
+    const selo = obterSeloItem(item, pedidoLogistica);
+    const qtd = item.quantidade || item.qty || 1;
+
+    // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido, sem consultas ao Firebase
+    const fotoUrl = useMemo(() => {
+        return extrairFotoDoItem(item);
+    }, [item]);
+
+    return (
+        <div style={{ ...localStyles.itemLinhaResumida, backgroundColor: theme.inputBg, borderColor: theme.border, display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img src={fotoUrl || "https://placehold.co/40x40?text=Prod"} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', backgroundColor: selo.cor, color: '#fff' }}>
+                        {selo.texto}
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: theme.textMain }}>
+                        {qtd}x {item.nome || item.title}
+                    </span>
+                </div>
+                {item.variacao && (
+                    <span style={{ fontSize: '12px', color: theme.textSec, marginLeft: '2px' }}>
+                        Variação: {item.variacao}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+});
+
 const styles: { [key: string]: React.CSSProperties } = {
     paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
-    pageBtn: { padding: '8px 16px', cursor: 'pointer', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 'bold' }
+    pageBtn: { padding: '8px 16px', cursor: 'pointer', border: '1px solid', borderRadius: '4px', fontWeight: 'bold' }
 };
 
 const localStyles: { [key: string]: React.CSSProperties } = {
-    cardContainer: { borderRadius: '8px', backgroundColor: '#fff', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
-    cardHeaderLinha: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', minHeight: '45px', boxSizing: 'border-box' },
-    itemLinhaResumida: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 8px', backgroundColor: '#fdfdfd', borderRadius: '6px', border: '1px solid #f1f5f9' },
-    conteudoExpandido: { padding: '16px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' },
+    cardContainer: { borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+    cardHeaderLinha: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid', cursor: 'pointer', minHeight: '45px', boxSizing: 'border-box' },
+    itemLinhaResumida: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 8px', borderRadius: '6px', border: '1px solid' },
+    conteudoExpandido: { padding: '16px', borderTop: '1px solid' },
     gridExpandido: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' },
-    caixaPersonalizacao: { backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px' },
-    caixaBlocoPadrao: { backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }
+    caixaPersonalizacao: { border: '1px solid', borderRadius: '8px', padding: '12px' },
+    caixaBlocoPadrao: { border: '1px solid', borderRadius: '8px', padding: '12px' }
 };

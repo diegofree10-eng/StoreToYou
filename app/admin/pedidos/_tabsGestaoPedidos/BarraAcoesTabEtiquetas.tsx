@@ -5,6 +5,9 @@ import ModalProcessamento from '../ModalProcessamento';
 import AlertaErrosMelhorEnvio from './AlertaErrosMelhorEnvio';
 import { doc, updateDoc } from 'firebase/firestore';
 
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
+
 interface BarraAcoesProps {
     selecionados: string[];
     idsVisiveisDaAba: string[];
@@ -44,6 +47,9 @@ export default function BarraAcoesTabEtiquetas({
     onConcluirDigital,
     onConfirmarRecebimento
 }: BarraAcoesProps) {
+    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+    const { theme } = useTheme();
+
     const [carregandoAcao, setCarregandoAcao] = useState(false);
     const [modalProgresso, setModalProgresso] = useState<{
         aberto: boolean;
@@ -72,11 +78,9 @@ export default function BarraAcoesTabEtiquetas({
     const pedidosPendentesDeEtiqueta = pedidosSelecionadosObj.filter(p => {
         const idEtq = p?.Etiqueta?.IdEtiqueta;
         const codEnv = p?.Etiqueta?.codigoEnvio;
-        const statusEtq = p?.Etiqueta?.statusEtiqueta;
+        const statusEtq = String(p?.Etiqueta?.statusEtiqueta || p?.statusEtiqueta || '').toLowerCase(); // 🌟 Correção segura
 
         // Se tem ID e Cod, a etiqueta existe no Melhor Envio.
-        // Só permitimos emitir de novo se ele estiver em status de erro E NÃO tiver o ID/Cod
-        // Se tiver ID e Cod, ele não pode ser "emitido", deve ser "pago" ou "sincronizado".
         if (idEtq && codEnv) return false;
 
         // Se chegar aqui, não tem Id/Cod, então pode aparecer o botão de emitir se estiver em erro ou pendente
@@ -434,7 +438,7 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    // ⚙️ 7. Mudar Status em Massa (Select)
+    // ⚙️ 7. Mudar Status em Massa (Com Trava Estricta de Sequência e Mudança de Aba)
     const alterarStatusMassa = async (e: React.ChangeEvent<HTMLSelectElement>) => {
         if (isAbaConcluidos) return;
         const valorAcao = e.target.value;
@@ -452,17 +456,31 @@ export default function BarraAcoesTabEtiquetas({
             return;
         }
 
-        if (valorAcao !== 'pago' && valorAcao !== 'nao_pago') {
-            const pedidosNaoPagos = selecionadosNestaAba
-                .map(id => localPedidos.find(p => p.id === id))
-                .filter(p => {
-                    if (!p) return false;
-                    const isPagoReal = p.pago === true || p.StatusProducao?.isPago === true || p.statusPagamento === 'pago';
-                    return !isPagoReal;
-                });
+        // 🛡️ TRAVAS DE FLUXO ESTRITO (Pago ➔ Pendente ➔ Produção ➔ Pronto)
+        for (const pedidoId of selecionadosNestaAba) {
+            const ped = localPedidos.find(p => p.id === pedidoId);
+            if (!ped) continue;
 
-            if (pedidosNaoPagos.length > 0) {
-                alert(`❌ Operação bloqueada! Há ${pedidosNaoPagos.length} pedido(s) que não estão PAGOS.`);
+            const isPagoReal = ped.pago === true || ped.StatusProducao?.isPago === true || ped.statusPagamento === 'pago';
+            const statusAtualProd = String(ped.StatusProducao?.dsStatusProducao || ped.statusProducao || "pendente").trim().toLowerCase();
+
+            // 1. Se tentar ir para Pendente, Produção ou Pronto, o pedido obrigatoriamente precisa estar PAGO
+            if ((valorAcao === 'pendente' || valorAcao === 'produção' || valorAcao === 'pronto') && !isPagoReal) {
+                alert(`❌ Operação bloqueada! O pedido #${ped.numeroPedido || ped.id.slice(-4)} precisa estar marcado como PAGO antes de mudar de status.`);
+                e.target.value = "";
+                return;
+            }
+
+            // 2. Trava para ir de Pendente para Produção: Precisa estar em Pendente
+            if (valorAcao === 'produção' && statusAtualProd !== 'pendente') {
+                alert(`❌ Operação bloqueada! O pedido #${ped.numeroPedido || ped.id.slice(-4)} precisa estar na aba/status "Pendente" para ir para Produção.`);
+                e.target.value = "";
+                return;
+            }
+
+            // 3. Trava para ir de Produção para Pronto: Precisa estar em Produção
+            if (valorAcao === 'pronto' && statusAtualProd !== 'produção' && statusAtualProd !== 'producao') {
+                alert(`❌ Operação bloqueada! O pedido #${ped.numeroPedido || ped.id.slice(-4)} precisa estar na aba/status "Produção" antes de ser marcado como Pronto.`);
                 e.target.value = "";
                 return;
             }
@@ -475,12 +493,12 @@ export default function BarraAcoesTabEtiquetas({
                 for (const pedidoId of selecionadosNestaAba) {
                     await alterarStatusPedido(pedidoId, 'pendente', {
                         "StatusProducao.isPago": novoPago,
-                        "StatusProducao.dsStatusProducao": "Pendente" // 🛠️ Força o campo padronizado para evitar o conflito
+                        "StatusProducao.dsStatusProducao": "Pendente"
                     });
                 }
                 setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
                 alert(`✅ ${selecionadosCount} pedido(s) atualizado(s) para ${novoPago ? 'PAGO' : 'NÃO PAGO'}!`);
-                if (novoPago) setAbaAtiva('pendente');
+                if (novoPago) setAbaAtiva('pendente'); // Joga automaticamente para a aba pendente se for pago
             } else {
                 if (!confirm(`Deseja alterar o status de produção para "${valorAcao.toUpperCase()}"?`)) {
                     e.target.value = "";
@@ -492,7 +510,12 @@ export default function BarraAcoesTabEtiquetas({
                     });
                 }
                 setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
-                alert("✅ Status atualizado com sucesso!");
+                
+                // 🌟 Redireciona automaticamente para a aba correspondente ao novo status
+                const abaDestino = valorAcao.toLowerCase() === 'produção' ? 'producao' : valorAcao.toLowerCase();
+                setAbaAtiva(abaDestino);
+
+                alert("✅ Status atualizado e pedido movido com sucesso!");
             }
         } catch (e: any) {
             alert("Erro ao atualizar em massa: " + e.message);
@@ -509,7 +532,7 @@ export default function BarraAcoesTabEtiquetas({
 
     return (
         <>
-            <div style={styles.selectionBarTop}>
+            <div style={{ ...styles.selectionBarTop, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <input
                         type="checkbox"
@@ -518,7 +541,7 @@ export default function BarraAcoesTabEtiquetas({
                         style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
                         title="Selecionar todos os pedidos visíveis desta aba"
                     />
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.textSec }}>
                         {temSelecionados ? `${selecionadosCount} selecionado(s)` : 'Nenhum selecionado'}
                     </span>
                 </div>
@@ -527,7 +550,7 @@ export default function BarraAcoesTabEtiquetas({
                     <select
                         onChange={alterarStatusMassa}
                         defaultValue=""
-                        style={styles.selectAcaoMassa}
+                        style={{ ...styles.selectAcaoMassa, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                         disabled={carregandoAcao}
                     >
                         <option value="" disabled>⚙️ Mudar Status / Ações...</option>
@@ -554,13 +577,13 @@ export default function BarraAcoesTabEtiquetas({
                 </div>
             </div>
 
-            <div style={styles.selectionBarBottom}>
+            <div style={{ ...styles.selectionBarBottom, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end', width: '100%' }}>
                     {abaAtiva === 'cotar' && temSelecionados && (
                         <button
                             disabled={carregandoAcao}
                             onClick={onCotarSelecionados}
-                            style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                            style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
                             ⚡ Cotar Frete Selecionados ({selecionadosCount})
                         </button>
@@ -632,7 +655,7 @@ export default function BarraAcoesTabEtiquetas({
                                 <button
                                     disabled={carregandoAcao}
                                     onClick={imprimirEtiquetasEmMassa}
-                                    style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                                 >
                                     🖨️ Imprimir Etiquetas ({selecionadosCount})
                                 </button>
@@ -684,14 +707,13 @@ const styles: { [key: string]: React.CSSProperties } = {
         alignItems: 'center',
         justifyContent: 'space-between',
         marginTop: '10px',
-        backgroundColor: '#fff',
         padding: '0 16px',
         height: '52px',
         width: '100%',
         boxSizing: 'border-box',
         borderTopLeftRadius: '8px',
         borderTopRightRadius: '8px',
-        border: '1px solid #e2e8f0',
+        border: '1px solid',
         borderBottom: 'none',
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         position: 'sticky',
@@ -701,14 +723,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     selectionBarBottom: {
         display: 'flex',
         alignItems: 'center',
-        backgroundColor: '#fff',
         padding: '10px 16px',
         minHeight: '55px',
         width: '100%',
         boxSizing: 'border-box',
         borderBottomLeftRadius: '8px',
         borderBottomRightRadius: '8px',
-        border: '1px solid #e2e8f0',
+        border: '1px solid',
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         position: 'sticky',
         top: '62px',
@@ -717,13 +738,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     selectAcaoMassa: {
         padding: '7px 12px',
         borderRadius: '6px',
-        border: '1px solid #cbd5e1',
+        border: '1px solid',
         fontSize: '13px',
         outline: 'none',
         cursor: 'pointer',
-        backgroundColor: '#f8fafc',
-        fontWeight: '600',
-        color: '#1e293b'
+        fontWeight: '600'
     }
 };
 // Barra de acoes controla toda a logica do select de Status produção e botoes de Etiquetas na TabEmitirEtiquetas.tsx

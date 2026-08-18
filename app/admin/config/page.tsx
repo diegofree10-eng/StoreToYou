@@ -5,7 +5,10 @@ import { db, auth, storage } from "@/lib/firebase";
 import { doc, setDoc, onSnapshot, collection, query, orderBy, getDoc, updateDoc, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
-import { FiBell, FiMessageSquare } from "react-icons/fi";
+import { FiBell } from "react-icons/fi";
+
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
 
 import UpgradeModal from "@/app/admin/_components/UpgradeModal";
 import CupomModal from "@/app/admin/_components/CupomModal";
@@ -20,9 +23,12 @@ import AparenciaTab from "./tabsConfig/AparenciaTab";
 import SistemaTab from "./tabsConfig/SistemaTab";
 import MensagensTab from "./tabsConfig/MensagensTab";
 import AssinaturaTab from "./tabsConfig/AssinaturaTab";
-import AtualizacoesTab from "./tabsConfig/AtualizacoesTab"; // <-- Nova Aba de Atualizações adicionada
+import AtualizacoesTab from "./tabsConfig/AtualizacoesTab";
 
 export default function AdminConfig() {
+  // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+  const { theme } = useTheme();
+
   interface ConfigState {
     dadosPessoais: { [key: string]: any };
     dadosLoja: { [key: string]: any };
@@ -57,7 +63,6 @@ export default function AdminConfig() {
   const [contagemProdutos, setContagemProdutos] = useState(0);
   const [planosConfig, setPlanosConfig] = useState<any>(null);
   const [avisoPopup, setAvisoPopup] = useState<any>(null);
-  const [msgHistoricoAberta, setMsgHistoricoAberta] = useState<any>(null);
   const [listaCategorias, setListaCategorias] = useState<any[]>([]);
   const [showToken, setShowToken] = useState(false);
 
@@ -71,6 +76,9 @@ export default function AdminConfig() {
   const [arquivoBanner1, setArquivoBanner1] = useState<File | null>(null);
   const [arquivoBanner2, setArquivoBanner2] = useState<File | null>(null);
   const [arquivoBanner3, setArquivoBanner3] = useState<File | null>(null);
+
+  // Modo Noturno verificado via Tema Global
+  const isModoNoturno = theme.bgApp === "#0f172a";
 
   useEffect(() => {
     if (!uid) return;
@@ -405,7 +413,7 @@ export default function AdminConfig() {
       <div style={{
         ...styles.seloCard,
         border: `1px solid ${isOuroAtivo ? '#d97706' : info.cor + '40'}`,
-        background: estaVencendo ? '#fef2f2' : '#fff'
+        background: theme.bgCard
       }}>
         <div style={{ ...styles.medalhaBox, background: `${info.cor}15`, border: `2px solid ${info.cor}30` }}>
           {info.medalhaUrl ? <img src={info.medalhaUrl} style={styles.imgFull} alt="Medalha do Plano" /> : <span style={{ fontSize: '28px' }}>🏅</span>}
@@ -423,24 +431,24 @@ export default function AdminConfig() {
                 </span>
               )}
             </div>
-            <span style={{ fontSize: '10px', fontWeight: '800', background: '#f1f5f9', color: '#475569', padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '10px', fontWeight: '800', background: theme.bgApp, color: theme.textSec, padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase', border: `1px solid ${theme.border}` }}>
               {config.dadosLoja?.ciclo || 'mensal'}
             </span>
           </div>
 
           <div style={styles.infoGrid}>
-            <div style={styles.infoItem}>
-              <small style={styles.infoLabel}>Criação</small>
-              <span style={styles.infoValue}>{dataCriacao?.toLocaleDateString('pt-BR') || '---'}</span>
+            <div style={{ ...styles.infoItem, background: theme.bgApp, border: `1px solid ${theme.border}` }}>
+              <small style={{ ...styles.infoLabel, color: theme.textSec }}>Criação</small>
+              <span style={{ ...styles.infoValue, color: theme.textMain }}>{dataCriacao?.toLocaleDateString('pt-BR') || '---'}</span>
             </div>
-            <div style={styles.infoItem}>
-              <small style={styles.infoLabel}>{isOuroAtivo ? "Fim do Teste" : "Vencimento"}</small>
-              <span style={{ ...styles.infoValue, color: estaVencendo ? '#ef4444' : '#1e293b', fontWeight: estaVencendo ? '900' : '700' }}>
+            <div style={{ ...styles.infoItem, background: theme.bgApp, border: `1px solid ${theme.border}` }}>
+              <small style={{ ...styles.infoLabel, color: theme.textSec }}>{isOuroAtivo ? "Fim do Teste" : "Vencimento"}</small>
+              <span style={{ ...styles.infoValue, color: estaVencendo ? '#ef4444' : theme.textMain, fontWeight: estaVencendo ? '900' : '700' }}>
                 {dataVencimento?.toLocaleDateString('pt-BR') || '---'}
               </span>
             </div>
-            <div style={styles.infoItem}>
-              <small style={styles.infoLabel}>Status</small>
+            <div style={{ ...styles.infoItem, background: theme.bgApp, border: `1px solid ${theme.border}` }}>
+              <small style={{ ...styles.infoLabel, color: theme.textSec }}>Status</small>
               <span style={{ ...styles.infoValue, color: estaVencendo ? '#ef4444' : '#10b981', fontWeight: '800' }}>
                 {estaVencendo ? `Vence em ${diasRestantes}d!` : "Em dia"}
               </span>
@@ -451,45 +459,44 @@ export default function AdminConfig() {
     );
   }
 
-  if (loading) return <div style={styles.center}>Sincronizando...</div>;
+  if (loading) return <div style={{ ...styles.center, color: theme.textMain }}>Sincronizando...</div>;
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, background: theme.bgApp, color: theme.textMain }}>
       {avisoPopup && (
         <div style={styles.overlay}>
-          <div style={styles.popupCard}>
+          <div style={{ ...styles.popupCard, background: theme.bgCard, border: `1px solid ${theme.border}`, color: theme.textMain }}>
             <div style={styles.popupHeader}><FiBell size={24} /> AVISO IMPORTANTE</div>
-            <p style={styles.popupText}>{avisoPopup.texto}</p>
+            <p style={{ ...styles.popupText, color: theme.textSec }}>{avisoPopup.texto}</p>
             <button type="button" onClick={confirmarLeituraMaster} style={styles.btnPopupConfirm}>OK, ESTOU CIENTE</button>
           </div>
         </div>
       )}
 
-      <div style={styles.card}>
-        {/* Cabeçalho com Título e Versão Dinâmica do Sistema */}
+      <div style={{ ...styles.card, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: '800', margin: 0 }}>⚙️ Configurações</h2>
-          <span style={{ fontSize: '11px', fontWeight: '800', background: '#f1f5f9', color: '#64748b', padding: '4px 10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: '800', margin: 0, color: theme.textMain }}>⚙️ Configurações</h2>
+          <span style={{ fontSize: '11px', fontWeight: '800', background: theme.bgApp, color: theme.textSec, padding: '4px 10px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
             Versão: {config.atualizacao?.nrVersaoSistemaLogista || config.sistema?.dsVersaoSistema || "0.0.0"}
           </span>
         </div>
 
         {renderSeloPlano()}
 
-        <div style={styles.tabBar}>
-          <button type="button" style={abaAtiva === 'pessoal' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('pessoal')}>DADOS PESSOAIS</button>
-          <button type="button" style={abaAtiva === 'loja' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('loja')}>DADOS DA LOJA</button>
-          <button type="button" style={abaAtiva === 'banner' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('banner')}>BANNERS</button>
-          <button type="button" style={abaAtiva === 'pagamentos' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('pagamentos')}>PAGAMENTOS</button>
-          <button type="button" style={abaAtiva === 'aparencia' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('aparencia')}>APARÊNCIA</button>
-          <button type="button" style={abaAtiva === 'sistema' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('sistema')}>SISTEMA / CUPONS</button>
-          <button type="button" style={abaAtiva === 'mensagens' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('mensagens')}>MENSAGENS</button>
-          <button type="button" style={abaAtiva === 'assinatura' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('assinatura')}>ASSINATURA</button>
-          <button type="button" style={abaAtiva === 'atualizacoes' ? styles.tabBtnActive : styles.tabBtn} onClick={() => setAbaAtiva('atualizacoes')}>ATUALIZAÇÕES</button>
+        <div style={{ ...styles.tabBar, borderBottom: `1px solid ${theme.border}` }}>
+          <button type="button" style={abaAtiva === 'pessoal' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('pessoal')}>DADOS PESSOAIS</button>
+          <button type="button" style={abaAtiva === 'loja' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('loja')}>DADOS DA LOJA</button>
+          <button type="button" style={abaAtiva === 'banner' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('banner')}>BANNERS</button>
+          <button type="button" style={abaAtiva === 'pagamentos' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('pagamentos')}>PAGAMENTOS</button>
+          <button type="button" style={abaAtiva === 'aparencia' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('aparencia')}>APARÊNCIA</button>
+          <button type="button" style={abaAtiva === 'sistema' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('sistema')}>SISTEMA / CUPONS</button>
+          <button type="button" style={abaAtiva === 'mensagens' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('mensagens')}>MENSAGENS</button>
+          <button type="button" style={abaAtiva === 'assinatura' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('assinatura')}>ASSINATURA</button>
+          <button type="button" style={abaAtiva === 'atualizacoes' ? { ...styles.tabBtnActive, color: theme.primary, borderBottomColor: theme.primary } : { ...styles.tabBtn, color: theme.textSec }} onClick={() => setAbaAtiva('atualizacoes')}>ATUALIZAÇÕES</button>
         </div>
 
-        {abaAtiva === 'pessoal' && <DadosPessoaisTab config={config} setConfig={setConfig} buscarCep={buscarCep} />}
-        {abaAtiva === 'loja' && <DadosLojaTab config={config} setConfig={setConfig} buscarCep={buscarCep} novaLogo={novaLogo} setNovaLogo={setNovaLogo} setShowHorarioModal={setShowHorarioModal} adicionarRedeSocial={adicionarRedeSocial} atualizarRedeSocial={atualizarRedeSocial} removerRedeSocial={removerRedeSocial} />}
+        {abaAtiva === 'pessoal' && <DadosPessoaisTab config={config} setConfig={setConfig} buscarCep={buscarCep} theme={theme} />}
+        {abaAtiva === 'loja' && <DadosLojaTab config={config} setConfig={setConfig} buscarCep={buscarCep} novaLogo={novaLogo} setNovaLogo={setNovaLogo} setShowHorarioModal={setShowHorarioModal} adicionarRedeSocial={adicionarRedeSocial} atualizarRedeSocial={atualizarRedeSocial} removerRedeSocial={removerRedeSocial} theme={theme} />}
         {abaAtiva === 'banner' && (
           <BannerTab
             uid={uid}
@@ -502,17 +509,18 @@ export default function AdminConfig() {
             setArquivoBanner1={setArquivoBanner1}
             setArquivoBanner2={setArquivoBanner2}
             setArquivoBanner3={setArquivoBanner3}
+            theme={theme}
           />
         )}
-        {abaAtiva === 'pagamentos' && <PagamentosTab config={config} setConfig={setConfig} masterLiberouMeioPagamento={masterLiberouMeioPagamento} />}
-        {abaAtiva === 'aparencia' && <AparenciaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} />}
-        {abaAtiva === 'sistema' && <SistemaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} setShowCupomModal={setShowCupomModal} showToken={showToken} setShowToken={setShowToken} />}
-        {abaAtiva === 'mensagens' && <MensagensTab config={config} confirmarLeituraMensagem={confirmarLeituraMensagem} />}
-        {abaAtiva === 'assinatura' && <AssinaturaTab config={config} planosConfig={planosConfig} setShowUpgradeModal={setShowUpgradeModal} />}
-        {abaAtiva === 'atualizacoes' && <AtualizacoesTab config={config} />}
+        {abaAtiva === 'pagamentos' && <PagamentosTab config={config} setConfig={setConfig} masterLiberouMeioPagamento={masterLiberouMeioPagamento} theme={theme} />}
+        {abaAtiva === 'aparencia' && <AparenciaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} theme={theme} />}
+        {abaAtiva === 'sistema' && <SistemaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} setShowCupomModal={setShowCupomModal} showToken={showToken} setShowToken={setShowToken} theme={theme} />}
+        {abaAtiva === 'mensagens' && <MensagensTab config={config} confirmarLeituraMensagem={confirmarLeituraMensagem} theme={theme} />}
+        {abaAtiva === 'assinatura' && <AssinaturaTab config={config} planosConfig={planosConfig} setShowUpgradeModal={setShowUpgradeModal} theme={theme} />}
+        {abaAtiva === 'atualizacoes' && <AtualizacoesTab config={config} theme={theme} />}
 
         {abaAtiva !== 'mensagens' && abaAtiva !== 'assinatura' && abaAtiva !== 'atualizacoes' && (
-          <button type="button" onClick={handleSalvar} disabled={salvando} style={salvando ? styles.btnDisabled : styles.btnSalvar}>
+          <button type="button" onClick={handleSalvar} disabled={salvando} style={{ ...styles.btnSalvar, background: theme.primary, opacity: salvando ? 0.6 : 1 }}>
             {salvando ? "Processando..." : "💾 Salvar Alterações"}
           </button>
         )}
@@ -541,32 +549,48 @@ export default function AdminConfig() {
           onSolicitar={solicitarUpgrade}
         />
       </div>
+
+      <style jsx global>{`
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: ${isModoNoturno ? "#0f172a" : "#f1f5f9"};
+        }
+        ::-webkit-scrollbar-thumb {
+          background: ${isModoNoturno ? "#334155" : "#cbd5e1"};
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: ${isModoNoturno ? "#475569" : "#94a3b8"};
+        }
+      `}</style>
     </div>
   );
 }
 
 const styles: any = {
-  page: { padding: "0px 16px 40px 16px", background: "#f8fafc", minHeight: "100vh", display: "flex", justifyContent: "center", boxSizing: "border-box" },
-  card: { background: "#fff", padding: "20px", borderRadius: "0 0 24px 24px", width: "100%", maxWidth: "970px", boxShadow: "0 10px 15px rgba(0,0,0,0.05)", marginTop: "0px", boxSizing: "border-box" },
+  page: { padding: "0px 16px 40px 16px", minHeight: "100vh", display: "flex", justifyContent: "center", boxSizing: "border-box", transition: "background 0.3s" },
+  card: { padding: "20px", borderRadius: "0 0 24px 24px", width: "100%", maxWidth: "970px", boxShadow: "0 10px 15px rgba(0,0,0,0.05)", marginTop: "0px", boxSizing: "border-box", transition: "background 0.3s" },
 
-  seloCard: { display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', background: '#fff', borderRadius: '16px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', boxSizing: 'border-box', width: '100%' },
+  seloCard: { display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', borderRadius: '16px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', boxSizing: 'border-box', width: '100%', transition: 'background 0.3s' },
   medalhaBox: { minWidth: '56px', width: '56px', height: '56px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
   imgFull: { width: '100%', height: '100%', objectFit: 'contain' },
 
   infoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '8px', marginTop: '10px', width: '100%' },
-  infoItem: { display: 'flex', flexDirection: 'column', gap: '2px', background: '#f8fafc', padding: '6px 10px', borderRadius: '8px', boxSizing: 'border-box' },
-  infoLabel: { fontSize: '9px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' },
-  infoValue: { fontSize: '11px', fontWeight: '700', color: '#1e293b', wordBreak: 'break-word' },
+  infoItem: { display: 'flex', flexDirection: 'column', gap: '2px', padding: '6px 10px', borderRadius: '8px', boxSizing: 'border-box' },
+  infoLabel: { fontSize: '9px', fontWeight: '800', textTransform: 'uppercase' },
+  infoValue: { fontSize: '11px', fontWeight: '700', wordBreak: 'break-word' },
 
-  tabBar: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' },
-  tabBtn: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid transparent', cursor: 'pointer', color: '#94a3b8', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
-  tabBtnActive: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid #2563eb', cursor: 'pointer', color: '#2563eb', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
-  btnSalvar: { width: "100%", padding: "16px", background: "#059669", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", marginTop: '30px' },
-  btnDisabled: { width: "100%", padding: "16px", background: "#94a3b8", color: "#fff", border: "none", borderRadius: "12px", cursor: "not-allowed", marginTop: '30px' },
+  tabBar: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '25px', paddingBottom: '12px' },
+  tabBtn: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
+  tabBtnActive: { padding: '12px', background: 'none', border: 'none', borderBottom: '3px solid', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px', whiteSpace: 'nowrap' },
+  btnSalvar: { width: "100%", padding: "16px", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", marginTop: '30px' },
   center: { textAlign: "center", marginTop: "100px" },
   overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
-  popupCard: { background: '#fff', padding: '30px', borderRadius: '24px', maxWidth: '450px', width: '100%', textAlign: 'center' },
+  popupCard: { padding: '30px', borderRadius: '24px', maxWidth: '450px', width: '100%', textAlign: 'center' },
   popupHeader: { fontSize: '14px', fontWeight: '900', color: '#3b82f6', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
-  popupText: { fontSize: '16px', color: '#475569', marginBottom: '30px', fontWeight: '500' },
+  popupText: { fontSize: '16px', marginBottom: '30px', fontWeight: '500' },
   btnPopupConfirm: { width: '100%', padding: '15px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }
 };

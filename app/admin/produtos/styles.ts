@@ -212,14 +212,16 @@ export const styles: { [key: string]: React.CSSProperties } = {
     flexWrap: "wrap",
   },
   searchBar: {
-    flex: 3,
+    flex: 2,
     minWidth: "140px",
     padding: "10px",
     borderRadius: "8px",
     border: "1px solid #e2e8f0",
     fontSize: "13px",
     boxSizing: "border-box",
-    background: "#fff",
+    backgroundColor: "#ffffff", // Use backgroundColor explicitamente
+    // Adicione a sombra interna para o efeito de profundidade:
+    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)",
   },
   selectTop: {
     flex: 1,
@@ -366,7 +368,12 @@ export const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: "800",
   },
 
-  sideTitle: { fontSize: "15px", fontWeight: "bold", marginBottom: "15px", color: "#1e293b" },
+  sideTitle: {
+    fontSize: "15px",
+    fontWeight: "bold",
+    marginBottom: "15px",
+    color: "#1e293b",
+  },
   input: {
     width: "100%",
     padding: "10px",
@@ -561,7 +568,7 @@ export const shopeeStyles: { [key: string]: React.CSSProperties } = {
   addBtn: {
     border: "1px dashed #1e293b",
     background: "#fff",
-    color: '#1e293b',
+    color: "#1e293b",
     padding: "6px 15px",
     cursor: "pointer",
     borderRadius: "2px",

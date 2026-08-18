@@ -7,7 +7,13 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase
 import { onAuthStateChanged } from "firebase/auth";
 import { FiPackage, FiAlertTriangle, FiXCircle, FiSearch, FiCheck, FiDollarSign } from "react-icons/fi";
 
+// 🌟 Importando o hook do tema global (ThemeContext)
+import { useTheme } from "@/context/ThemeContext";
+
 export default function PaginaEstoque() {
+    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
+    const { theme } = useTheme();
+
     const [uid, setUid] = useState<string | null>(null);
     const [produtos, setProdutos] = useState<any[]>([]);
     const [busca, setBusca] = useState("");
@@ -154,7 +160,7 @@ export default function PaginaEstoque() {
     };
 
     return (
-        <div style={{ padding: '15px', fontFamily: 'system-ui, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh', boxSizing: 'border-box' }}>
+        <div style={{ padding: '15px', fontFamily: 'system-ui, sans-serif', backgroundColor: theme.bgApp, color: theme.textMain, minHeight: '100vh', boxSizing: 'border-box', transition: 'background 0.3s, color 0.3s' }}>
             
             <style jsx>{`
                 @media (max-width: 768px) {
@@ -179,48 +185,48 @@ export default function PaginaEstoque() {
 
             {/* TÍTULO DA PÁGINA */}
             <div style={{ marginBottom: '15px' }}>
-                <h2 style={{ fontSize: '18px', color: '#1e293b', margin: 0, fontWeight: 800 }}>📦 Controle de Estoque</h2>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>Monitore os níveis de estoque e faça ajustes rápidos em produtos e variações.</p>
+                <h2 style={{ fontSize: '18px', color: theme.textMain, margin: 0, fontWeight: 800 }}>📦 Controle de Estoque</h2>
+                <p style={{ fontSize: '12px', color: theme.textSec, margin: '4px 0 0 0' }}>Monitore os níveis de estoque e faça ajustes rápidos em produtos e variações.</p>
             </div>
 
             {/* CARDS DE VISUALIZAÇÃO NO TOPO */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '15px' }}>
                 
-                <div onClick={() => setFiltroRapido("todos")} style={{ ...styles.cardMetrica, borderLeft: '4px solid #3b82f6', cursor: 'pointer', background: filtroRapido === 'todos' ? '#eff6ff' : '#fff' }}>
+                <div onClick={() => setFiltroRapido("todos")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', borderLeft: `4px solid ${theme.primary}`, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>TOTAL CADASTRADO</span>
-                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: '#1e293b' }}>{metricas.totalItens}</h3>
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>TOTAL CADASTRADO</span>
+                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.totalItens}</h3>
                         </div>
-                        <FiPackage size={24} color="#3b82f6" />
+                        <FiPackage size={24} color={theme.primary} />
                     </div>
                 </div>
 
-                <div onClick={() => setFiltroRapido("baixo")} style={{ ...styles.cardMetrica, borderLeft: '4px solid #f59e0b', cursor: 'pointer', background: filtroRapido === 'baixo' ? '#fef3c7' : '#fff' }}>
+                <div onClick={() => setFiltroRapido("baixo")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', borderLeft: '4px solid #f59e0b', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#d97706' }}>ESTOQUE BAIXO</span>
-                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: '#b45309' }}>{metricas.estoqueBaixo}</h3>
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>ESTOQUE BAIXO</span>
+                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.estoqueBaixo}</h3>
                         </div>
                         <FiAlertTriangle size={24} color="#f59e0b" />
                     </div>
                 </div>
 
-                <div onClick={() => setFiltroRapido("zerado")} style={{ ...styles.cardMetrica, borderLeft: '4px solid #ef4444', cursor: 'pointer', background: filtroRapido === 'zerado' ? '#fee2e2' : '#fff' }}>
+                <div onClick={() => setFiltroRapido("zerado")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', borderLeft: '4px solid #ef4444', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#dc2626' }}>ESGOTADOS (ZERADOS)</span>
-                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: '#991b1b' }}>{metricas.zerados}</h3>
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>ESGOTADOS (ZERADOS)</span>
+                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.zerados}</h3>
                         </div>
                         <FiXCircle size={24} color="#ef4444" />
                     </div>
                 </div>
 
-                <div style={{ ...styles.cardMetrica, borderLeft: '4px solid #10b981', background: '#fff' }}>
+                <div style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', borderLeft: '4px solid #10b981' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#059669' }}>VALOR TOTAL EM ESTOQUE</span>
-                            <h3 style={{ fontSize: '18px', margin: '4px 0 0 0', color: '#047857' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>VALOR TOTAL EM ESTOQUE</span>
+                            <h3 style={{ fontSize: '18px', margin: '4px 0 0 0', color: theme.textMain }}>
                                 R$ {metricas.valorTotalEstoque.toFixed(2).replace('.', ',')}
                             </h3>
                         </div>
@@ -231,34 +237,34 @@ export default function PaginaEstoque() {
             </div>
 
             {/* BARRA DE BUSCA E FILTROS */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                    <FiSearch color="#64748b" />
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap', background: theme.bgCard, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px', background: theme.inputBg, padding: '8px 12px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                    <FiSearch color={theme.textSec} />
                     <input 
                         type="text" 
                         placeholder="Buscar por nome, variação ou SKU..." 
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
-                        style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '13px' }}
+                        style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '13px', color: theme.textMain }}
                     />
                 </div>
 
                 <div style={{ display: 'flex', gap: '6px', width: '100%', justifyContent: 'space-between' }}>
                     <button 
                         onClick={() => setFiltroRapido("todos")}
-                        style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: '1px solid #cbd5e1', background: filtroRapido === 'todos' ? '#334155' : '#fff', color: filtroRapido === 'todos' ? '#fff' : '#475569' }}
+                        style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'todos' ? theme.primary : theme.bgCard, color: filtroRapido === 'todos' ? '#fff' : theme.textSec }}
                     >
                         Todos
                     </button>
                     <button 
                         onClick={() => setFiltroRapido("baixo")}
-                        style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: '1px solid #cbd5e1', background: filtroRapido === 'baixo' ? '#f59e0b' : '#fff', color: filtroRapido === 'baixo' ? '#fff' : '#475569' }}
+                        style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'baixo' ? '#f59e0b' : theme.bgCard, color: filtroRapido === 'baixo' ? '#fff' : theme.textSec }}
                     >
                         Estoque Baixo
                     </button>
                     <button 
                         onClick={() => setFiltroRapido("zerado")}
-                        style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: '1px solid #cbd5e1', background: filtroRapido === 'zerado' ? '#ef4444' : '#fff', color: filtroRapido === 'zerado' ? '#fff' : '#475569' }}
+                        style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'zerado' ? '#ef4444' : theme.bgCard, color: filtroRapido === 'zerado' ? '#fff' : theme.textSec }}
                     >
                         Zerados
                     </button>
@@ -266,11 +272,11 @@ export default function PaginaEstoque() {
             </div>
 
             {/* VERSÃO DESKTOP (TABELA TRADICIONAL) */}
-            <div className="desktop-table" style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+            <div className="desktop-table" style={{ background: theme.bgCard, borderRadius: '8px', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                         <thead>
-                            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
+                            <tr style={{ background: theme.bgApp, borderBottom: `1px solid ${theme.border}`, color: theme.textSec }}>
                                 <th style={{ padding: '12px 16px' }}>Produto</th>
                                 <th style={{ padding: '12px 16px' }}>Estoque Atual</th>
                                 <th style={{ padding: '12px 16px' }}>Estoque Míni</th>
@@ -282,7 +288,7 @@ export default function PaginaEstoque() {
                         <tbody>
                             {itensFiltrados.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: theme.textSec }}>
                                         Nenhum item encontrado com os filtros atuais. 🔍
                                     </td>
                                 </tr>
@@ -294,22 +300,22 @@ export default function PaginaEstoque() {
                                     const estaEditando = editandoId === item.uniqueKey;
 
                                     return (
-                                        <tr key={item.uniqueKey} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <tr key={item.uniqueKey} style={{ borderBottom: `1px solid ${theme.border}` }}>
                                             <td style={{ padding: '12px 16px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                     <img 
                                                         src={item.foto || "https://placehold.co/40x40?text=Prod"} 
                                                         alt="" 
-                                                        style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0' }} 
+                                                        style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', border: `1px solid ${theme.border}` }} 
                                                     />
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                        <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{item.nomeProduto}</span>
+                                                        <span style={{ fontWeight: 'bold', color: theme.textMain }}>{item.nomeProduto}</span>
                                                         {item.nomeVariacao !== "Produto Único" ? (
-                                                            <span style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', border: '1px solid #cbd5e1', width: 'fit-content', color: '#475569' }}>
+                                                            <span style={{ background: theme.bgApp, padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', border: `1px solid ${theme.border}`, width: 'fit-content', color: theme.textSec }}>
                                                                 {item.nomeVariacao}
                                                             </span>
                                                         ) : (
-                                                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>SKU: {item.sku}</span>
+                                                            <span style={{ fontSize: '11px', color: theme.textSec }}>SKU: {item.sku}</span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -321,7 +327,7 @@ export default function PaginaEstoque() {
                                                         value={valorEditado}
                                                         onChange={(e) => setValorEditado(e.target.value)}
                                                         autoFocus
-                                                        style={{ width: '70px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b82f6', outline: 'none', fontWeight: 'bold' }}
+                                                        style={{ width: '70px', padding: '4px 8px', borderRadius: '4px', border: `1px solid ${theme.primary}`, outline: 'none', fontWeight: 'bold', background: theme.inputBg, color: theme.textMain }}
                                                     />
                                                 ) : (
                                                     <span style={{ 
@@ -336,13 +342,13 @@ export default function PaginaEstoque() {
                                                     </span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '12px 16px', fontWeight: 'bold', color: '#16a34a' }}>
+                                            <td style={{ padding: '12px 16px', fontWeight: 'bold', color: theme.textMain }}>
                                                 {estoqueMinDesejado}
                                             </td>
-                                            <td style={{ padding: '12px 16px', fontWeight: '600', color: '#059669' }}>
+                                            <td style={{ padding: '12px 16px', fontWeight: '600', color: theme.primary }}>
                                                 R$ {Number(item.preco).toFixed(2).replace('.', ',')}
                                             </td>
-                                            <td style={{ padding: '12px 16px', fontWeight: 'bold', color: '#1e293b' }}>
+                                            <td style={{ padding: '12px 16px', fontWeight: 'bold', color: theme.textMain }}>
                                                 R$ {Number(item.estoque * item.preco).toFixed(2).replace('.', ',')}
                                             </td>
                                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
@@ -357,7 +363,7 @@ export default function PaginaEstoque() {
                                                         </button>
                                                         <button 
                                                             onClick={() => setEditandoId(null)}
-                                                            style={{ background: '#e2e8f0', color: '#475569', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                                                            style={{ background: theme.border, color: theme.textMain, border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
                                                         >
                                                             ✕
                                                         </button>
@@ -368,7 +374,7 @@ export default function PaginaEstoque() {
                                                             setEditandoId(item.uniqueKey);
                                                             setValorEditado(String(item.estoque));
                                                         }}
-                                                        style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                                                        style={{ background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}`, padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
                                                     >
                                                         ✏️ Ajustar
                                                     </button>
@@ -386,7 +392,7 @@ export default function PaginaEstoque() {
             {/* VERSÃO MOBILE (CARDS INDIVIDUAIS OTIMIZADOS) */}
             <div className="mobile-card-list">
                 {itensFiltrados.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '30px', color: '#64748b', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ textAlign: 'center', padding: '30px', color: theme.textSec, background: theme.bgCard, borderRadius: '8px', border: `1px solid ${theme.border}` }}>
                         Nenhum item encontrado com os filtros atuais. 🔍
                     </div>
                 ) : (
@@ -397,23 +403,23 @@ export default function PaginaEstoque() {
                         const estaEditando = editandoId === item.uniqueKey;
 
                         return (
-                            <div key={item.uniqueKey} style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                            <div key={item.uniqueKey} style={{ background: theme.bgCard, borderRadius: '8px', border: `1px solid ${theme.border}`, padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                                 {/* Topo do Card: Foto, Nome, Variação e Ação rápida */}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
                                         <img 
                                             src={item.foto || "https://placehold.co/40x40?text=Prod"} 
                                             alt="" 
-                                            style={{ width: '42px', height: '42px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0', flexShrink: 0 }} 
+                                            style={{ width: '42px', height: '42px', borderRadius: '6px', objectFit: 'cover', border: `1px solid ${theme.border}`, flexShrink: 0 }} 
                                         />
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                                            <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nomeProduto}</span>
+                                            <span style={{ fontWeight: 'bold', color: theme.textMain, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nomeProduto}</span>
                                             {item.nomeVariacao !== "Produto Único" ? (
-                                                <span style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', border: '1px solid #cbd5e1', width: 'fit-content', color: '#475569' }}>
+                                                <span style={{ background: theme.bgApp, padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', border: `1px solid ${theme.border}`, width: 'fit-content', color: theme.textSec }}>
                                                     {item.nomeVariacao}
                                                 </span>
                                             ) : (
-                                                <span style={{ fontSize: '11px', color: '#94a3b8' }}>SKU: {item.sku}</span>
+                                                <span style={{ fontSize: '11px', color: theme.textSec }}>SKU: {item.sku}</span>
                                             )}
                                         </div>
                                     </div>
@@ -431,7 +437,7 @@ export default function PaginaEstoque() {
                                                 </button>
                                                 <button 
                                                     onClick={() => setEditandoId(null)}
-                                                    style={{ background: '#e2e8f0', color: '#475569', border: 'none', padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                                                    style={{ background: theme.border, color: theme.textMain, border: 'none', padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
                                                 >
                                                     ✕
                                                 </button>
@@ -442,7 +448,7 @@ export default function PaginaEstoque() {
                                                     setEditandoId(item.uniqueKey);
                                                     setValorEditado(String(item.estoque));
                                                 }}
-                                                style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                                                style={{ background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}`, padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
                                             >
                                                 ✏️ Ajustar
                                             </button>
@@ -450,19 +456,19 @@ export default function PaginaEstoque() {
                                     </div>
                                 </div>
 
-                                <hr style={{ border: '0', borderTop: '1px solid #f1f5f9', margin: '2px 0' }} />
+                                <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '2px 0' }} />
 
                                 {/* Grade de Informações Financeiras e de Estoque */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', textAlign: 'center', background: '#f8fafc', padding: '8px', borderRadius: '6px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', textAlign: 'center', background: theme.bgApp, padding: '8px', borderRadius: '6px' }}>
                                     <div>
-                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: '#64748b' }}>ATUAL</span>
+                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: theme.textSec }}>ATUAL</span>
                                         {estaEditando ? (
                                             <input 
                                                 type="number"
                                                 value={valorEditado}
                                                 onChange={(e) => setValorEditado(e.target.value)}
                                                 autoFocus
-                                                style={{ width: '45px', padding: '2px', textAlign: 'center', borderRadius: '4px', border: '1px solid #3b82f6', outline: 'none', fontSize: '12px', fontWeight: 'bold', marginTop: '2px' }}
+                                                style={{ width: '45px', padding: '2px', textAlign: 'center', borderRadius: '4px', border: `1px solid ${theme.primary}`, outline: 'none', fontSize: '12px', fontWeight: 'bold', marginTop: '2px', background: theme.inputBg, color: theme.textMain }}
                                             />
                                         ) : (
                                             <span style={{ 
@@ -480,20 +486,20 @@ export default function PaginaEstoque() {
                                         )}
                                     </div>
                                     <div>
-                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: '#64748b' }}>MÍNIMO</span>
-                                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#16a34a', marginTop: '3px' }}>
+                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: theme.textSec }}>MÍNIMO</span>
+                                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: theme.textMain, marginTop: '3px' }}>
                                             {estoqueMinDesejado}
                                         </span>
                                     </div>
                                     <div>
-                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: '#64748b' }}>UNITÁRIO</span>
-                                        <span style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#059669', marginTop: '3px' }}>
+                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: theme.textSec }}>UNITÁRIO</span>
+                                        <span style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: theme.primary, marginTop: '3px' }}>
                                             R$ {Number(item.preco).toFixed(2).replace('.', ',')}
                                         </span>
                                     </div>
                                     <div>
-                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: '#64748b' }}>TOTAL</span>
-                                        <span style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#1e293b', marginTop: '3px' }}>
+                                        <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: theme.textSec }}>TOTAL</span>
+                                        <span style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: theme.textMain, marginTop: '3px' }}>
                                             R$ {Number(item.estoque * item.preco).toFixed(2).replace('.', ',')}
                                         </span>
                                     </div>
@@ -507,14 +513,3 @@ export default function PaginaEstoque() {
         </div>
     );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-    cardMetrica: {
-        background: '#fff',
-        padding: '12px 14px',
-        borderRadius: '8px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        transition: 'transform 0.15s ease'
-    }
-};
