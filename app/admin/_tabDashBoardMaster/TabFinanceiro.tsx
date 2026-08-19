@@ -1,7 +1,15 @@
 "use client";
 import React, { useState, useMemo } from "react";
+import { useTheme } from "@/context/ThemeContext";
+import { FiSearch, FiChevronDown, FiChevronUp, FiDollarSign, FiUser, FiShoppingBag } from "react-icons/fi";
 
-export default function TabFinanceiro({ lojistas }: { lojistas: any[] }) {
+interface TabFinanceiroProps {
+  lojistas: any[];
+}
+
+export default function TabFinanceiro({ lojistas }: TabFinanceiroProps) {
+  const { theme, isModoNoturno } = useTheme();
+
   const [expandido, setExpandido] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
 
@@ -18,87 +26,140 @@ export default function TabFinanceiro({ lojistas }: { lojistas: any[] }) {
   }, [lojistas, busca]);
 
   return (
-    <div style={styles.container}>
-      <h2 style={styles.titulo}>Painel Financeiro de Lojistas</h2>
+    <div style={{ ...styles.container, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+      <div style={styles.headerContainer}>
+        <h2 style={{ ...styles.titulo, color: theme.textMain }}>Painel Financeiro de Lojistas</h2>
+        <span style={{ ...styles.badgeTotal, background: isModoNoturno ? '#1e293b' : '#eff6ff', color: theme.primary, border: `1px solid ${theme.border}` }}>
+          Total: {lojistasFiltrados.length} Lojas
+        </span>
+      </div>
       
       {/* Campo de Pesquisa */}
-      <input 
-        style={styles.inputBusca}
-        placeholder="🔍 Pesquisar por nome da loja, dono ou CPF..."
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-      />
+      <div style={{ ...styles.searchWrapper, background: theme.bgApp || theme.bgApp, border: `1px solid ${theme.border}` }}>
+        <FiSearch color={theme.textSec} size={18} />
+        <input 
+          style={{ ...styles.inputBusca, color: theme.textMain }}
+          placeholder="Pesquisar por nome da loja, dono ou CPF..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+      </div>
 
-      <table style={styles.table}>
-        <thead>
-          <tr style={styles.thRow}>
-            <th style={styles.th}>NOME DA LOJA</th>
-            <th style={{ ...styles.th, textAlign: 'right' }}>LUCRO LÍQUIDO REAL</th>
-            <th style={{ ...styles.th, textAlign: 'right' }}>TICKET MÉDIO</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lojistasFiltrados.map((loja) => (
-            <React.Fragment key={loja.id}>
-              <tr 
-                style={styles.tr} 
-                onClick={() => setExpandido(expandido === loja.id ? null : loja.id)}
-              >
-                <td style={styles.tdLoja}>
-                  <span style={styles.seta}>{expandido === loja.id ? '🔼' : '🔽'}</span>
-                  {loja.nomeLoja || "Loja sem nome"}
+      <div style={{ ...styles.tableContainer, border: `1px solid ${theme.border}` }}>
+        <table style={styles.table}>
+          <thead>
+            <tr style={{ ...styles.thRow, background: isModoNoturno ? '#0f172a' : '#f8fafc', borderBottom: `2px solid ${theme.border}` }}>
+              <th style={{ ...styles.th, color: theme.textSec }}>NOME DA LOJA</th>
+              <th style={{ ...styles.th, textAlign: 'right', color: theme.textSec }}>LUCRO LÍQUIDO REAL</th>
+              <th style={{ ...styles.th, textAlign: 'right', color: theme.textSec }}>TICKET MÉDIO</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lojistasFiltrados.length === 0 ? (
+              <tr>
+                <td colSpan={3} style={{ textAlign: 'center', padding: '40px', color: theme.textSec }}>
+                  Nenhum lojista encontrado.
                 </td>
-                <td style={styles.tdFinanceiro}>{formatarMoeda(loja.lucroReal || 0)}</td>
-                <td style={styles.tdFinanceiro}>{formatarMoeda(loja.ticketMedio || 0)}</td>
               </tr>
+            ) : (
+              lojistasFiltrados.map((loja, index) => {
+                const isAberto = expandido === loja.id;
+                const linhaPar = index % 2 === 0;
 
-              {expandido === loja.id && (
-                <tr style={styles.trExpandido}>
-                  <td colSpan={3} style={styles.tdExpandido}>
-                    <div style={styles.boxGrid}>
-                      {/* DADOS PESSOAIS */}
-                      <div>
-                        <h4 style={styles.boxTitle}>DADOS PESSOAIS</h4>
-                        <p style={styles.boxItem}><strong>Dono:</strong> {loja.nomeResponsavel || "---"}</p>
-                        <p style={styles.boxItem}><strong>CPF:</strong> {loja.cpfResponsavel || "---"}</p>
-                        <p style={styles.boxItem}><strong>E-mail:</strong> {loja.emailPessoal || "---"}</p>
-                        <p style={styles.boxItem}><strong>WhatsApp:</strong> {loja.whatsapp || "---"}</p>
-                      </div>
-                      
-                      {/* DADOS DA LOJA */}
-                      <div>
-                        <h4 style={styles.boxTitle}>DADOS DA LOJA</h4>
-                        <p style={styles.boxItem}><strong>Plano:</strong> {loja.plano || "Bronze"}</p>
-                        <p style={styles.boxItem}><strong>Endereço:</strong> {loja.ruaOrigem || "---"}, {loja.numeroOrigem || "---"}</p>
-                        <p style={styles.boxItem}><strong>Bairro:</strong> {loja.bairroOrigem || "---"}</p>
-                        <p style={styles.boxItem}><strong>CEP/Cidade:</strong> {loja.cepOrigem || "---"} - {loja.cidadeOrigem || "---"}/{loja.ufOrigem || "--"}</p>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
+                return (
+                  <React.Fragment key={loja.id}>
+                    <tr 
+                      style={{ 
+                        ...styles.tr, 
+                        background: isAberto 
+                          ? (isModoNoturno ? '#1e293b' : '#eff6ff') 
+                          : linhaPar ? (isModoNoturno ? '#0f172a' : '#ffffff') : (isModoNoturno ? '#111827' : '#fcfcfc'),
+                        borderBottom: `1px solid ${theme.border}` 
+                      }} 
+                      onClick={() => setExpandido(isAberto ? null : loja.id)}
+                    >
+                      <td style={{ ...styles.tdLoja, color: theme.textMain }}>
+                        <span style={{ ...styles.setaBox, background: isModoNoturno ? '#334155' : '#e2e8f0', color: theme.textMain }}>
+                          {isAberto ? <FiChevronUp size={12} /> : <FiChevronDown size={12} />}
+                        </span>
+                        {loja.nomeLoja || "Loja sem nome"}
+                      </td>
+                      <td style={{ ...styles.tdFinanceiro, color: '#10b981', fontWeight: '800' }}>
+                        {formatarMoeda(loja.lucroReal || 0)}
+                      </td>
+                      <td style={{ ...styles.tdFinanceiro, color: theme.textMain }}>
+                        {formatarMoeda(loja.ticketMedio || 0)}
+                      </td>
+                    </tr>
+
+                    {isAberto && (
+                      <tr style={{ background: isModoNoturno ? '#0b0f19' : '#f1f5f9' }}>
+                        <td colSpan={3} style={styles.tdExpandido}>
+                          <div style={styles.boxGrid}>
+                            
+                            {/* DADOS PESSOAIS */}
+                            <div style={{ ...styles.cardDetalhe, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+                              <h4 style={{ ...styles.boxTitle, color: theme.primary }}>
+                                <FiUser size={14} /> DADOS PESSOAIS
+                              </h4>
+                              <div style={styles.detalheConteudo}>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>Dono:</strong> <span style={{ color: theme.textMain }}>{loja.nomeResponsavel || "---"}</span></p>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>CPF:</strong> <span style={{ color: theme.textMain }}>{loja.cpfResponsavel || "---"}</span></p>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>E-mail:</strong> <span style={{ color: theme.textMain }}>{loja.emailPessoal || "---"}</span></p>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>WhatsApp:</strong> <span style={{ color: theme.textMain }}>{loja.whatsapp || "---"}</span></p>
+                              </div>
+                            </div>
+                            
+                            {/* DADOS DA LOJA */}
+                            <div style={{ ...styles.cardDetalhe, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+                              <h4 style={{ ...styles.boxTitle, color: theme.primary }}>
+                                <FiShoppingBag size={14} /> DADOS DA LOJA
+                              </h4>
+                              <div style={styles.detalheConteudo}>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>Plano:</strong> <span style={{ color: theme.textMain, fontWeight: 'bold' }}>{loja.plano || "Bronze"}</span></p>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>Endereço:</strong> <span style={{ color: theme.textMain }}>{loja.ruaOrigem || "---"}, {loja.numeroOrigem || "---"}</span></p>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>Bairro:</strong> <span style={{ color: theme.textMain }}>{loja.bairroOrigem || "---"}</span></p>
+                                <p style={{ ...styles.boxItem, color: theme.textSec }}><strong>CEP/Cidade:</strong> <span style={{ color: theme.textMain }}>{loja.cepOrigem || "---"} - {loja.cidadeOrigem || "---"}/{loja.ufOrigem || "--"}</span></p>
+                              </div>
+                            </div>
+
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { background: "#fff", padding: "20px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" },
-  titulo: { fontSize: "18px", marginBottom: "20px", color: "#1e293b" },
-  inputBusca: { width: "100%", padding: "12px", marginBottom: "20px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "14px" },
+  container: { padding: "24px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" },
+  headerContainer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' },
+  titulo: { fontSize: "18px", fontWeight: "800", margin: 0 },
+  badgeTotal: { fontSize: '11px', fontWeight: '700', padding: '6px 12px', borderRadius: '8px', textTransform: 'uppercase' },
+  
+  searchWrapper: { display: 'flex', alignItems: 'center', gap: '10px', padding: '0 14px', borderRadius: '12px', marginBottom: '20px' },
+  inputBusca: { width: "100%", padding: "12px 0", background: 'transparent', border: "none", fontSize: "14px", outline: "none" },
+  
+  tableContainer: { borderRadius: '14px', overflow: 'hidden' },
   table: { width: "100%", borderCollapse: "collapse" },
-  thRow: { borderBottom: "2px solid #f1f5f9" },
-  th: { padding: "12px", textAlign: "left", fontSize: "11px", color: "#64748b", textTransform: "uppercase" },
-  tr: { cursor: "pointer", borderBottom: "1px solid #f1f5f9", transition: "0.2s" },
-  tdLoja: { padding: "16px", fontWeight: "700", color: "#334155" },
-  tdFinanceiro: { padding: "16px", textAlign: "right", fontWeight: "600", color: "#0f172a" },
-  seta: { marginRight: "10px", fontSize: "10px" },
-  trExpandido: { background: "#f8fafc" },
+  thRow: {},
+  th: { padding: "14px 16px", textAlign: "left", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: '0.5px' },
+  tr: { cursor: "pointer", transition: "background 0.2s" },
+  tdLoja: { padding: "16px", fontWeight: "700", display: 'flex', alignItems: 'center', gap: '12px' },
+  tdFinanceiro: { padding: "16px", textAlign: "right", fontSize: "14px" },
+  setaBox: { width: '22px', height: '22px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  
   tdExpandido: { padding: "20px" },
-  boxGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" },
-  boxTitle: { fontSize: "10px", fontWeight: "800", color: "#94a3b8", marginBottom: "8px", textTransform: "uppercase" },
-  boxItem: { fontSize: "13px", color: "#475569", margin: "4px 0" }
+  boxGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" },
+  cardDetalhe: { padding: '16px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+  boxTitle: { fontSize: "11px", fontWeight: "900", marginBottom: "12px", textTransform: "uppercase", display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' },
+  detalheConteudo: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  boxItem: { fontSize: "13px", margin: 0 }
 };

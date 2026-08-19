@@ -17,7 +17,8 @@ import {
   startAfter,
   getDocs
 } from "firebase/firestore";
-import { FiGitCommit, FiCheckCircle, FiSave, FiSearch, FiTrash2, FiClock, FiTag, FiCalendar, FiEye, FiEyeOff, FiChevronDown, FiDatabase } from "react-icons/fi";
+import { FiGitCommit, FiCheckCircle, FiSave, FiSearch, FiTrash2, FiClock, FiTag, FiCalendar, FiEye, FiEyeOff, FiChevronDown, FiDatabase, FiMessageSquare } from "react-icons/fi";
+import { useTheme } from "@/context/ThemeContext";
 
 // Categorias e subpastas estruturadas do sistema para o select agrupado
 const categoriasSistema = {
@@ -95,7 +96,6 @@ const categoriasSistema = {
 
 // Dicionário completo e abrangente para traduzir todos os nomes internos para termos amigáveis ao lojista
 const nomesAmigaveisModulo: { [key: string]: string } = {
-  // Categorias
   "DASHBOARD MASTER": "Painel Master",
   "DASHBOARD LOJISTA": "Painel do Lojista",
   "ADMIN / CONFIG": "Configurações do Admin",
@@ -107,7 +107,6 @@ const nomesAmigaveisModulo: { [key: string]: string } = {
   "LOGIN": "Acesso e Login",
   "APP": "Aplicativo",
 
-  // Itens Master
   "Dashboard Master": "Visão Geral Master",
   "TabAparenciaLandPage": "Aparência da Landing Page",
   "TabAssinaturas": "Assinaturas e Planos",
@@ -117,25 +116,21 @@ const nomesAmigaveisModulo: { [key: string]: string } = {
   "TabHistoricoVersao": "Histórico de Versões",
   "TabPanorama": "Panorama Geral",
   "TabPlanos.tsx": "Gerenciamento de Planos",
-
-  // Itens Lojista
    
-  "TabCatalogo": "Catálogo de Produtos - DASHBOARD / Catalogo",
-  "TabClientes": "Gestão de Clientes - DASHBOARD / Clientes",
-  "TabDespesas": "Controle de Despesas - DASHBOARD / Despesas",
-  "TabDevolucoes": "Controle de Devoluções - DASHBOARD / Devolucoes",
-  "TabFaturamentoCanais": "Faturamento por Canais - DASHBOARD / Canais de Renda",
-  "TabLucroReal": "Lucro Real - DASHBOARD / Lucro Real",
-  "TabPrecificacao": "Precificação - DASHBOARD / Precificação",
-  "TabRelatorioHistorico": "Relatório Histórico - DASHBOARD / Relatório Histórico",
-  "TabSazonalidade": "Sazonalidade - DASHBOARD / Sazonalidade",
-  "TabVendas": "Gestão de Vendas - DASHBOARD / Vendas",
-  "Page": "Página Principal",
-  "Layout": "Layout do Sistema",
-  "Sidebar": "Menu Lateral",
+  "TabCatalogo": "Catálogo de Produtos - DASHBOARD / Catalogo",
+  "TabClientes": "Gestão de Clientes - DASHBOARD / Clientes",
+  "TabDespesas": "Controle de Despesas - DASHBOARD / Despesas",
+  "TabDevolucoes": "Controle de Devoluções - DASHBOARD / Devolucoes",
+  "TabFaturamentoCanais": "Faturamento por Canais - DASHBOARD / Canais de Renda",
+  "TabLucroReal": "Lucro Real - DASHBOARD / Lucro Real",
+  "TabPrecificacao": "Precificação - DASHBOARD / Precificação",
+  "TabRelatorioHistorico": "Relatório Histórico - DASHBOARD / Relatório Histórico",
+  "TabSazonalidade": "Sazonalidade - DASHBOARD / Sazonalidade",
+  "TabVendas": "Gestão de Vendas - DASHBOARD / Vendas",
+  "Page": "Página Principal",
+  "Layout": "Layout do Sistema",
+  "Sidebar": "Menu Lateral",
 
-
-  // Itens Admin / Config
   "AparenciaTab": "Configuraçoes / Aparência",
   "AssinaturaTab": "Configuraçoes / Assinatura",
   "AtualizacoesTab": "Configuraçoes / Atualizações",
@@ -146,7 +141,6 @@ const nomesAmigaveisModulo: { [key: string]: string } = {
   "PagamentosTab": "Configuraçoes / Pagamentos",
   "SistemaTab": "Configuraçoes / Sistema - Cupons",
 
-  // Itens Pedidos
   "TabCotarFrete": "Pedidos / Cotação de Frete",
   "TabDigital": "Pedidos / Digital",
   "TabEmitirEtiquetas": "Pedidos / Etiquetas",
@@ -158,14 +152,11 @@ const nomesAmigaveisModulo: { [key: string]: string } = {
   "TabRetiradaLoja": "Pedidos / Retirada",
   "TabSeparacaoImpressao": "Separação e Impressão",
   "TabTodosPedidos": "Todos os Pedidos",
-
 };
 
-// Função para formatar o texto técnico da página afetada para o lojista de forma completa
 const formatarNomeModuloParaLojista = (dsPaginaAfetada: string) => {
   if (!dsPaginaAfetada) return "Sistema";
   let resultado = dsPaginaAfetada;
-  // Ordena as chaves por tamanho decrescente para evitar substituições parciais incorretas
   const chavesOrdenadas = Object.keys(nomesAmigaveisModulo).sort((a, b) => b.length - a.length);
   for (const interno of chavesOrdenadas) {
     const amigavel = nomesAmigaveisModulo[interno];
@@ -182,11 +173,12 @@ interface VersaoItem {
   dsDescricao: string[];
   isExibirLogista?: boolean;
   nrVersaoSchemaSistema?: number;
-  ano?: number;
   createdAt?: any;
 }
 
 export default function TabHistoricoVersao() {
+  const { theme, isModoNoturno } = useTheme();
+
   const [versoes, setVersoes] = useState<VersaoItem[]>([]);
   const [versaoAtivaGlobal, setVersaoAtivaGlobal] = useState<string>("");
   const [busca, setBusca] = useState("");
@@ -194,6 +186,9 @@ export default function TabHistoricoVersao() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
+
+  // 🌟 Estado para controlar o modal de visualização (mesmo padrão do TabAvisos)
+  const [versaoSelecionada, setVersaoSelecionada] = useState<VersaoItem | null>(null);
 
   const ITENS_POR_PAGINA = 5;
 
@@ -208,11 +203,6 @@ export default function TabHistoricoVersao() {
     mudancas: "",
     isExibirLogista: false
   });
-
-  const getNomeColecao = (dataIso: string) => {
-    const ano = dataIso ? new Date(dataIso).getFullYear() : new Date().getFullYear();
-    return `historico_versoes_${ano}`;
-  };
 
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, "configuracoes", "sistema"), (docSnap) => {
@@ -231,11 +221,8 @@ export default function TabHistoricoVersao() {
 
   const carregarHistoricoInicial = async () => {
     try {
-      const anoAtual = new Date().getFullYear();
-      const nomeColecao = `historico_versoes_${anoAtual}`;
-      
       const q = query(
-        collection(db, nomeColecao), 
+        collection(db, "configuracoes", "sistema", "historicoVersoes"), 
         orderBy("nrVersaoSistemaSistema", "desc"), 
         limit(ITENS_POR_PAGINA)
       );
@@ -254,7 +241,6 @@ export default function TabHistoricoVersao() {
             dsDescricao: Array.isArray(dados.dsDescricao) ? dados.dsDescricao : [],
             isExibirLogista: !!dados.isExibirLogista,
             nrVersaoSchemaSistema: dados.nrVersaoSchemaSistema || dados.versaoSchema || 0,
-            ano: dados.ano || anoAtual,
             createdAt: dados.createdAt
           } as VersaoItem);
         }
@@ -277,11 +263,8 @@ export default function TabHistoricoVersao() {
     setLoadingMore(true);
 
     try {
-      const anoAtual = new Date().getFullYear();
-      const nomeColecao = `historico_versoes_${anoAtual}`;
-
       const q = query(
-        collection(db, nomeColecao), 
+        collection(db, "configuracoes", "sistema", "historicoVersoes"), 
         orderBy("nrVersaoSistemaSistema", "desc"), 
         startAfter(lastVisible),
         limit(ITENS_POR_PAGINA)
@@ -301,7 +284,6 @@ export default function TabHistoricoVersao() {
             dsDescricao: Array.isArray(dados.dsDescricao) ? dados.dsDescricao : [],
             isExibirLogista: !!dados.isExibirLogista,
             nrVersaoSchemaSistema: dados.nrVersaoSchemaSistema || dados.versaoSchema || 0,
-            ano: dados.ano || anoAtual,
             createdAt: dados.createdAt
           } as VersaoItem);
         }
@@ -335,8 +317,6 @@ export default function TabHistoricoVersao() {
     setLoading(true);
     try {
       const versaoId = `${novaVersao.ano}.${novaVersao.major}.${novaVersao.minor}.${novaVersao.patch}`;
-      const anoRegistro = new Date(novaVersao.data).getFullYear();
-      const nomeColecaoAno = getNomeColecao(novaVersao.data);
       const schemaNum = Number(novaVersao.schemaCode) || 0;
 
       const dadosVersao: VersaoItem = {
@@ -346,16 +326,14 @@ export default function TabHistoricoVersao() {
         dsDescricao: novaVersao.mudancas.split("\n").filter(m => m.trim() !== ""),
         isExibirLogista: novaVersao.isExibirLogista,
         nrVersaoSchemaSistema: schemaNum,
-        ano: anoRegistro,
         createdAt: serverTimestamp()
       };
 
-      const versaoRef = doc(db, nomeColecaoAno, versaoId);
+      const versaoRef = doc(db, "configuracoes", "sistema", "historicoVersoes", versaoId);
       await setDoc(versaoRef, dadosVersao, { merge: true });
 
       const configRef = doc(db, "configuracoes", "sistema");
       await setDoc(configRef, {
-        historicoVersoes: dadosVersao,
         dsVersaoSistema: versaoId,
         versaoSchemaAtual: schemaNum
       }, { merge: true });
@@ -378,18 +356,14 @@ export default function TabHistoricoVersao() {
     }
   };
 
-  const excluirVersao = async (versaoId: string, anoVersao?: number) => {
+  const excluirVersao = async (versaoId: string) => {
     if (!confirm(`Deseja realmente excluir permanentemente o registro da versão ${versaoId}?`)) return;
     try {
-      const anoRef = anoVersao || new Date().getFullYear();
-      const nomeColecaoAno = `historico_versoes_${anoRef}`;
-
-      await deleteDoc(doc(db, nomeColecaoAno, versaoId));
+      await deleteDoc(doc(db, "configuracoes", "sistema", "historicoVersoes", versaoId));
 
       if (versaoAtivaGlobal === versaoId) {
         const configRef = doc(db, "configuracoes", "sistema");
         await updateDoc(configRef, {
-          historicoVersoes: deleteField(),
           dsVersaoSistema: deleteField(),
           versaoSchemaAtual: deleteField()
         });
@@ -415,40 +389,75 @@ export default function TabHistoricoVersao() {
 
   return (
     <section style={styles.wrapper}>
+      {/* 🌟 MODAL DE VISUALIZAÇÃO DE DETALHES (Mesmo padrão do TabAvisos) */}
+      {versaoSelecionada && (
+        <div style={styles.overlayMaster} onClick={() => setVersaoSelecionada(null)}>
+          <div style={{ ...styles.modalVisualizar, background: theme.bgCard, border: `1px solid ${theme.border}` }} onClick={e => e.stopPropagation()}>
+            <div style={{ ...styles.modalVisHeader, color: theme.primary }}>
+              <FiGitCommit /> DETALHES DA VERSÃO v{versaoSelecionada.nrVersaoSistemaSistema}
+            </div>
+            <div style={styles.historicoScroll}>
+              <div style={{ ...styles.modalVisSub, color: theme.textSec, marginBottom: '10px' }}>
+                <span>DATA: {versaoSelecionada.tsDataAtualizacao}</span>
+                {versaoSelecionada.nrVersaoSchemaSistema !== undefined && (
+                  <span style={{ color: '#d97706', fontWeight: 'bold' }}>SCHEMA v{versaoSelecionada.nrVersaoSchemaSistema}</span>
+                )}
+              </div>
+              <p style={{ fontSize: '12px', fontWeight: 'bold', color: theme.primary, marginBottom: '15px', textTransform: 'uppercase' }}>
+                MÓDULO: {formatarNomeModuloParaLojista(versaoSelecionada.dsPaginaAfetada)}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {versaoSelecionada.dsDescricao?.map((desc: string, i: number) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', color: theme.textMain, fontSize: '13px' }}>
+                    <FiCheckCircle size={14} color="#10b981" style={{ marginTop: '2px', flexShrink: 0 }} />
+                    <span>{desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button 
+              style={{ ...styles.modalVisBtn, background: isModoNoturno ? theme.bgApp : '#0f172a', color: theme.textMain, border: `1px solid ${theme.border}` }} 
+              onClick={() => setVersaoSelecionada(null)}
+            >
+              FECHAR
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. BARRA DE PESQUISA NO TOPO */}
-      <div style={styles.searchBox}>
-        <FiSearch color="#64748b" size={18} />
+      <div style={{ ...styles.searchBox, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+        <FiSearch color={theme.textSec} size={18} />
         <input
           type="text"
           placeholder="Pesquisar por número da versão, módulo ou alteração..."
           value={busca}
           onChange={e => setBusca(e.target.value)}
-          style={styles.searchInput}
+          style={{ ...styles.searchInput, color: theme.textMain }}
         />
         {busca && (
-          <button onClick={() => setBusca("")} style={styles.clearSearchBtn}>
+          <button onClick={() => setBusca("")} style={{ ...styles.clearSearchBtn, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}>
             Limpar
           </button>
         )}
       </div>
 
       {/* 2. PAINEL DE CADASTRO / EDIÇÃO */}
-      <div style={styles.cardCadastro}>
+      <div style={{ ...styles.cardCadastro, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
         <div style={styles.cardHeaderTitle}>
-          <FiGitCommit size={20} color="#3b82f6" />
-          <h3 style={styles.h3}>Cadastrar Nova Versão do Sistema</h3>
+          <FiGitCommit size={20} color={theme.primary} />
+          <h3 style={{ ...styles.h3, color: theme.textMain }}>Cadastrar Nova Versão do Sistema</h3>
         </div>
-        <p style={styles.helpText}>
+        <p style={{ ...styles.helpText, color: theme.textSec }}>
           Insira uma nova tag de atualização e informe se há alterações estruturais no banco de dados através da Versão do Schema.
         </p>
 
         <form onSubmit={salvarVersao} style={styles.formGrid}>
-          {/* Layout Ajustado Exclusivamente para Versão PC (Desktop) / Flexível */}
           <div style={styles.inputRowDesktop}>
             
             {/* COMPOSIÇÃO DA VERSÃO */}
             <div style={styles.inputGroup}>
-              <label style={styles.label}>
+              <label style={{ ...styles.label, color: theme.textSec }}>
                 <FiTag size={12} /> Composição da Versão
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -456,34 +465,34 @@ export default function TabHistoricoVersao() {
                   type="text"
                   value={novaVersao.ano}
                   readOnly
-                  style={{ ...styles.input, width: '45px', textAlign: 'center', background: '#f1f5f9', fontWeight: 'bold' }}
+                  style={{ ...styles.input, width: '45px', textAlign: 'center', background: isModoNoturno ? theme.bgApp : '#f1f5f9', fontWeight: 'bold', color: theme.textMain, border: `1px solid ${theme.border}` }}
                   title="Ano base"
                 />
-                <span style={{ fontWeight: 'bold', color: '#64748b' }}>.</span>
+                <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
                 <input
                   type="number"
                   min="0"
                   value={novaVersao.major}
                   onChange={e => setNovaVersao({ ...novaVersao, major: e.target.value })}
-                  style={{ ...styles.input, width: '55px', textAlign: 'center' }}
+                  style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   required
                 />
-                <span style={{ fontWeight: 'bold', color: '#64748b' }}>.</span>
+                <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
                 <input
                   type="number"
                   min="0"
                   value={novaVersao.minor}
                   onChange={e => setNovaVersao({ ...novaVersao, minor: e.target.value })}
-                  style={{ ...styles.input, width: '55px', textAlign: 'center' }}
+                  style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   required
                 />
-                <span style={{ fontWeight: 'bold', color: '#64748b' }}>.</span>
+                <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
                 <input
                   type="number"
                   min="0"
                   value={novaVersao.patch}
                   onChange={e => setNovaVersao({ ...novaVersao, patch: e.target.value })}
-                  style={{ ...styles.input, width: '55px', textAlign: 'center' }}
+                  style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   required
                 />
               </div>
@@ -491,7 +500,7 @@ export default function TabHistoricoVersao() {
 
             {/* VERSÃO DO SCHEMA DO BANCO */}
             <div style={styles.inputGroup}>
-              <label style={styles.label}>
+              <label style={{ ...styles.label, color: theme.textSec }}>
                 <FiDatabase size={12} /> Versão do Schema (Banco)
               </label>
               <input
@@ -500,35 +509,35 @@ export default function TabHistoricoVersao() {
                 placeholder="Ex: 2"
                 value={novaVersao.schemaCode}
                 onChange={e => setNovaVersao({ ...novaVersao, schemaCode: Number(e.target.value) })}
-                style={styles.input}
+                style={{ ...styles.input, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                 required
               />
             </div>
 
             {/* DATA DA VERSÃO */}
             <div style={styles.inputGroup}>
-              <label style={styles.label}>
+              <label style={{ ...styles.label, color: theme.textSec }}>
                 <FiCalendar size={12} /> Data da Versão
               </label>
               <input
                 type="date"
                 value={novaVersao.data}
                 onChange={e => setNovaVersao({ ...novaVersao, data: e.target.value })}
-                style={styles.input}
+                style={{ ...styles.input, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                 required
               />
             </div>
 
             {/* ÁREA / MÓDULO AFETADO */}
             <div style={styles.inputGroup}>
-              <label style={styles.label}>Área / Módulo Afetado</label>
+              <label style={{ ...styles.label, color: theme.textSec }}>Área / Módulo Afetado</label>
               <select
                 value={novaVersao.tipo}
                 onChange={e => setNovaVersao({ ...novaVersao, tipo: e.target.value })}
-                style={styles.select}
+                style={{ ...styles.select, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
               >
                 {Object.entries(categoriasSistema).map(([categoria, paginas]) => (
-                  <optgroup key={categoria} label={categoria}>
+                  <optgroup key={categoria} label={categoria} style={{ background: theme.bgCard, color: theme.textMain }}>
                     {paginas.map((pagina) => {
                       const valorFormatado = `${categoria} > ${pagina}`;
                       return (
@@ -544,19 +553,19 @@ export default function TabHistoricoVersao() {
           </div>
 
           <div style={styles.inputGroup}>
-            <label style={styles.label}>O que mudou? (Digite uma alteração por linha)</label>
+            <label style={{ ...styles.label, color: theme.textSec }}>O que mudou? (Digite uma alteração por linha)</label>
             <textarea
               placeholder={"- Adicionado suporte ao novo painel financeiro\n- Correção de bugs no fluxo de pedidos"}
               value={novaVersao.mudancas}
               onChange={e => setNovaVersao({ ...novaVersao, mudancas: e.target.value })}
-              style={styles.textarea}
+              style={{ ...styles.textarea, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
               required
             />
           </div>
 
           {/* CHECKBOX PARA EXIBIR AO LOJISTA */}
-          <div style={styles.checkboxContainer}>
-            <label style={styles.checkboxLabel}>
+          <div style={{ ...styles.checkboxContainer, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
+            <label style={{ ...styles.checkboxLabel, color: theme.textMain }}>
               <input
                 type="checkbox"
                 checked={novaVersao.isExibirLogista}
@@ -567,7 +576,7 @@ export default function TabHistoricoVersao() {
             </label>
           </div>
 
-          <button type="submit" style={styles.btnSalvar} disabled={loading}>
+          <button type="submit" style={{ ...styles.btnSalvar, background: theme.primary }} disabled={loading}>
             <FiSave size={16} /> {loading ? "Salvando versão..." : "Salvar e Publicar Versão"}
           </button>
         </form>
@@ -576,14 +585,14 @@ export default function TabHistoricoVersao() {
       {/* 3. TIMELINE / LISTAGEM COMPLETA DO HISTÓRICO DE VERSÕES */}
       <div style={styles.timelineContainer}>
         <div style={styles.listHeaderSection}>
-          <h4 style={styles.subTitleHeading}>Histórico de Atualizações Publicadas</h4>
-          <span style={styles.badgeCount}>{versoesFiltradas.length} versões listadas</span>
+          <h4 style={{ ...styles.subTitleHeading, color: theme.textMain }}>Histórico de Atualizações Publicadas</h4>
+          <span style={{ ...styles.badgeCount, background: isModoNoturno ? '#334155' : '#e2e8f0', color: theme.textSec }}>{versoesFiltradas.length} versões listadas</span>
         </div>
 
         {versoesFiltradas.length === 0 ? (
-          <div style={styles.emptyContainer}>
-            <FiClock size={32} color="#94a3b8" />
-            <p style={styles.emptyText}>Nenhuma versão encontrada no histórico deste ano.</p>
+          <div style={{ ...styles.emptyContainer, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+            <FiClock size={32} color={theme.textSec} />
+            <p style={{ ...styles.emptyText, color: theme.textSec }}>Nenhuma versão encontrada no histórico.</p>
           </div>
         ) : (
           <div style={styles.listGrid}>
@@ -591,16 +600,22 @@ export default function TabHistoricoVersao() {
               const versaoAtualItem = item.nrVersaoSistemaSistema;
               const isAtiva = versaoAtivaGlobal === versaoAtualItem;
               return (
-                <div key={item.id || versaoAtualItem} style={{
-                  ...styles.cardVersao,
-                  borderColor: isAtiva ? '#3b82f6' : '#e2e8f0',
-                  boxShadow: isAtiva ? '0 4px 12px rgba(59, 130, 246, 0.08)' : '0 1px 3px rgba(0,0,0,0.02)'
-                }}>
+                <div 
+                  key={item.id || versaoAtualItem} 
+                  onClick={() => setVersaoSelecionada(item)} // 🌟 Ao clicar no card, abre o modal de detalhes igual ao de avisos
+                  style={{
+                    ...styles.cardVersao,
+                    cursor: 'pointer',
+                    background: theme.bgCard,
+                    borderColor: isAtiva ? theme.primary : theme.border,
+                    boxShadow: isAtiva ? `0 4px 12px rgba(59, 130, 246, 0.08)` : '0 1px 3px rgba(0,0,0,0.02)'
+                  }}
+                >
                   <div style={styles.versaoHeader}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                      <div style={styles.versionIconBadge}>
-                        <FiGitCommit size={16} color="#3b82f6" />
-                        <span style={styles.tituloVersao}>v{versaoAtualItem}</span>
+                      <div style={{ ...styles.versionIconBadge, background: isModoNoturno ? '#1e293b' : '#eff6ff' }}>
+                        <FiGitCommit size={16} color={theme.primary} />
+                        <span style={{ ...styles.tituloVersao, color: theme.primary }}>v{versaoAtualItem}</span>
                       </div>
 
                       {item.nrVersaoSchemaSistema !== undefined && (
@@ -618,16 +633,19 @@ export default function TabHistoricoVersao() {
                           <FiEye size={12} /> Visível para Lojistas
                         </span>
                       ) : (
-                        <span style={styles.badgeOculto}>
+                        <span style={{ ...styles.badgeOculto, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}>
                           <FiEyeOff size={12} /> Oculta (Apenas Master)
                         </span>
                       )}
                     </div>
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={styles.dataVersao}>{item.tsDataAtualizacao}</span>
+                      <span style={{ ...styles.dataVersao, color: theme.textSec }}>{item.tsDataAtualizacao}</span>
                       <button 
-                        onClick={() => excluirVersao(versaoAtualItem, item.ano)} 
+                        onClick={(e) => {
+                          e.stopPropagation(); // Evita abrir o modal ao clicar na lixeira
+                          excluirVersao(versaoAtualItem);
+                        }} 
                         style={styles.btnExcluir} 
                         title="Excluir Versão do Histórico"
                       >
@@ -636,12 +654,11 @@ export default function TabHistoricoVersao() {
                     </div>
                   </div>
 
-                  {/* Nome amigável totalmente abrangente formatado para o lojista */}
-                  <span style={styles.tipoVersao}>{formatarNomeModuloParaLojista(item.dsPaginaAfetada)}</span>
+                  <span style={{ ...styles.tipoVersao, color: theme.textSec }}>{formatarNomeModuloParaLojista(item.dsPaginaAfetada)}</span>
 
                   <ul style={styles.listaMudancas}>
                     {item.dsDescricao?.map((mudanca: string, idx: number) => (
-                      <li key={idx} style={styles.itemMudanca}>
+                      <li key={idx} style={{ ...styles.itemMudanca, color: theme.textMain }}>
                         <FiCheckCircle size={14} color="#10b981" style={{ marginTop: '2px', flexShrink: 0 }} />
                         <span>{mudanca}</span>
                       </li>
@@ -658,7 +675,7 @@ export default function TabHistoricoVersao() {
           <button 
             onClick={carregarMaisVersoes} 
             disabled={loadingMore}
-            style={styles.btnCarregarMais}
+            style={{ ...styles.btnCarregarMais, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textMain }}
           >
             {loadingMore ? "Carregando mais..." : <>Carregar mais versões antigas <FiChevronDown /></>}
           </button>
@@ -681,10 +698,8 @@ const styles: any = {
     display: 'flex', 
     alignItems: 'center', 
     gap: '12px', 
-    background: '#fff', 
     padding: '14px 18px', 
     borderRadius: '12px', 
-    border: '1px solid #e2e8f0', 
     boxShadow: '0 1px 3px rgba(0,0,0,0.02)' 
   },
   searchInput: { 
@@ -692,24 +707,19 @@ const styles: any = {
     outline: 'none', 
     width: '100%', 
     fontSize: '14px', 
-    background: 'transparent',
-    color: '#1e293b'
+    background: 'transparent'
   },
   clearSearchBtn: {
-    background: '#f1f5f9',
     border: 'none',
     padding: '4px 10px',
     borderRadius: '6px',
     fontSize: '11px',
     cursor: 'pointer',
-    color: '#64748b',
     fontWeight: '600'
   },
   cardCadastro: { 
-    background: '#fff', 
     padding: '28px', 
     borderRadius: '16px', 
-    border: '1px solid #e2e8f0', 
     boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' 
   },
   cardHeaderTitle: {
@@ -721,13 +731,11 @@ const styles: any = {
   h3: { 
     fontSize: "15px", 
     fontWeight: "800", 
-    color: "#1e293b", 
     textTransform: 'uppercase',
     letterSpacing: '0.3px'
   },
   helpText: { 
     fontSize: '13px', 
-    color: '#64748b', 
     marginBottom: '22px',
     lineHeight: '1.5'
   },
@@ -750,7 +758,6 @@ const styles: any = {
   label: { 
     fontSize: '11px', 
     fontWeight: '700', 
-    color: '#475569', 
     textTransform: 'uppercase',
     display: 'flex',
     alignItems: 'center',
@@ -761,11 +768,8 @@ const styles: any = {
   input: { 
     padding: '11px 12px', 
     borderRadius: '8px', 
-    border: '1px solid #cbd5e1', 
     fontSize: '13px', 
     outline: 'none', 
-    background: '#fff',
-    color: '#1e293b',
     width: '100%',
     boxSizing: 'border-box',
     transition: 'border-color 0.2s'
@@ -773,34 +777,27 @@ const styles: any = {
   select: { 
     padding: '11px 12px', 
     borderRadius: '8px', 
-    border: '1px solid #cbd5e1', 
     fontSize: '13px', 
     outline: 'none', 
-    background: '#fff', 
     cursor: 'pointer',
-    color: '#1e293b',
     width: '100%',
     boxSizing: 'border-box'
   },
   textarea: { 
     padding: '12px 14px', 
     borderRadius: '8px', 
-    border: '1px solid #cbd5e1', 
     fontSize: '13px', 
     height: '110px', 
     outline: 'none', 
     resize: 'vertical',
     fontFamily: 'inherit',
-    color: '#1e293b',
     lineHeight: '1.5'
   },
   checkboxContainer: {
     display: 'flex',
     alignItems: 'center',
-    background: '#f8fafc',
     padding: '12px 14px',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0'
+    borderRadius: '8px'
   },
   checkboxLabel: {
     display: 'flex',
@@ -808,8 +805,7 @@ const styles: any = {
     gap: '10px',
     cursor: 'pointer',
     fontSize: '13px',
-    fontWeight: '600',
-    color: '#334155'
+    fontWeight: '600'
   },
   checkboxInput: {
     width: '16px',
@@ -817,7 +813,6 @@ const styles: any = {
     cursor: 'pointer'
   },
   btnSalvar: { 
-    background: '#3b82f6', 
     color: '#fff', 
     padding: '13px 22px', 
     borderRadius: '9px', 
@@ -847,15 +842,12 @@ const styles: any = {
   subTitleHeading: {
     fontSize: '14px',
     fontWeight: '700',
-    color: '#334155',
     textTransform: 'uppercase',
     letterSpacing: '0.3px'
   },
   badgeCount: {
     fontSize: '12px',
     fontWeight: '600',
-    color: '#64748b',
-    background: '#e2e8f0',
     padding: '3px 10px',
     borderRadius: '20px'
   },
@@ -865,10 +857,9 @@ const styles: any = {
     gap: '15px'
   },
   cardVersao: { 
-    background: '#fff', 
     padding: '22px', 
     borderRadius: '14px', 
-    border: '1px solid #e2e8f0', 
+    border: '1px solid',
     transition: 'all 0.2s'
   },
   versaoHeader: { 
@@ -883,14 +874,12 @@ const styles: any = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    background: '#eff6ff',
     padding: '4px 10px',
     borderRadius: '8px'
   },
   tituloVersao: { 
     fontSize: '14px', 
-    fontWeight: '800', 
-    color: '#1d4ed8' 
+    fontWeight: '800' 
   },
   badgeSchema: {
     fontSize: '10px',
@@ -925,8 +914,6 @@ const styles: any = {
   badgeOculto: {
     fontSize: '10px',
     fontWeight: '700',
-    background: '#f1f5f9',
-    color: '#64748b',
     padding: '3px 8px',
     borderRadius: '6px',
     display: 'flex',
@@ -936,12 +923,10 @@ const styles: any = {
   },
   dataVersao: { 
     fontSize: '12px', 
-    color: '#64748b', 
     fontWeight: '600' 
   },
   tipoVersao: { 
     fontSize: '11px', 
-    color: '#64748b', 
     fontWeight: '700', 
     textTransform: 'uppercase', 
     display: 'block', 
@@ -961,7 +946,6 @@ const styles: any = {
     alignItems: 'flex-start', 
     gap: '10px', 
     fontSize: '13px', 
-    color: '#334155',
     lineHeight: '1.4'
   },
   emptyContainer: {
@@ -969,15 +953,12 @@ const styles: any = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#fff',
     padding: '40px',
     borderRadius: '12px',
-    border: '1px solid #e2e8f0',
     gap: '10px'
   },
   emptyText: { 
     textAlign: 'center', 
-    color: '#64748b', 
     fontSize: '13px' 
   },
   btnExcluir: { 
@@ -993,8 +974,6 @@ const styles: any = {
     transition: 'background 0.2s'
   },
   btnCarregarMais: {
-    background: '#f1f5f9',
-    color: '#475569',
     padding: '12px',
     borderRadius: '8px',
     border: 'none',
@@ -1007,9 +986,15 @@ const styles: any = {
     gap: '8px',
     marginTop: '10px',
     transition: 'background 0.2s'
-  }
+  },
+  // 🌟 Estilos padronizados iguais aos do modal de Avisos
+  overlayMaster: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
+  modalVisualizar: { padding: '30px', borderRadius: '24px', maxWidth: '600px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' },
+  modalVisHeader: { fontSize: '14px', fontWeight: '900', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px', textTransform: 'uppercase' },
+  historicoScroll: { maxHeight: '400px', overflowY: 'auto', paddingRight: '10px', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' },
+  modalVisSub: { display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: '800' },
+  modalVisBtn: { width: '100%', padding: '15px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }
 };
-
 // Este componente (TabHistoricoVersao.tsx) é o painel de gerenciamento e controle do histórico de versões do sistema.
 // Ele permite que o administrador Master cadastre novas tags de atualização (composição de versão semântica), 
 // defina a versão do Schema do banco de dados, selecione o módulo/área afetada, descreva as alterações linha a linha 

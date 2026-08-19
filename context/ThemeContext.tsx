@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, getDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 
 export const PALETA_LIGHT = {
@@ -29,26 +29,35 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isModoNoturno, setIsModoNoturno] = useState(false);
 
   useEffect(() => {
-    let unsubscribe = () => {};
+    let unsubscribeLoja = () => {};
 
-    // Escuta a autenticação para pegar o ID do lojista
-    const unsubAuth = auth.onAuthStateChanged((user) => {
+    const unsubAuth = auth.onAuthStateChanged(async (user) => {
       if (user) {
-        // Escuta em tempo real o documento do lojista no Firestore
-        // Isso garante que se você mudar o status no painel, o contexto atualiza
-        unsubscribe = onSnapshot(doc(db, "lojistas", user.uid), (snap) => {
-          if (snap.exists()) {
-            const dados = snap.data();
-            const modo = dados?.aparencia?.isModoNoturno || false;
-            setIsModoNoturno(modo);
+        try {
+          // 1. Descobre o ID real da loja (tratando se o UID for da collection usuarios ou lojistas)
+          let lojaIdReal = user.uid;
+          const userSnap = await getDoc(doc(db, "usuarios", user.uid));
+          if (userSnap.exists() && userSnap.data().lojaId) {
+            lojaIdReal = userSnap.data().lojaId;
           }
-        });
+
+          // 2. Escuta em tempo real o documento correto do lojista no Firestore
+          unsubscribeLoja = onSnapshot(doc(db, "lojistas", lojaIdReal), (snap) => {
+            if (snap.exists()) {
+              const dados = snap.data();
+              const modo = dados?.aparencia?.isModoNoturno || false;
+              setIsModoNoturno(modo);
+            }
+          });
+        } catch (error) {
+          console.error("Erro ao carregar tema do lojista:", error);
+        }
       }
     });
 
     return () => {
       unsubAuth();
-      unsubscribe();
+      unsubscribeLoja();
     };
   }, []);
 

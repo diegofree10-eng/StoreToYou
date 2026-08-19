@@ -7,8 +7,11 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage
 import { FiUploadCloud, FiTrash2, FiImage } from "react-icons/fi";
 import ImageCropperModal from "@/utils/ImageCropperModal"; // Para o Logotipo
 import ImageCropperModalBanner from "@/utils/ImageCropperModalBanner"; // Para os Banners (proporção 1100x380)
+import { useTheme } from "@/context/ThemeContext";
 
 export default function TabAparenciaLandPage() {
+    const { theme, isModoNoturno } = useTheme();
+
     const [loading, setLoading] = useState(true);
     const [logoTipo, setLogoTipo] = useState("");
     const [tempLogoFile, setTempLogoFile] = useState<File | null>(null);
@@ -143,7 +146,7 @@ export default function TabAparenciaLandPage() {
         }
     };
 
-    if (loading) return <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>Carregando painel...</div>;
+    if (loading) return <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Carregando painel...</div>;
 
     return (
         <div style={styles.container}>
@@ -169,26 +172,26 @@ export default function TabAparenciaLandPage() {
             )}
 
             <div style={styles.headerBox}>
-                <h2 style={styles.title}>Aparência da Landing Page</h2>
-                <p style={styles.subtitle}>Gerencie a identidade visual e os banners do carrossel principal.</p>
+                <h2 style={{ ...styles.title, color: theme.textMain }}>Aparência da Landing Page</h2>
+                <p style={{ ...styles.subtitle, color: theme.textSec }}>Gerencie a identidade visual e os banners do carrossel principal.</p>
             </div>
 
             {/* LOGOTIPO COM O CROPPER */}
-            <div style={styles.sectionCard}>
-                <h3 style={styles.h3}>Logotipo do Sistema</h3>
-                <p style={styles.helpText}>Utilize uma imagem limpa. O sistema ajustará automaticamente para o formato padrão otimizado.</p>
+            <div style={{ ...styles.sectionCard, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+                <h3 style={{ ...styles.h3, color: theme.textSec }}>Logotipo do Sistema</h3>
+                <p style={{ ...styles.helpText, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec }}>Utilize uma imagem limpa. O sistema ajustará automaticamente para o formato padrão otimizado.</p>
 
-                <div style={styles.bannerField}>
-                    <div style={{ ...styles.bannerPreview, height: '100px', width: '200px', margin: '0 auto' }}>
+                <div style={{ ...styles.bannerField, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
+                    <div style={{ ...styles.bannerPreview, height: '100px', width: '200px', margin: '0 auto', background: theme.bgCard, border: `1px dashed ${theme.border}` }}>
                         {logoTipo ? (
                             <img src={logoTipo} alt="Logotipo" style={{ maxHeight: "80px", width: "auto", objectFit: "contain" }} />
                         ) : (
-                            <FiImage size={24} color="#cbd5e1" />
+                            <FiImage size={24} color={theme.textSec} />
                         )}
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
-                        <label style={styles.uploadTrigger}>
+                        <label style={{ ...styles.uploadTrigger, background: theme.bgCard, border: `1px solid ${theme.border}`, color: theme.textMain }}>
                             <FiUploadCloud /> {uploadingLogo ? "Processando..." : logoTipo ? "Trocar Logotipo" : "Escolher Logotipo"}
                             <input 
                                 type="file" 
@@ -205,9 +208,9 @@ export default function TabAparenciaLandPage() {
             </div>
 
             {/* BANNERS DO CARROSSEL COM O CROPPER */}
-            <div style={styles.sectionCard}>
-                <h3 style={styles.h3}>Banners do Carrossel (Início)</h3>
-                <p style={styles.helpText}>Tamanho recomendado: <b>1100 x 380 pixels</b> (o cropper abrirá automaticamente para ajuste perfeito).</p>
+            <div style={{ ...styles.sectionCard, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+                <h3 style={{ ...styles.h3, color: theme.textSec }}>Banners do Carrossel (Início)</h3>
+                <p style={{ ...styles.helpText, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec }}>Tamanho recomendado: <b>1100 x 380 pixels</b> (o cropper abrirá automaticamente para ajuste perfeito).</p>
 
                 <div style={styles.bannerGrid}>
                     {[0, 1, 2].map((index) => {
@@ -216,9 +219,9 @@ export default function TabAparenciaLandPage() {
                         const urlSalva = banners[index];
 
                         return (
-                            <div key={index} style={styles.bannerField}>
+                            <div key={index} style={{ ...styles.bannerField, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                    <label style={styles.label}>Banner {num}</label>
+                                    <label style={{ ...styles.label, color: theme.textSec }}>Banner {num}</label>
                                     {(arquivo || urlSalva) && (
                                         <button type="button" onClick={() => handleExcluirBanner(index)} style={styles.btnRemoverLixeira}>
                                             <FiTrash2 size={13} /> Excluir Banner
@@ -226,18 +229,18 @@ export default function TabAparenciaLandPage() {
                                     )}
                                 </div>
 
-                                <div style={styles.bannerPreview}>
+                                <div style={{ ...styles.bannerPreview, background: theme.bgCard, border: `1px dashed ${theme.border}` }}>
                                     {arquivo ? (
                                         <img src={URL.createObjectURL(arquivo)} style={styles.imgFull} alt={`Preview ${num}`} />
                                     ) : urlSalva ? (
                                         <img src={urlSalva} style={styles.imgFull} alt={`Salvo ${num}`} />
                                     ) : (
-                                        <FiImage size={30} color="#cbd5e1" />
+                                        <FiImage size={30} color={theme.textSec} />
                                     )}
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                    <label style={styles.uploadTrigger}>
+                                    <label style={{ ...styles.uploadTrigger, background: theme.bgCard, border: `1px solid ${theme.border}`, color: theme.textMain }}>
                                         <FiUploadCloud /> {arquivo || urlSalva ? "Trocar Imagem" : "Escolher Imagem"}
                                         <input 
                                             type="file" 
@@ -271,17 +274,17 @@ export default function TabAparenciaLandPage() {
 const styles: any = {
     container: { maxWidth: "1000px", margin: "0 auto", padding: "20px", fontFamily: "'Inter', sans-serif" },
     headerBox: { marginBottom: "30px" },
-    title: { fontSize: "24px", fontWeight: "800", color: "#1e293b", marginBottom: "8px" },
-    subtitle: { fontSize: "14px", color: "#64748b" },
-    sectionCard: { background: "#fff", borderRadius: "16px", padding: "25px", border: "1px solid #e2e8f0", marginBottom: "25px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" },
-    h3: { fontSize: "14px", fontWeight: "800", color: "#475569", marginBottom: "8px", textTransform: 'uppercase' },
-    label: { fontSize: "12px", fontWeight: "600", color: "#64748b", display: 'block' },
-    helpText: { fontSize: '13px', color: '#64748b', marginBottom: '20px', background: '#f1f5f9', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #055bb1' },
+    title: { fontSize: "24px", fontWeight: "800", marginBottom: "8px" },
+    subtitle: { fontSize: "14px" },
+    sectionCard: { borderRadius: "16px", padding: "25px", marginBottom: "25px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" },
+    h3: { fontSize: "14px", fontWeight: "800", marginBottom: "8px", textTransform: 'uppercase' },
+    label: { fontSize: "12px", fontWeight: "600", display: 'block' },
+    helpText: { fontSize: '13px', marginBottom: '20px', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #055bb1' },
     bannerGrid: { display: 'flex', flexDirection: 'column', gap: '20px' },
-    bannerField: { border: '1px solid #e2e8f0', padding: '15px', borderRadius: '12px', background: '#f8fafc' },
-    bannerPreview: { width: '100%', aspectRatio: '1100 / 380', background: '#fff', borderRadius: '8px', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    bannerField: { padding: '15px', borderRadius: '12px' },
+    bannerPreview: { width: '100%', aspectRatio: '1100 / 380', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
     imgFull: { width: '100%', height: '100%', objectFit: 'cover' },
-    uploadTrigger: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', color: '#475569' },
+    uploadTrigger: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' },
     btnSalvarAlteracao: { flex: 1, padding: '12px', background: '#055bb1', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' },
     btnRemoverLixeira: { background: '#fee2e2', color: '#ef4444', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }
 };

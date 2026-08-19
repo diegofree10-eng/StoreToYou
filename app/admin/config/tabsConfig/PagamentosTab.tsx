@@ -1,22 +1,13 @@
 "use client";
 
+import { useTheme } from "@/context/ThemeContext";
+
 export default function PagamentosTab({
   config,
   setConfig,
-  masterLiberouMeioPagamento,
-  theme
+  masterLiberouMeioPagamento
 }: any) {
-
-  const currentTheme = theme || {
-    bgCard: "#ffffff",
-    textMain: "#1e293b",
-    textSec: "#64748b",
-    border: "#e2e8f0",
-    inputBg: "#ffffff",
-    primary: "#2563eb"
-  };
-
-  const isDark = currentTheme.inputBg !== "#ffffff";
+  const { theme, isModoNoturno } = useTheme();
 
   // Função auxiliar para atualizar o tipo de chave ou o valor da chave mantendo a estrutura
   const handleChavePixChange = (campo: "tipo" | "valor", valor: string) => {
@@ -43,25 +34,25 @@ export default function PagamentosTab({
 
   return (
     <section>
-      <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Recebimento Manual</h3>
+      <h3 style={{ ...styles.h3, color: theme.textMain }}>Recebimento Manual</h3>
       
       <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <label style={{ ...styles.label, color: currentTheme.textSec }}>Tipo de Chave PIX</label>
+        <label style={{ ...styles.label, color: theme.textSec }}>Tipo de Chave PIX</label>
         <select
-          style={{ ...styles.select, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
+          style={{ ...styles.select, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
           value={pixObj.tipo || "telefone"}
           onChange={e => handleChavePixChange("tipo", e.target.value)}
         >
-          <option value="telefone" style={{ background: currentTheme.inputBg }}>Celular / Telefone</option>
-          <option value="cpf" style={{ background: currentTheme.inputBg }}>CPF</option>
-          <option value="cnpj" style={{ background: currentTheme.inputBg }}>CNPJ</option>
-          <option value="email" style={{ background: currentTheme.inputBg }}>E-mail</option>
-          <option value="aleatoria" style={{ background: currentTheme.inputBg }}>Chave Aleatória (EVP)</option>
+          <option value="telefone" style={{ background: theme.bgApp, color: theme.textMain }}>Celular / Telefone</option>
+          <option value="cpf" style={{ background: theme.bgApp, color: theme.textMain }}>CPF</option>
+          <option value="cnpj" style={{ background: theme.bgApp, color: theme.textMain }}>CNPJ</option>
+          <option value="email" style={{ background: theme.bgApp, color: theme.textMain }}>E-mail</option>
+          <option value="aleatoria" style={{ background: theme.bgApp, color: theme.textMain }}>Chave Aleatória (EVP)</option>
         </select>
 
-        <label style={{ ...styles.label, color: currentTheme.textSec }}>Chave PIX ({pixObj.tipo?.toUpperCase() || "TELEFONE"})</label>
+        <label style={{ ...styles.label, color: theme.textSec }}>Chave PIX ({pixObj.tipo?.toUpperCase() || "TELEFONE"})</label>
         <input
-          style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
+          style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
           value={pixObj.valor || ""}
           onChange={e => handleChavePixChange("valor", e.target.value)}
           placeholder={
@@ -71,23 +62,23 @@ export default function PagamentosTab({
             'Digite sua chave Pix'
           }
         />
-        <span style={{ fontSize: '11px', color: currentTheme.textSec }}>
+        <span style={{ fontSize: '11px', color: theme.textSec }}>
           {pixObj.tipo === 'telefone' && '💡 Digite apenas o DDD e o número. O sistema ajustará o formato automaticamente para o padrão do Banco Central.'}
         </span>
       </div>
 
-      <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Gateways de Checkout Ativos</h3>
-      <p style={{ ...styles.helpText, background: isDark ? '#0f172a' : '#f1f5f9', color: currentTheme.textSec, borderLeft: `4px solid ${currentTheme.primary}` }}>
+      <h3 style={{ ...styles.h3, color: theme.textMain }}>Gateways de Checkout Ativos</h3>
+      <p style={{ ...styles.helpText, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec, borderLeft: `4px solid ${theme.primary}` }}>
         Habilite as chaves do intermediador que você possui conta ativa. O recebimento online depende do seu plano contratado.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {masterLiberouMeioPagamento("mercado_pago") && (
           <div style={{
-            background: config.pagamentos.dsMercadoPago?.ativo ? (isDark ? '#0c4a6e' : '#f0f9ff') : (isDark ? '#1e293b' : '#f8fafc'),
+            background: config.pagamentos.dsMercadoPago?.ativo ? (isModoNoturno ? '#0c4a6e' : '#f0f9ff') : (isModoNoturno ? theme.bgApp : '#f8fafc'),
             padding: '20px',
             borderRadius: '15px',
-            border: config.pagamentos.dsMercadoPago?.ativo ? '1px solid #009ee3' : `1px solid ${currentTheme.border}`
+            border: config.pagamentos.dsMercadoPago?.ativo ? '1px solid #009ee3' : `1px solid ${theme.border}`
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <b style={{ color: '#009ee3', fontSize: '13px' }}>MERCADO PAGO Checkout</b>
@@ -106,9 +97,9 @@ export default function PagamentosTab({
 
             {config.pagamentos.dsMercadoPago?.ativo && (
               <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ ...styles.label, color: currentTheme.textSec }}>Public Key</label>
+                <label style={{ ...styles.label, color: theme.textSec }}>Public Key</label>
                 <input
-                  style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
+                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   value={config.pagamentos.dsMercadoPago.publicKey || ""}
                   onChange={e => setConfig({
                     ...config,
@@ -118,9 +109,9 @@ export default function PagamentosTab({
                     }
                   })}
                 />
-                <label style={{ ...styles.label, color: currentTheme.textSec }}>Access Token</label>
+                <label style={{ ...styles.label, color: theme.textSec }}>Access Token</label>
                 <input
-                  style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
+                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   type="password"
                   value={config.pagamentos.dsMercadoPago.accessToken || ""}
                   onChange={e => setConfig({
@@ -138,10 +129,10 @@ export default function PagamentosTab({
 
         {masterLiberouMeioPagamento("pagseguro") && (
           <div style={{
-            background: config.pagamentos.dsPagSeguro?.ativo ? (isDark ? '#431407' : '#fdf8f5') : (isDark ? '#1e293b' : '#f8fafc'),
+            background: config.pagamentos.dsPagSeguro?.ativo ? (isModoNoturno ? '#431407' : '#fdf8f5') : (isModoNoturno ? theme.bgApp : '#f8fafc'),
             padding: '20px',
             borderRadius: '15px',
-            border: config.pagamentos.dsPagSeguro?.ativo ? '1px solid #ff6c00' : `1px solid ${currentTheme.border}`
+            border: config.pagamentos.dsPagSeguro?.ativo ? '1px solid #ff6c00' : `1px solid ${theme.border}`
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <b style={{ color: '#ff6c00', fontSize: '13px' }}>PAGSEGURO Checkout Transparente</b>
@@ -160,9 +151,9 @@ export default function PagamentosTab({
 
             {config.pagamentos.dsPagSeguro?.ativo && (
               <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ ...styles.label, color: currentTheme.textSec }}>E-mail da Conta PagSeguro</label>
+                <label style={{ ...styles.label, color: theme.textSec }}>E-mail da Conta PagSeguro</label>
                 <input
-                  style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
+                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   placeholder="exemplo@loja.com.br"
                   value={config.pagamentos.dsPagSeguro.email || ""}
                   onChange={e => setConfig({
@@ -173,9 +164,9 @@ export default function PagamentosTab({
                     }
                   })}
                 />
-                <label style={{ ...styles.label, color: currentTheme.textSec }}>Token de Production PagSeguro</label>
+                <label style={{ ...styles.label, color: theme.textSec }}>Token de Production PagSeguro</label>
                 <input
-                  style={{ ...styles.input, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}
+                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   type="password"
                   placeholder="Cole o token de contingência"
                   value={config.pagamentos.dsPagSeguro.token || ""}

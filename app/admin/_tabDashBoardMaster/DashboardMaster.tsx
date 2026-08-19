@@ -5,6 +5,9 @@ import {
   collection, doc, onSnapshot, getDoc, query, orderBy
 } from "firebase/firestore";
 
+// --- IMPORTAÇÃO DO TEMA GLOBAL ---
+import { useTheme } from "@/context/ThemeContext";
+
 // --- IMPORTAÇÃO DAS TABS ---
 import TabPanorama from "./TabPanorama";
 import TabPlanos from "./TabPlanos";
@@ -21,6 +24,8 @@ import {
 } from "react-icons/fi";
 
 export default function PainelMasterFesta() {
+  const { theme, isModoNoturno } = useTheme(); // 🌟 Consumindo o tema global
+
   const [activeTab, setActiveTab] = useState("PANORAMA");
   const [loading, setLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -76,7 +81,6 @@ export default function PainelMasterFesta() {
       console.error("Erro na busca de denúncias:", error.message);
     });
 
-    // Escuta em tempo real a versão atual do sistema para exibir no topo direito
     const unsubVersao = onSnapshot(doc(db, "configuracoes", "sistema"), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
@@ -101,10 +105,16 @@ export default function PainelMasterFesta() {
     setTimeout(() => setNotificacao({ exibir: false, texto: "", tipo: "sucesso" }), 3000);
   };
 
-  if (loading || !isAuthorized) return <div style={styles.loader}><p>Autenticando Master...</p></div>;
+  if (loading || !isAuthorized) {
+    return (
+      <div style={{ ...styles.loader, backgroundColor: theme.bgApp, color: theme.textSec }}>
+        <p>Autenticando Master...</p>
+      </div>
+    );
+  }
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, backgroundColor: theme.bgApp, color: theme.textMain }}>
       {/* TOAST DE NOTIFICAÇÃO */}
       {notificacao.exibir && (
         <div style={{ ...styles.toast, backgroundColor: notificacao.tipo === "sucesso" ? "#10b981" : "#ef4444" }}>
@@ -112,26 +122,31 @@ export default function PainelMasterFesta() {
         </div>
       )}
 
-      <header style={styles.header}>
+      <header style={{ ...styles.header, borderBottom: `1px solid ${theme.border}` }}>
         <div>
-          <h2 style={styles.welcomeText}>Seja bem-vindo,</h2>
-          <h1 style={styles.masterTitle}>MASTER</h1>
-          <p style={styles.subTitle}>Painel de Controle Administrativo</p>
+          <h2 style={{ ...styles.welcomeText, color: theme.textSec }}>Seja bem-vindo,</h2>
+          <h1 style={{ ...styles.masterTitle, color: theme.textMain }}>MASTER</h1>
+          <p style={{ ...styles.subTitle, color: theme.textSec }}>Painel de Controle Administrativo</p>
         </div>
 
         {/* BLOCO DIREITO: VERSÃO RECENTE */}
         <div style={styles.headerRightContainer}>
           {versaoAtualMaster && (
-            <div style={styles.versionBadge}>
-              <FiGitCommit size={15} color="#3b82f6" />
+            <div style={{ 
+              ...styles.versionBadge, 
+              background: isModoNoturno ? '#1e293b' : '#eff6ff', 
+              border: `1px solid ${isModoNoturno ? '#334155' : '#bfdbfe'}`,
+              color: isModoNoturno ? '#60a5fa' : '#1e40af'
+            }}>
+              <FiGitCommit size={15} color={theme.primary} />
               <span>v{versaoAtualMaster}</span>
             </div>
           )}
         </div>
       </header>
 
-      {/* NAVEGAÇÃO ENTRE TABS (Com quebra de linha ativada - wrap) */}
-      <nav style={styles.tabContainer}>
+      {/* NAVEGAÇÃO ENTRE TABS */}
+      <nav style={{ ...styles.tabContainer, borderBottom: `2px solid ${theme.border}` }}>
         {[
           { id: "PANORAMA", icon: <FiTrendingUp />, label: "PANORAMA" },
           { id: "FINANCEIRO", icon: <FiDollarSign />, label: "FINANCEIRO" },
@@ -141,15 +156,23 @@ export default function PainelMasterFesta() {
           { id: "VERSOES", icon: <FiGitCommit />, label: "VERSÕES" },
           { id: "AVISOS", icon: <FiMessageSquare />, label: "AVISOS" },
           { id: "DENUNCIAS", icon: <FiAlertTriangle />, label: "DENÚNCIAS" }
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            style={activeTab === t.id ? styles.tabActive : styles.tab}
-          >
-            {t.icon} {t.label}
-          </button>
-        ))}
+        ].map(t => {
+          const isActive = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              style={{
+                ...styles.tab,
+                color: isActive ? theme.primary : theme.textSec,
+                borderBottomColor: isActive ? theme.primary : "transparent",
+                fontWeight: isActive ? "700" : "600"
+              }}
+            >
+              {t.icon} {t.label}
+            </button>
+          );
+        })}
       </nav>
 
       {/* CONTEÚDO DINÂMICO DAS TABS */}
@@ -191,35 +214,29 @@ export default function PainelMasterFesta() {
 }
 
 const styles: any = {
-  container: { padding: "20px", backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif" },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', padding: '0 10px', flexWrap: 'wrap', gap: '15px' },
+  container: { padding: "20px", minHeight: "100vh", fontFamily: "'Inter', sans-serif", transition: "background 0.3s, color 0.3s" },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', padding: '0 10px 15px 10px', flexWrap: 'wrap', gap: '15px' },
 
   welcomeText: {
     fontSize: "14px",
-    color: "#64748b",
     fontWeight: "500",
     marginBottom: "-4px"
   },
   masterTitle: {
     fontSize: "32px",
-    color: "#0f172a",
     fontWeight: "900",
     letterSpacing: '-1.5px',
     margin: 0
   },
-  subTitle: { color: '#64748b', fontSize: '14px', marginTop: '4px' },
+  subTitle: { fontSize: '14px', marginTop: '4px' },
 
   headerRightContainer: { display: 'flex', alignItems: 'center', gap: '12px' },
-  statsHeader: { background: '#fff', padding: '10px 16px', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' },
-  statItem: { display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', color: '#3b82f6', fontSize: '13px' },
-  versionBadge: { display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '10px 14px', borderRadius: '10px', fontWeight: '800', color: '#1e40af', fontSize: '13px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
-  loader: { height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#64748b' },
+  versionBadge: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '10px', fontWeight: '800', fontSize: '13px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+  loader: { height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' },
   toast: { position: 'fixed', top: '20px', right: '20px', padding: '15px 25px', borderRadius: '10px', color: '#fff', fontWeight: 'bold', zIndex: 1000, boxShadow: '0 10px 15px rgba(0,0,0,0.1)' },
   
-  // ALTERADO: Removido overflowX e adicionado flexWrap para as abas quebrarem linha perfeitamente
-  tabContainer: { display: "flex", gap: "10px", flexWrap: 'wrap', borderBottom: "2px solid #e2e8f0", marginBottom: "25px", paddingBottom: '10px' },
+  tabContainer: { display: "flex", gap: "10px", flexWrap: 'wrap', marginBottom: "25px", paddingBottom: '0px' },
   
-  tab: { padding: "12px 20px", border: "none", borderBottom: "3px solid transparent", background: "none", cursor: "pointer", color: "#94a3b8", fontWeight: "600", display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', transition: '0.2s' },
-  tabActive: { padding: "12px 20px", border: "none", borderBottom: "3px solid #3b82f6", background: "none", cursor: "pointer", color: "#3b82f6", fontWeight: "700", display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' },
+  tab: { padding: "12px 20px", border: "none", borderBottom: "3px solid transparent", background: "none", cursor: "pointer", display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', transition: '0.2s' },
   mainContent: { maxWidth: '1200px', margin: '0 auto' },
 };

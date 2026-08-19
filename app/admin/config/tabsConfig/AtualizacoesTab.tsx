@@ -4,54 +4,55 @@ import React, { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { FiGitCommit, FiCheckCircle } from "react-icons/fi";
+import { useTheme } from "@/context/ThemeContext";
 
-export default function AtualizacoesTab({ config, theme }: any) {
-  const currentTheme = theme || {
-    bgCard: "#ffffff",
-    textMain: "#1e293b",
-    textSec: "#64748b",
-    border: "#e2e8f0",
-    inputBg: "#ffffff",
-    primary: "#2563eb"
-  };
-
-  const isDark = currentTheme.inputBg !== "#ffffff";
+export default function AtualizacoesTab({ config }: any) {
+  const { theme, isModoNoturno } = useTheme();
 
   const [versoes, setVersoes] = useState<any[]>([]);
 
   useEffect(() => {
-    const q = query(collection(db, "historico_versoes_2026"), orderBy("nrVersaoSistemaSistema", "desc"));
+    const anoAtual = new Date().getFullYear();
+    const nomeColecao = `historico_versoes_${anoAtual}`;
+
+    const q = query(collection(db, nomeColecao), orderBy("nrVersaoSistemaSistema", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       setVersoes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Erro ao buscar histórico de versões:", error);
     });
     return () => unsub();
   }, []);
 
-  const versaoAtualLoja = config?.atualizacao?.nrVersaoSistemaLogista || config?.sistema?.dsVersaoSistema || "0.0.0";
+  const versaoAtualLoja = 
+    config?.atualizacao?.nrVersaoSistemaLogista || 
+    config?.sistema?.dsVersaoSistema || 
+    config?.dsVersaoSistema || 
+    "0.0.0";
 
   return (
     <section>
       <div style={styles.headerBox}>
         <div>
-          <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Histórico de Atualizações do Sistema</h3>
-          <p style={{ ...styles.helpText, color: currentTheme.textSec }}>Acompanhe as melhorias, correções e novidades aplicadas na plataforma.</p>
+          <h3 style={{ ...styles.h3, color: theme.textMain }}>Histórico de Atualizações do Sistema</h3>
+          <p style={{ ...styles.helpText, color: theme.textSec }}>Acompanhe as melhorias, correções e novidades aplicadas na plataforma.</p>
         </div>
         <div style={{ 
           ...styles.badgeVersaoAtual, 
-          background: isDark ? '#064e3b' : '#ecfdf5', 
-          color: isDark ? '#6ee7b7' : '#047857', 
-          borderTop: `1px solid ${isDark ? '#065f46' : '#a7f3d0'}`,
-          borderRight: `1px solid ${isDark ? '#065f46' : '#a7f3d0'}`,
-          borderBottom: `1px solid ${isDark ? '#065f46' : '#a7f3d0'}`,
-          borderLeft: `1px solid ${isDark ? '#065f46' : '#a7f3d0'}`
+          background: isModoNoturno ? '#064e3b' : '#ecfdf5', 
+          color: isModoNoturno ? '#6ee7b7' : '#047857', 
+          borderTop: `1px solid ${isModoNoturno ? '#065f46' : '#a7f3d0'}`,
+          borderRight: `1px solid ${isModoNoturno ? '#065f46' : '#a7f3d0'}`,
+          borderBottom: `1px solid ${isModoNoturno ? '#065f46' : '#a7f3d0'}`,
+          borderLeft: `1px solid ${isModoNoturno ? '#065f46' : '#a7f3d0'}`
         }}>
-          Sua Versão: <strong style={{ color: currentTheme.textMain }}>{versaoAtualLoja}</strong>
+          Sua Versão: <strong style={{ color: theme.textMain }}>{versaoAtualLoja}</strong>
         </div>
       </div>
 
       <div style={styles.timelineContainer}>
         {versoes.length === 0 ? (
-          <p style={{ ...styles.emptyText, color: currentTheme.textSec }}>Nenhum registro de atualização encontrado.</p>
+          <p style={{ ...styles.emptyText, color: theme.textSec }}>Nenhum registro de atualização encontrado para este ano.</p>
         ) : (
           versoes.map((item) => {
             const versaoItem = item.nrVersaoSistemaSistema || item.versao;
@@ -63,30 +64,30 @@ export default function AtualizacoesTab({ config, theme }: any) {
                 key={item.id} 
                 style={{
                   ...styles.cardVersao,
-                  background: isDark ? '#0f172a' : '#f8fafc',
-                  borderTop: `1px solid ${currentTheme.border}`,
-                  borderRight: `1px solid ${currentTheme.border}`,
-                  borderBottom: `1px solid ${currentTheme.border}`,
+                  background: isModoNoturno ? theme.bgApp : '#f8fafc',
+                  borderTop: `1px solid ${theme.border}`,
+                  borderRight: `1px solid ${theme.border}`,
+                  borderBottom: `1px solid ${theme.border}`,
                   borderLeft: `4px solid ${corBordaEsquerda}`
                 }}
               >
                 <div style={styles.versaoHeader}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FiGitCommit size={18} color={isAtual ? "#059669" : currentTheme.textSec} />
-                    <span style={{ ...styles.tituloVersao, color: currentTheme.textMain }}>Versão {versaoItem}</span>
+                    <FiGitCommit size={18} color={isAtual ? "#059669" : theme.textSec} />
+                    <span style={{ ...styles.tituloVersao, color: theme.textMain }}>Versão {versaoItem}</span>
                     {item.nrVersaoSchemaSistema !== undefined && (
                       <span style={styles.badgeSchema}>Schema v{item.nrVersaoSchemaSistema}</span>
                     )}
                     {isAtual && <span style={styles.tagAtual}>Atual</span>}
                   </div>
-                  <span style={{ ...styles.dataVersao, color: currentTheme.textSec }}>{item.tsDataAtualizacao || item.data}</span>
+                  <span style={{ ...styles.dataVersao, color: theme.textSec }}>{item.tsDataAtualizacao || item.data}</span>
                 </div>
 
-                <span style={{ ...styles.tipoVersao, color: currentTheme.primary }}>{item.dsPaginaAfetada || item.tipo}</span>
+                <span style={{ ...styles.tipoVersao, color: theme.primary }}>{item.dsPaginaAfetada || item.tipo}</span>
 
                 <ul style={styles.listaMudancas}>
                   {(item.dsDescricao || item.mudancas)?.map((mudanca: string, idx: number) => (
-                    <li key={idx} style={{ ...styles.itemMudanca, color: currentTheme.textSec }}>
+                    <li key={idx} style={{ ...styles.itemMudanca, color: theme.textSec }}>
                       <FiCheckCircle size={14} color="#10b981" style={{ marginTop: '2px', flexShrink: 0 }} />
                       <span>{mudanca}</span>
                     </li>

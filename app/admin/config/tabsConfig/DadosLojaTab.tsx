@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FiTrash2 } from "react-icons/fi";
 import { aplicarMascara } from "@/utils/formatters";
 import ImageCropperModalLogo from "@/utils/ImageCropperModalLogo";
+import { useTheme } from "@/context/ThemeContext";
 
 export default function DadosLojaTab({
   config,
@@ -14,21 +15,10 @@ export default function DadosLojaTab({
   setShowHorarioModal,
   adicionarRedeSocial,
   atualizarRedeSocial,
-  removerRedeSocial,
-  theme
+  removerRedeSocial
 }: any) {
+  const { theme, isModoNoturno } = useTheme();
   const slugAtual = config.dadosLoja?.dsSlug || "sua-loja";
-
-  const currentTheme = theme || {
-    bgCard: "#ffffff",
-    textMain: "#1e293b",
-    textSec: "#64748b",
-    border: "#e2e8f0",
-    inputBg: "#ffffff",
-    primary: "#2563eb"
-  };
-
-  const isDark = currentTheme.inputBg !== "#ffffff";
 
   // Estado local para gerenciar o arquivo temporário que irá para o Cropper
   const [tempFileLogo, setTempFileLogo] = useState<File | null>(null);
@@ -51,11 +41,11 @@ export default function DadosLojaTab({
         />
       )}
 
-      <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Marca e Redes Sociais</h3>
+      <h3 style={{ ...styles.h3, color: theme.textMain }}>Marca e Redes Sociais</h3>
       
       {/* Linha com Logo e Link da Loja */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <div style={{ ...styles.previewLogo, background: isDark ? '#0f172a' : '#f1f5f9', border: `1px solid ${currentTheme.border}`, color: currentTheme.textSec }}>
+        <div style={{ ...styles.previewLogo, background: isModoNoturno ? theme.bgApp : '#f1f5f9', border: `1px solid ${theme.border}`, color: theme.textSec }}>
           {novaLogo ? (
             <img src={URL.createObjectURL(novaLogo)} style={styles.imgFull} alt="Logo Preview" />
           ) : config.dadosLoja.dsLogoLoja ? (
@@ -74,23 +64,23 @@ export default function DadosLojaTab({
                 setTempFileLogo(file);
               }
             }} 
-            style={{ fontSize: '11px', color: currentTheme.textMain }} 
+            style={{ fontSize: '11px', color: theme.textMain }} 
           />
         </div>
       </div>
 
       {/* Campo do Link da Loja */}
-      <div style={{ marginBottom: '15px', background: isDark ? '#0f172a' : '#f8fafc', padding: '12px', borderRadius: '10px', border: `1px solid ${currentTheme.border}` }}>
-        <label style={{ ...styles.label, color: currentTheme.textSec }}>Link da sua Loja (Endereço Web)</label>
+      <div style={{ marginBottom: '15px', background: isModoNoturno ? theme.bgApp : '#f8fafc', padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}` }}>
+        <label style={{ ...styles.label, color: theme.textSec }}>Link da sua Loja (Endereço Web)</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} className="link-loja-row">
           <input
             type="text"
             readOnly
             style={{ 
               ...styles.input, 
-              backgroundColor: isDark ? '#1e293b' : '#f1f5f9', 
-              color: currentTheme.textSec, 
-              border: `1px solid ${currentTheme.border}`,
+              backgroundColor: isModoNoturno ? theme.bgCard : '#f1f5f9', 
+              color: theme.textSec, 
+              border: `1px solid ${theme.border}`,
               cursor: 'not-allowed', 
               fontWeight: 'bold' 
             }}
@@ -102,7 +92,7 @@ export default function DadosLojaTab({
               navigator.clipboard.writeText(`https://www.storetoyou.com.br/${slugAtual}`);
               alert("Link copiado para a área de transferência!");
             }}
-            style={{ background: currentTheme.primary, color: '#fff', border: 'none', padding: '12px 16px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            style={{ background: theme.primary, color: '#fff', border: 'none', padding: '12px 16px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
             Copiar Link
           </button>
@@ -111,14 +101,14 @@ export default function DadosLojaTab({
 
       {/* Restante do formulário */}
       <div style={{ marginBottom: '15px' }}>
-        <label style={{ ...styles.label, color: currentTheme.textSec }}>Segmento da Loja (Ramo) *</label>
+        <label style={{ ...styles.label, color: theme.textSec }}>Segmento da Loja (Ramo) *</label>
         <select
           required
           style={{ 
             ...styles.input, 
-            background: currentTheme.inputBg, 
-            color: currentTheme.textMain, 
-            border: `1px solid ${currentTheme.border}` 
+            background: theme.bgApp, 
+            color: theme.textMain, 
+            border: `1px solid ${theme.border}` 
           }}
           value={
             ["festas", "confeitaria", "papelaria", "decoracao", "roupas"].includes(config.dadosLoja.dsSeguimentoLoja)
@@ -134,26 +124,26 @@ export default function DadosLojaTab({
             }
           }}
         >
-          <option value="" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Selecione o ramo...</option>
-          <option value="festas" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Artigos para Festas</option>
-          <option value="confeitaria" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Confeitaria e Doces</option>
-          <option value="papelaria" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Papelaria Criativa</option>
-          <option value="decoracao" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Decoração de Eventos</option>
-          <option value="roupas" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Vestuário e Acessórios</option>
-          <option value="Outros" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Outros (digitar abaixo)</option>
+          <option value="" style={{ background: theme.bgApp, color: theme.textMain }}>Selecione o ramo...</option>
+          <option value="festas" style={{ background: theme.bgApp, color: theme.textMain }}>Artigos para Festas</option>
+          <option value="confeitaria" style={{ background: theme.bgApp, color: theme.textMain }}>Confeitaria e Doces</option>
+          <option value="papelaria" style={{ background: theme.bgApp, color: theme.textMain }}>Papelaria Criativa</option>
+          <option value="decoracao" style={{ background: theme.bgApp, color: theme.textMain }}>Decoração de Eventos</option>
+          <option value="roupas" style={{ background: theme.bgApp, color: theme.textMain }}>Vestuário e Acessórios</option>
+          <option value="Outros" style={{ background: theme.bgApp, color: theme.textMain }}>Outros (digitar abaixo)</option>
         </select>
       </div>
 
       {!["festas", "confeitaria", "papelaria", "decoracao", "roupas", ""].includes(config.dadosLoja.dsSeguimentoLoja) && (
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>Qual o seu segmento? *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>Qual o seu segmento? *</label>
           <input
             required
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             placeholder="Ex: Pet Shop, Artesanato, etc."
             value={config.dadosLoja.dsSeguimentoLoja === "OUTROS_MODE" ? "" : config.dadosLoja.dsSeguimentoLoja}
@@ -162,10 +152,10 @@ export default function DadosLojaTab({
         </div>
       )}
 
-      <div style={{ background: isDark ? '#0f172a' : '#f8fafc', padding: '15px', borderRadius: '15px', marginBottom: '20px', border: `1px solid ${currentTheme.border}` }}>
+      <div style={{ background: isModoNoturno ? theme.bgApp : '#f8fafc', padding: '15px', borderRadius: '15px', marginBottom: '20px', border: `1px solid ${theme.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>Minhas Redes Sociais</label>
-          <button type="button" onClick={adicionarRedeSocial} style={{ ...styles.btnAdicionarSocial, background: currentTheme.primary }}>+ Adicionar</button>
+          <label style={{ ...styles.label, color: theme.textSec }}>Minhas Redes Sociais</label>
+          <button type="button" onClick={adicionarRedeSocial} style={{ ...styles.btnAdicionarSocial, background: theme.primary }}>+ Adicionar</button>
         </div>
         {config.dadosLoja.redesSociais?.map((rede: any, index: number) => (
           <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }} className="rede-social-row">
@@ -173,26 +163,26 @@ export default function DadosLojaTab({
               style={{ 
                 ...styles.input, 
                 flex: 1, 
-                background: currentTheme.inputBg, 
-                color: currentTheme.textMain, 
-                border: `1px solid ${currentTheme.border}` 
+                background: theme.bgApp, 
+                color: theme.textMain, 
+                border: `1px solid ${theme.border}` 
               }}
               value={rede.plataforma}
               onChange={e => atualizarRedeSocial(index, 'plataforma', e.target.value)}
             >
-              <option value="instagram" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Instagram</option>
-              <option value="facebook" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Facebook</option>
-              <option value="tiktok" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>TikTok</option>
-              <option value="youtube" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>YouTube</option>
-              <option value="site" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Site Próprio</option>
+              <option value="instagram" style={{ background: theme.bgApp, color: theme.textMain }}>Instagram</option>
+              <option value="facebook" style={{ background: theme.bgApp, color: theme.textMain }}>Facebook</option>
+              <option value="tiktok" style={{ background: theme.bgApp, color: theme.textMain }}>TikTok</option>
+              <option value="youtube" style={{ background: theme.bgApp, color: theme.textMain }}>YouTube</option>
+              <option value="site" style={{ background: theme.bgApp, color: theme.textMain }}>Site Próprio</option>
             </select>
             <input
               style={{ 
                 ...styles.input, 
                 flex: 2, 
-                background: currentTheme.inputBg, 
-                color: currentTheme.textMain, 
-                border: `1px solid ${currentTheme.border}` 
+                background: theme.bgApp, 
+                color: theme.textMain, 
+                border: `1px solid ${theme.border}` 
               }}
               value={rede.url || ""}
               onChange={e => atualizarRedeSocial(index, 'url', e.target.value)}
@@ -207,14 +197,14 @@ export default function DadosLojaTab({
 
       <div style={styles.inputRow}>
         <div style={{ flex: 1 }}>
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>WhatsApp Loja *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>WhatsApp Loja *</label>
           <input
             required
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             value={config.dadosLoja.nrWhatssapLoja || ""}
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, nrWhatssapLoja: aplicarMascara(e.target.value, 'tel') } })}
@@ -222,9 +212,9 @@ export default function DadosLojaTab({
         </div>
       </div>
 
-      <h3 style={{ ...styles.h3, marginTop: '25px', color: currentTheme.textMain }}>Endereço da Loja</h3>
+      <h3 style={{ ...styles.h3, marginTop: '25px', color: theme.textMain }}>Endereço da Loja</h3>
 
-      <label style={{ display: 'flex', alignItems: 'center', marginBottom: '15px', cursor: 'pointer', fontSize: '13px', color: currentTheme.textMain }}>
+      <label style={{ display: 'flex', alignItems: 'center', marginBottom: '15px', cursor: 'pointer', fontSize: '13px', color: theme.textMain }}>
         <input
           type="checkbox"
           style={{ marginRight: '10px' }}
@@ -250,42 +240,42 @@ export default function DadosLojaTab({
 
       <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-row-1">
         <div style={{ flex: 3 }} className="input-group-mobile">
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>Rua *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>Rua *</label>
           <input
             required
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             value={config.dadosLoja.dsRuaLoja || ""}
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsRuaLoja: e.target.value } })}
           />
         </div>
         <div style={{ flex: 1 }} className="input-group-mobile">
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>Nº *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>Nº *</label>
           <input
             required
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             value={config.dadosLoja.nrNumeroLoja || ""}
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, nrNumeroLoja: e.target.value } })}
           />
         </div>
         <div style={{ flex: 1.5 }} className="input-group-mobile">
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>CEP *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>CEP *</label>
           <input
             required
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             value={config.dadosLoja.dsCepLoja || ""}
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsCepLoja: aplicarMascara(e.target.value, 'cep') } })}
@@ -296,43 +286,43 @@ export default function DadosLojaTab({
 
       <div style={{ ...styles.inputRow, marginTop: '10px' }} className="endereco-row-2">
         <div style={{ flex: 2 }} className="input-group-mobile">
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>Bairro *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>Bairro *</label>
           <input
             required
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             value={config.dadosLoja.dsBairroLoja || ""}
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsBairroLoja: e.target.value } })}
           />
         </div>
         <div style={{ flex: 2 }} className="input-group-mobile">
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>Cidade *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>Cidade *</label>
           <input
             required
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             value={config.dadosLoja.dsCidadeLoja || ""}
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsCidadeLoja: e.target.value } })}
           />
         </div>
         <div style={{ flex: 0.5 }} className="input-group-mobile">
-          <label style={{ ...styles.label, color: currentTheme.textSec }}>UF *</label>
+          <label style={{ ...styles.label, color: theme.textSec }}>UF *</label>
           <input
             required
             maxLength={2}
             style={{ 
               ...styles.input, 
-              background: currentTheme.inputBg, 
-              color: currentTheme.textMain, 
-              border: `1px solid ${currentTheme.border}` 
+              background: theme.bgApp, 
+              color: theme.textMain, 
+              border: `1px solid ${theme.border}` 
             }}
             value={config.dadosLoja.dsUfLoja || ""}
             onChange={e => setConfig({ ...config, dadosLoja: { ...config.dadosLoja, dsUfLoja: e.target.value.toUpperCase() } })}
@@ -340,7 +330,7 @@ export default function DadosLojaTab({
         </div>
       </div>
 
-      <button type="button" onClick={() => setShowHorarioModal(true)} style={{ ...styles.btnHorario, marginTop: '20px', background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}>
+      <button type="button" onClick={() => setShowHorarioModal(true)} style={{ ...styles.btnHorario, marginTop: '20px', background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}>
         🕗 Configurar Horários
       </button>
 

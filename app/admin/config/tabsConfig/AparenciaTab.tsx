@@ -1,38 +1,30 @@
 "use client";
 
+import { useTheme } from "@/context/ThemeContext";
+
 export default function AparenciaTab({
   config,
   setConfig,
-  masterLiberou,
-  theme
+  masterLiberou
 }: any) {
-  const currentTheme = theme || {
-    bgCard: "#ffffff",
-    textMain: "#1e293b",
-    textSec: "#64748b",
-    border: "#e2e8f0",
-    inputBg: "#ffffff",
-    primary: "#2563eb"
-  };
-
-  const isDark = currentTheme.inputBg !== "#ffffff";
+  const { theme, isModoNoturno } = useTheme();
 
   return (
     <section>
-      <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Personalização Visual do Catálogo</h3>
+      <h3 style={{ ...styles.h3, color: theme.textMain }}>Personalização Visual do Catálogo</h3>
       {!masterLiberou("temPersonalizacao") ? (
         <div style={styles.lockNotice}>🔒 Bloqueado no plano {config.dadosLoja.dsPlanoLoja}.</div>
       ) : (
         <>
-          <p style={{ ...styles.helpText, background: isDark ? '#0f172a' : '#f1f5f9', color: currentTheme.textSec, borderLeft: `4px solid ${currentTheme.primary}` }}>
+          <p style={{ ...styles.helpText, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec, borderLeft: `4px solid ${theme.primary}` }}>
             Ajuste as cores principais do seu site para combinar com sua marca.
           </p>
           
           {/* Campo de Ativação do Modo Noturno */}
-          <div style={{ ...styles.modoNoturnoContainer, background: isDark ? '#0f172a' : '#f8fafc', border: `1px solid ${currentTheme.border}` }}>
+          <div style={{ ...styles.modoNoturnoContainer, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
             <div style={styles.modoNoturnoInfo}>
-              <span style={{ ...styles.label, color: currentTheme.textMain, marginBottom: '2px' }}>Modo Noturno (Dark Mode)</span>
-              <span style={{ ...styles.subLabel, color: currentTheme.textSec }}>Ativar tema escuro padrão para os clientes</span>
+              <span style={{ ...styles.label, color: theme.textMain, marginBottom: '2px' }}>Modo Noturno (Dark Mode)</span>
+              <span style={{ ...styles.subLabel, color: theme.textSec }}>Ativar tema escuro padrão para os clientes</span>
             </div>
             <label style={styles.switch}>
               <input
@@ -46,7 +38,7 @@ export default function AparenciaTab({
               />
               <span style={{
                 ...styles.slider,
-                backgroundColor: config.aparencia?.isModoNoturno ? currentTheme.primary : '#cbd5e1'
+                backgroundColor: config.aparencia?.isModoNoturno ? theme.primary : '#cbd5e1'
               }}>
                 <span style={{
                   ...styles.sliderThumb,
@@ -56,39 +48,39 @@ export default function AparenciaTab({
             </label>
           </div>
 
-          <div style={{ ...styles.colorGrid, background: isDark ? '#0f172a' : '#f8fafc', border: `1px solid ${currentTheme.border}` }}>
+          <div style={{ ...styles.colorGrid, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
             <div style={styles.colorItem}>
-              <label style={{ ...styles.label, color: currentTheme.textSec }}>Cor Principal</label>
+              <label style={{ ...styles.label, color: theme.textSec }}>Cor Principal</label>
               <input
                 type="color"
-                style={{ ...styles.inputColor, background: currentTheme.inputBg, border: `2px solid ${currentTheme.border}` }}
+                style={{ ...styles.inputColor, background: theme.bgApp, border: `2px solid ${theme.border}` }}
                 value={config.aparencia?.dscorPrincipal || "#FF8C00"}
                 onChange={e => setConfig({ ...config, aparencia: { ...config.aparencia, dscorPrincipal: e.target.value } })}
               />
             </div>
             <div style={styles.colorItem}>
-              <label style={{ ...styles.label, color: currentTheme.textSec }}>Cor Secundária</label>
+              <label style={{ ...styles.label, color: theme.textSec }}>Cor Secundária</label>
               <input
                 type="color"
-                style={{ ...styles.inputColor, background: currentTheme.inputBg, border: `2px solid ${currentTheme.border}` }}
+                style={{ ...styles.inputColor, background: theme.bgApp, border: `2px solid ${theme.border}` }}
                 value={config.aparencia?.dscorSecundaria || "#F5F5DC"}
                 onChange={e => setConfig({ ...config, aparencia: { ...config.aparencia, dscorSecundaria: e.target.value } })}
               />
             </div>
             <div style={styles.colorItem}>
-              <label style={{ ...styles.label, color: currentTheme.textSec }}>Cor de Fundo</label>
+              <label style={{ ...styles.label, color: theme.textSec }}>Cor de Fundo</label>
               <input
                 type="color"
-                style={{ ...styles.inputColor, background: currentTheme.inputBg, border: `2px solid ${currentTheme.border}` }}
+                style={{ ...styles.inputColor, background: theme.bgApp, border: `2px solid ${theme.border}` }}
                 value={config.aparencia?.dscorFundo || "#f8fafc"}
                 onChange={e => setConfig({ ...config, aparencia: { ...config.aparencia, dscorFundo: e.target.value } })}
               />
             </div>
             <div style={styles.colorItem}>
-              <label style={{ ...styles.label, color: currentTheme.textSec }}>Cor dos Textos</label>
+              <label style={{ ...styles.label, color: theme.textSec }}>Cor dos Textos</label>
               <input
                 type="color"
-                style={{ ...styles.inputColor, background: currentTheme.inputBg, border: `2px solid ${currentTheme.border}` }}
+                style={{ ...styles.inputColor, background: theme.bgApp, border: `2px solid ${theme.border}` }}
                 value={config.aparencia?.dscorTextoCard || "#1e293b"}
                 onChange={e => setConfig({ ...config, aparencia: { ...config.aparencia, dscorTextoCard: e.target.value } })}
               />
@@ -99,9 +91,9 @@ export default function AparenciaTab({
             style={{ 
               ...styles.btnRestaurar, 
               marginTop: '20px', 
-              background: isDark ? '#0f172a' : '#f1f5f9', 
-              color: currentTheme.textMain, 
-              border: `1px dashed ${currentTheme.border}` 
+              background: isModoNoturno ? theme.bgApp : '#f1f5f9', 
+              color: theme.textMain, 
+              border: `1px dashed ${theme.border}` 
             }}
             onClick={() => setConfig({
               ...config,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FiImage, FiUploadCloud, FiTrash2 } from "react-icons/fi";
 import { excluirBannerCompleto } from "@/utils/exclusao";
 import ImageCropperModalBanner from "@/utils/ImageCropperModalBanner";
+import { useTheme } from "@/context/ThemeContext";
 
 export default function BannerTab({
   uid,
@@ -15,19 +16,9 @@ export default function BannerTab({
   arquivoBanner3,
   setArquivoBanner1,
   setArquivoBanner2,
-  setArquivoBanner3,
-  theme
+  setArquivoBanner3
 }: any) {
-  const currentTheme = theme || {
-    bgCard: "#ffffff",
-    textMain: "#1e293b",
-    textSec: "#64748b",
-    border: "#e2e8f0",
-    inputBg: "#ffffff",
-    primary: "#2563eb"
-  };
-
-  const isDark = currentTheme.inputBg !== "#ffffff";
+  const { theme, isModoNoturno } = useTheme();
 
   const [bannerParaCortar, setBannerParaCortar] = useState<number | null>(null);
   const [tempFileTemp, setTempFileTemp] = useState<File | null>(null);
@@ -57,8 +48,8 @@ export default function BannerTab({
         />
       )}
 
-      <h3 style={{ ...styles.h3, color: currentTheme.textMain }}>Banners do Carrossel (Início)</h3>
-      <p style={{ ...styles.helpText, background: isDark ? '#0f172a' : '#f1f5f9', color: currentTheme.textSec, borderLeft: `4px solid ${currentTheme.primary}` }}>
+      <h3 style={{ ...styles.h3, color: theme.textMain }}>Banners do Carrossel (Início)</h3>
+      <p style={{ ...styles.helpText, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec, borderLeft: `4px solid ${theme.primary}` }}>
         Utilize imagens na proporção exata de <b>1100 x 380 pixels</b> (o cropper abrirá automaticamente para ajuste). Vincule o banner a uma categoria para redirecionamento automático.
       </p>
       
@@ -96,9 +87,9 @@ export default function BannerTab({
           };
 
           return (
-            <div key={num} style={{ ...styles.bannerField, background: isDark ? '#0f172a' : '#f8fafc', border: `1px solid ${currentTheme.border}` }}>
+            <div key={num} style={{ ...styles.bannerField, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <label style={{ ...styles.label, color: currentTheme.textSec }}>Banner {num}</label>
+                <label style={{ ...styles.label, color: theme.textSec }}>Banner {num}</label>
                 {(arquivo || urlSalva) && (
                   <button type="button" onClick={handleExcluirOuLimpar} style={styles.btnRemoverLixeira}>
                     <FiTrash2 size={13} /> Excluir Banner
@@ -106,18 +97,18 @@ export default function BannerTab({
                 )}
               </div>
 
-              <div style={{ ...styles.bannerPreview, background: isDark ? '#1e293b' : '#fff', border: `1px dashed ${currentTheme.border}` }}>
+              <div style={{ ...styles.bannerPreview, background: isModoNoturno ? theme.bgCard : '#fff', border: `1px dashed ${theme.border}` }}>
                 {arquivo ? (
                   <img src={URL.createObjectURL(arquivo)} style={styles.imgFull} alt={`Preview ${num}`} />
                 ) : urlSalva ? (
                   <img src={urlSalva} style={styles.imgFull} alt={`Salvo ${num}`} />
                 ) : (
-                  <FiImage size={30} color={currentTheme.textSec} />
+                  <FiImage size={30} color={theme.textSec} />
                 )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
-                <label style={{ ...styles.uploadTrigger, background: currentTheme.inputBg, color: currentTheme.textMain, border: `1px solid ${currentTheme.border}` }}>
+                <label style={{ ...styles.uploadTrigger, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}>
                   <FiUploadCloud /> {arquivo || urlSalva ? "Trocar Imagem" : "Escolher Imagem"}
                   <input 
                     type="file" 
@@ -139,9 +130,9 @@ export default function BannerTab({
                       ...styles.input, 
                       fontSize: '12px', 
                       padding: '10px', 
-                      background: currentTheme.inputBg, 
-                      color: currentTheme.textMain, 
-                      border: `1px solid ${currentTheme.border}` 
+                      background: theme.bgApp, 
+                      color: theme.textMain, 
+                      border: `1px solid ${theme.border}` 
                     }}
                     value={config.banners[linkCampo] || ""}
                     onChange={e => setConfig({
@@ -149,9 +140,9 @@ export default function BannerTab({
                       banners: { ...config.banners, [linkCampo]: e.target.value }
                     })}
                   >
-                    <option value="" style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>Sem link (Categoria Alvo)</option>
+                    <option value="" style={{ background: theme.bgApp, color: theme.textMain }}>Sem link (Categoria Alvo)</option>
                     {listaCategorias.map((cat: any) => (
-                      <option key={cat.id} value={cat.nome} style={{ background: currentTheme.inputBg, color: currentTheme.textMain }}>{cat.nome}</option>
+                      <option key={cat.id} value={cat.nome} style={{ background: theme.bgApp, color: theme.textMain }}>{cat.nome}</option>
                     ))}
                   </select>
                 </div>

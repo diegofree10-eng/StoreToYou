@@ -515,7 +515,7 @@ export default function AdminConfig() {
         {abaAtiva === 'pagamentos' && <PagamentosTab config={config} setConfig={setConfig} masterLiberouMeioPagamento={masterLiberouMeioPagamento} theme={theme} />}
         {abaAtiva === 'aparencia' && <AparenciaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} theme={theme} />}
         {abaAtiva === 'sistema' && <SistemaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} setShowCupomModal={setShowCupomModal} showToken={showToken} setShowToken={setShowToken} theme={theme} />}
-        {abaAtiva === 'mensagens' && <MensagensTab config={config} confirmarLeituraMensagem={confirmarLeituraMensagem} theme={theme} />}
+        {abaAtiva === 'mensagens' && <MensagensTab config={config} lojistaId={uid} confirmarLeituraMensagem={confirmarLeituraMensagem} theme={theme} />}
         {abaAtiva === 'assinatura' && <AssinaturaTab config={config} planosConfig={planosConfig} setShowUpgradeModal={setShowUpgradeModal} theme={theme} />}
         {abaAtiva === 'atualizacoes' && <AtualizacoesTab config={config} theme={theme} />}
 

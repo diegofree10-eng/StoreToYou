@@ -3,6 +3,7 @@ import React from "react";
 import { db } from "@/lib/firebase";
 import { doc, deleteDoc } from "firebase/firestore";
 import { FiAlertTriangle, FiTrash2 } from "react-icons/fi";
+import { useTheme } from "@/context/ThemeContext";
 
 interface TabDenunciasProps {
   denuncias: any[];
@@ -10,6 +11,7 @@ interface TabDenunciasProps {
 }
 
 export default function TabDenuncias({ denuncias, mostrarAviso }: TabDenunciasProps) {
+  const { theme, isModoNoturno } = useTheme();
   
   const handleExcluirDenuncia = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir esta denúncia?")) {
@@ -23,38 +25,38 @@ export default function TabDenuncias({ denuncias, mostrarAviso }: TabDenunciasPr
   };
 
   return (
-    <div style={styles.tableContainer}>
-      <div style={styles.headerInfo}>
+    <div style={{ ...styles.tableContainer, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+      <div style={{ ...styles.headerInfo, borderBottom: `1px solid ${theme.border}` }}>
         <FiAlertTriangle size={20} color="#ef4444" />
-        <h3 style={styles.title}>Gestão de Denúncias Recebidas</h3>
+        <h3 style={{ ...styles.title, color: theme.textMain }}>Gestão de Denúncias Recebidas</h3>
       </div>
       
       <table style={styles.table}>
         <thead>
-          <tr>
-            <th style={styles.th}>DATA</th>
-            <th style={styles.th}>LOJISTA</th>
-            <th style={styles.th}>DENUNCIANTE</th>
-            <th style={styles.th}>MOTIVO</th>
-            <th style={styles.th}>AÇÃO</th>
+          <tr style={{ background: isModoNoturno ? '#0f172a' : '#f8fafc', borderBottom: `1px solid ${theme.border}` }}>
+            <th style={{ ...styles.th, color: theme.textSec }}>DATA</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>LOJISTA</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>DENUNCIANTE</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>MOTIVO</th>
+            <th style={{ ...styles.th, color: theme.textSec }}>AÇÃO</th>
           </tr>
         </thead>
         <tbody>
           {denuncias.length === 0 ? (
             <tr>
-              <td colSpan={5} style={styles.noData}>
+              <td colSpan={5} style={{ ...styles.noData, color: theme.textSec }}>
                 Nenhuma denúncia registrada no momento.
               </td>
             </tr>
           ) : (
             denuncias.map((d) => (
-              <tr key={d.id} style={styles.tr}>
-                <td style={styles.td}>{new Date(d.data).toLocaleDateString()}</td>
+              <tr key={d.id} style={{ ...styles.tr, borderBottom: `1px solid ${theme.border}` }}>
+                <td style={{ ...styles.td, color: theme.textSec }}>{new Date(d.data).toLocaleDateString()}</td>
                 <td style={styles.td}>
-                  <strong style={styles.lojaNome}>{d.nomeLojaDenunciada}</strong>
+                  <strong style={{ ...styles.lojaNome, color: theme.textMain }}>{d.nomeLojaDenunciada}</strong>
                 </td>
-                <td style={styles.td}>{d.nomeCliente || "Anônimo"}</td>
-                <td style={styles.td}>{d.motivo}</td>
+                <td style={{ ...styles.td, color: theme.textSec }}>{d.nomeCliente || "Anônimo"}</td>
+                <td style={{ ...styles.td, color: theme.textSec }}>{d.motivo}</td>
                 <td style={styles.td}>
                   <button 
                     style={styles.btnTrash} 
@@ -75,7 +77,6 @@ export default function TabDenuncias({ denuncias, mostrarAviso }: TabDenunciasPr
 
 const styles: any = {
   tableContainer: { 
-    background: "#fff", 
     borderRadius: "20px", 
     overflow: 'hidden', 
     boxShadow: "0 10px 25px rgba(0,0,0,0.03)" 
@@ -84,13 +85,11 @@ const styles: any = {
     padding: '20px',
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    borderBottom: '1px solid #f1f5f9'
+    gap: '10px'
   },
   title: {
     fontSize: '16px',
-    fontWeight: '700',
-    color: '#1e293b'
+    fontWeight: '700'
   },
   table: { 
     width: "100%", 
@@ -99,23 +98,17 @@ const styles: any = {
   th: { 
     padding: "15px 20px", 
     textAlign: 'left', 
-    background: '#f8fafc', 
-    color: '#64748b', 
     fontSize: '12px', 
     fontWeight: '800' 
   },
   td: { 
     padding: "18px 20px", 
-    borderBottom: "1px solid #f1f5f9",
-    fontSize: '14px',
-    color: '#475569'
+    fontSize: '14px'
   },
   tr: { 
     transition: '0.2s',
   },
-  lojaNome: {
-    color: '#0f172a'
-  },
+  lojaNome: {},
   btnTrash: { 
     background: '#fee2e2', 
     color: '#ef4444', 
@@ -132,7 +125,6 @@ const styles: any = {
   noData: {
     padding: '40px', 
     textAlign: 'center', 
-    color: '#94a3b8',
     fontSize: '14px'
   }
 };
