@@ -17,7 +17,7 @@ import {
   startAfter,
   getDocs
 } from "firebase/firestore";
-import { FiGitCommit, FiCheckCircle, FiSave, FiSearch, FiTrash2, FiClock, FiTag, FiCalendar, FiEye, FiEyeOff, FiChevronDown, FiDatabase, FiMessageSquare } from "react-icons/fi";
+import { FiGitCommit, FiCheckCircle, FiSave, FiSearch, FiTrash2, FiClock, FiTag, FiCalendar, FiEye, FiEyeOff, FiChevronDown, FiDatabase, FiPlusCircle, FiList } from "react-icons/fi";
 import { useTheme } from "@/context/ThemeContext";
 
 // Categorias e subpastas estruturadas do sistema para o select agrupado
@@ -94,7 +94,7 @@ const categoriasSistema = {
   ]
 };
 
-// Dicionário completo e abrangente para traduzir todos os nomes internos para termos amigáveis ao lojista
+// Dicionário para traduzir nomes internos para termos amigáveis
 const nomesAmigaveisModulo: { [key: string]: string } = {
   "DASHBOARD MASTER": "Painel Master",
   "DASHBOARD LOJISTA": "Painel do Lojista",
@@ -117,29 +117,29 @@ const nomesAmigaveisModulo: { [key: string]: string } = {
   "TabPanorama": "Panorama Geral",
   "TabPlanos.tsx": "Gerenciamento de Planos",
    
-  "TabCatalogo": "Catálogo de Produtos - DASHBOARD / Catalogo",
-  "TabClientes": "Gestão de Clientes - DASHBOARD / Clientes",
-  "TabDespesas": "Controle de Despesas - DASHBOARD / Despesas",
-  "TabDevolucoes": "Controle de Devoluções - DASHBOARD / Devolucoes",
-  "TabFaturamentoCanais": "Faturamento por Canais - DASHBOARD / Canais de Renda",
-  "TabLucroReal": "Lucro Real - DASHBOARD / Lucro Real",
-  "TabPrecificacao": "Precificação - DASHBOARD / Precificação",
-  "TabRelatorioHistorico": "Relatório Histórico - DASHBOARD / Relatório Histórico",
-  "TabSazonalidade": "Sazonalidade - DASHBOARD / Sazonalidade",
-  "TabVendas": "Gestão de Vendas - DASHBOARD / Vendas",
+  "TabCatalogo": "Catálogo de Produtos",
+  "TabClientes": "Gestão de Clientes",
+  "TabDespesas": "Controle de Despesas",
+  "TabDevolucoes": "Controle de Devoluções",
+  "TabFaturamentoCanais": "Faturamento por Canais",
+  "TabLucroReal": "Lucro Real",
+  "TabPrecificacao": "Precificação",
+  "TabRelatorioHistorico": "Relatório Histórico",
+  "TabSazonalidade": "Sazonalidade",
+  "TabVendas": "Gestão de Vendas",
   "Page": "Página Principal",
   "Layout": "Layout do Sistema",
   "Sidebar": "Menu Lateral",
 
-  "AparenciaTab": "Configuraçoes / Aparência",
-  "AssinaturaTab": "Configuraçoes / Assinatura",
-  "AtualizacoesTab": "Configuraçoes / Atualizações",
-  "BannerTab": "Configuraçoes / Banners",
-  "DadosLojaTab": "Configuraçoes / Dados da Loja",
-  "DadosPessoaisTab": "Configuraçoes / Dados Pessoais",
-  "MensagensTab": "Configuraçoes / Mensagens",
-  "PagamentosTab": "Configuraçoes / Pagamentos",
-  "SistemaTab": "Configuraçoes / Sistema - Cupons",
+  "AparenciaTab": "Configurações / Aparência",
+  "AssinaturaTab": "Configurações / Assinatura",
+  "AtualizacoesTab": "Configurações / Atualizações",
+  "BannerTab": "Configurações / Banners",
+  "DadosLojaTab": "Configurações / Dados da Loja",
+  "DadosPessoaisTab": "Configurações / Dados Pessoais",
+  "MensagensTab": "Configurações / Mensagens",
+  "PagamentosTab": "Configurações / Pagamentos",
+  "SistemaTab": "Configurações / Sistema - Cupons",
 
   "TabCotarFrete": "Pedidos / Cotação de Frete",
   "TabDigital": "Pedidos / Digital",
@@ -179,6 +179,9 @@ interface VersaoItem {
 export default function TabHistoricoVersao() {
   const { theme, isModoNoturno } = useTheme();
 
+  // 🌟 Abas internas: 'cadastrar' ou 'historico'
+  const [abaAtiva, setAbaAtiva] = useState<"cadastrar" | "historico">("cadastrar");
+
   const [versoes, setVersoes] = useState<VersaoItem[]>([]);
   const [versaoAtivaGlobal, setVersaoAtivaGlobal] = useState<string>("");
   const [busca, setBusca] = useState("");
@@ -187,7 +190,7 @@ export default function TabHistoricoVersao() {
   const [lastVisible, setLastVisible] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
 
-  // 🌟 Estado para controlar o modal de visualização (mesmo padrão do TabAvisos)
+  // Modal de detalhes
   const [versaoSelecionada, setVersaoSelecionada] = useState<VersaoItem | null>(null);
 
   const ITENS_POR_PAGINA = 5;
@@ -348,6 +351,7 @@ export default function TabHistoricoVersao() {
       }));
 
       carregarHistoricoInicial();
+      setAbaAtiva("historico"); // Alterna automaticamente para a aba de histórico após salvar
     } catch (error) {
       console.error("Erro ao salvar versão:", error);
       alert("Erro ao salvar a versão no banco de dados.");
@@ -389,7 +393,24 @@ export default function TabHistoricoVersao() {
 
   return (
     <section style={styles.wrapper}>
-      {/* 🌟 MODAL DE VISUALIZAÇÃO DE DETALHES (Mesmo padrão do TabAvisos) */}
+      
+      {/* 🌟 ABAS INTERNAS */}
+      <div style={styles.subTabsHeader}>
+        <button 
+          onClick={() => setAbaAtiva("cadastrar")}
+          style={abaAtiva === "cadastrar" ? { ...styles.subTabBtnActive, background: theme.primary, color: '#fff' } : { ...styles.subTabBtn, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec }}
+        >
+          <FiPlusCircle size={14} /> Cadastrar Nova Versão
+        </button>
+        <button 
+          onClick={() => setAbaAtiva("historico")}
+          style={abaAtiva === "historico" ? { ...styles.subTabBtnActive, background: theme.primary, color: '#fff' } : { ...styles.subTabBtn, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec }}
+        >
+          <FiList size={14} /> Histórico de Atualizações ({versoes.length})
+        </button>
+      </div>
+
+      {/* MODAL DE DETALHES */}
       {versaoSelecionada && (
         <div style={styles.overlayMaster} onClick={() => setVersaoSelecionada(null)}>
           <div style={{ ...styles.modalVisualizar, background: theme.bgCard, border: `1px solid ${theme.border}` }} onClick={e => e.stopPropagation()}>
@@ -425,262 +446,263 @@ export default function TabHistoricoVersao() {
         </div>
       )}
 
-      {/* 1. BARRA DE PESQUISA NO TOPO */}
-      <div style={{ ...styles.searchBox, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
-        <FiSearch color={theme.textSec} size={18} />
-        <input
-          type="text"
-          placeholder="Pesquisar por número da versão, módulo ou alteração..."
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          style={{ ...styles.searchInput, color: theme.textMain }}
-        />
-        {busca && (
-          <button onClick={() => setBusca("")} style={{ ...styles.clearSearchBtn, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}>
-            Limpar
-          </button>
-        )}
-      </div>
+      {/* ABA 1: CADASTRAR NOVA VERSÃO */}
+      {abaAtiva === "cadastrar" && (
+        <div style={{ ...styles.cardCadastro, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+          <div style={styles.cardHeaderTitle}>
+            <FiGitCommit size={20} color={theme.primary} />
+            <h3 style={{ ...styles.h3, color: theme.textMain }}>Cadastrar Nova Versão do Sistema</h3>
+          </div>
+          <p style={{ ...styles.helpText, color: theme.textSec }}>
+            Insira uma nova tag de atualização e informe se há alterações estruturais no banco de dados através da Versão do Schema.
+          </p>
 
-      {/* 2. PAINEL DE CADASTRO / EDIÇÃO */}
-      <div style={{ ...styles.cardCadastro, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
-        <div style={styles.cardHeaderTitle}>
-          <FiGitCommit size={20} color={theme.primary} />
-          <h3 style={{ ...styles.h3, color: theme.textMain }}>Cadastrar Nova Versão do Sistema</h3>
-        </div>
-        <p style={{ ...styles.helpText, color: theme.textSec }}>
-          Insira uma nova tag de atualização e informe se há alterações estruturais no banco de dados através da Versão do Schema.
-        </p>
+          <form onSubmit={salvarVersao} style={styles.formGrid}>
+            <div style={styles.inputRowDesktop}>
+              
+              <div style={styles.inputGroup}>
+                <label style={{ ...styles.label, color: theme.textSec }}>
+                  <FiTag size={12} /> Composição da Versão
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <input
+                    type="text"
+                    value={novaVersao.ano}
+                    readOnly
+                    style={{ ...styles.input, width: '45px', textAlign: 'center', background: isModoNoturno ? theme.bgApp : '#f1f5f9', fontWeight: 'bold', color: theme.textMain, border: `1px solid ${theme.border}` }}
+                    title="Ano base"
+                  />
+                  <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={novaVersao.major}
+                    onChange={e => setNovaVersao({ ...novaVersao, major: e.target.value })}
+                    style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
+                    required
+                  />
+                  <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={novaVersao.minor}
+                    onChange={e => setNovaVersao({ ...novaVersao, minor: e.target.value })}
+                    style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
+                    required
+                  />
+                  <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={novaVersao.patch}
+                    onChange={e => setNovaVersao({ ...novaVersao, patch: e.target.value })}
+                    style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
+                    required
+                  />
+                </div>
+              </div>
 
-        <form onSubmit={salvarVersao} style={styles.formGrid}>
-          <div style={styles.inputRowDesktop}>
-            
-            {/* COMPOSIÇÃO DA VERSÃO */}
-            <div style={styles.inputGroup}>
-              <label style={{ ...styles.label, color: theme.textSec }}>
-                <FiTag size={12} /> Composição da Versão
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <input
-                  type="text"
-                  value={novaVersao.ano}
-                  readOnly
-                  style={{ ...styles.input, width: '45px', textAlign: 'center', background: isModoNoturno ? theme.bgApp : '#f1f5f9', fontWeight: 'bold', color: theme.textMain, border: `1px solid ${theme.border}` }}
-                  title="Ano base"
-                />
-                <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
+              <div style={styles.inputGroup}>
+                <label style={{ ...styles.label, color: theme.textSec }}>
+                  <FiDatabase size={12} /> Versão do Schema (Banco)
+                </label>
                 <input
                   type="number"
                   min="0"
-                  value={novaVersao.major}
-                  onChange={e => setNovaVersao({ ...novaVersao, major: e.target.value })}
-                  style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                  required
-                />
-                <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={novaVersao.minor}
-                  onChange={e => setNovaVersao({ ...novaVersao, minor: e.target.value })}
-                  style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                  required
-                />
-                <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={novaVersao.patch}
-                  onChange={e => setNovaVersao({ ...novaVersao, patch: e.target.value })}
-                  style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
+                  placeholder="Ex: 2"
+                  value={novaVersao.schemaCode}
+                  onChange={e => setNovaVersao({ ...novaVersao, schemaCode: Number(e.target.value) })}
+                  style={{ ...styles.input, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                   required
                 />
               </div>
-            </div>
 
-            {/* VERSÃO DO SCHEMA DO BANCO */}
-            <div style={styles.inputGroup}>
-              <label style={{ ...styles.label, color: theme.textSec }}>
-                <FiDatabase size={12} /> Versão do Schema (Banco)
-              </label>
-              <input
-                type="number"
-                min="0"
-                placeholder="Ex: 2"
-                value={novaVersao.schemaCode}
-                onChange={e => setNovaVersao({ ...novaVersao, schemaCode: Number(e.target.value) })}
-                style={{ ...styles.input, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                required
-              />
-            </div>
+              <div style={styles.inputGroup}>
+                <label style={{ ...styles.label, color: theme.textSec }}>
+                  <FiCalendar size={12} /> Data da Versão
+                </label>
+                <input
+                  type="date"
+                  value={novaVersao.data}
+                  onChange={e => setNovaVersao({ ...novaVersao, data: e.target.value })}
+                  style={{ ...styles.input, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
+                  required
+                />
+              </div>
 
-            {/* DATA DA VERSÃO */}
-            <div style={styles.inputGroup}>
-              <label style={{ ...styles.label, color: theme.textSec }}>
-                <FiCalendar size={12} /> Data da Versão
-              </label>
-              <input
-                type="date"
-                value={novaVersao.data}
-                onChange={e => setNovaVersao({ ...novaVersao, data: e.target.value })}
-                style={{ ...styles.input, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                required
-              />
-            </div>
-
-            {/* ÁREA / MÓDULO AFETADO */}
-            <div style={styles.inputGroup}>
-              <label style={{ ...styles.label, color: theme.textSec }}>Área / Módulo Afetado</label>
-              <select
-                value={novaVersao.tipo}
-                onChange={e => setNovaVersao({ ...novaVersao, tipo: e.target.value })}
-                style={{ ...styles.select, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-              >
-                {Object.entries(categoriasSistema).map(([categoria, paginas]) => (
-                  <optgroup key={categoria} label={categoria} style={{ background: theme.bgCard, color: theme.textMain }}>
-                    {paginas.map((pagina) => {
-                      const valorFormatado = `${categoria} > ${pagina}`;
-                      return (
-                        <option key={pagina} value={valorFormatado}>
-                          {pagina}
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={{ ...styles.label, color: theme.textSec }}>O que mudou? (Digite uma alteração por linha)</label>
-            <textarea
-              placeholder={"- Adicionado suporte ao novo painel financeiro\n- Correção de bugs no fluxo de pedidos"}
-              value={novaVersao.mudancas}
-              onChange={e => setNovaVersao({ ...novaVersao, mudancas: e.target.value })}
-              style={{ ...styles.textarea, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-              required
-            />
-          </div>
-
-          {/* CHECKBOX PARA EXIBIR AO LOJISTA */}
-          <div style={{ ...styles.checkboxContainer, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
-            <label style={{ ...styles.checkboxLabel, color: theme.textMain }}>
-              <input
-                type="checkbox"
-                checked={novaVersao.isExibirLogista}
-                onChange={e => setNovaVersao({ ...novaVersao, isExibirLogista: e.target.checked })}
-                style={styles.checkboxInput}
-              />
-              <span>Exibir esta atualização publicamente no painel do Lojista?</span>
-            </label>
-          </div>
-
-          <button type="submit" style={{ ...styles.btnSalvar, background: theme.primary }} disabled={loading}>
-            <FiSave size={16} /> {loading ? "Salvando versão..." : "Salvar e Publicar Versão"}
-          </button>
-        </form>
-      </div>
-
-      {/* 3. TIMELINE / LISTAGEM COMPLETA DO HISTÓRICO DE VERSÕES */}
-      <div style={styles.timelineContainer}>
-        <div style={styles.listHeaderSection}>
-          <h4 style={{ ...styles.subTitleHeading, color: theme.textMain }}>Histórico de Atualizações Publicadas</h4>
-          <span style={{ ...styles.badgeCount, background: isModoNoturno ? '#334155' : '#e2e8f0', color: theme.textSec }}>{versoesFiltradas.length} versões listadas</span>
-        </div>
-
-        {versoesFiltradas.length === 0 ? (
-          <div style={{ ...styles.emptyContainer, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
-            <FiClock size={32} color={theme.textSec} />
-            <p style={{ ...styles.emptyText, color: theme.textSec }}>Nenhuma versão encontrada no histórico.</p>
-          </div>
-        ) : (
-          <div style={styles.listGrid}>
-            {versoesFiltradas.map((item) => {
-              const versaoAtualItem = item.nrVersaoSistemaSistema;
-              const isAtiva = versaoAtivaGlobal === versaoAtualItem;
-              return (
-                <div 
-                  key={item.id || versaoAtualItem} 
-                  onClick={() => setVersaoSelecionada(item)} // 🌟 Ao clicar no card, abre o modal de detalhes igual ao de avisos
-                  style={{
-                    ...styles.cardVersao,
-                    cursor: 'pointer',
-                    background: theme.bgCard,
-                    borderColor: isAtiva ? theme.primary : theme.border,
-                    boxShadow: isAtiva ? `0 4px 12px rgba(59, 130, 246, 0.08)` : '0 1px 3px rgba(0,0,0,0.02)'
-                  }}
+              <div style={styles.inputGroup}>
+                <label style={{ ...styles.label, color: theme.textSec }}>Área / Módulo Afetado</label>
+                <select
+                  value={novaVersao.tipo}
+                  onChange={e => setNovaVersao({ ...novaVersao, tipo: e.target.value })}
+                  style={{ ...styles.select, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
                 >
-                  <div style={styles.versaoHeader}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                      <div style={{ ...styles.versionIconBadge, background: isModoNoturno ? '#1e293b' : '#eff6ff' }}>
-                        <FiGitCommit size={16} color={theme.primary} />
-                        <span style={{ ...styles.tituloVersao, color: theme.primary }}>v{versaoAtualItem}</span>
-                      </div>
+                  {Object.entries(categoriasSistema).map(([categoria, paginas]) => (
+                    <optgroup key={categoria} label={categoria} style={{ background: theme.bgCard, color: theme.textMain }}>
+                      {paginas.map((pagina) => {
+                        const valorFormatado = `${categoria} > ${pagina}`;
+                        return (
+                          <option key={pagina} value={valorFormatado}>
+                            {pagina}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-                      {item.nrVersaoSchemaSistema !== undefined && (
-                        <span style={styles.badgeSchema}>
-                          Schema v{item.nrVersaoSchemaSistema}
-                        </span>
-                      )}
+            <div style={styles.inputGroup}>
+              <label style={{ ...styles.label, color: theme.textSec }}>O que mudou? (Digite uma alteração por linha)</label>
+              <textarea
+                placeholder={"- Adicionado suporte ao novo painel financeiro\n- Correção de bugs no fluxo de pedidos"}
+                value={novaVersao.mudancas}
+                onChange={e => setNovaVersao({ ...novaVersao, mudancas: e.target.value })}
+                style={{ ...styles.textarea, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
+                required
+              />
+            </div>
 
-                      {isAtiva && (
-                        <span style={styles.badgeOficial}>Versão Atual Ativa</span>
-                      )}
-                      
-                      {item.isExibirLogista ? (
-                        <span style={styles.badgeVisivel}>
-                          <FiEye size={12} /> Visível para Lojistas
-                        </span>
-                      ) : (
-                        <span style={{ ...styles.badgeOculto, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}>
-                          <FiEyeOff size={12} /> Oculta (Apenas Master)
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ ...styles.dataVersao, color: theme.textSec }}>{item.tsDataAtualizacao}</span>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation(); // Evita abrir o modal ao clicar na lixeira
-                          excluirVersao(versaoAtualItem);
-                        }} 
-                        style={styles.btnExcluir} 
-                        title="Excluir Versão do Histórico"
-                      >
-                        <FiTrash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
+            <div style={{ ...styles.checkboxContainer, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
+              <label style={{ ...styles.checkboxLabel, color: theme.textMain }}>
+                <input
+                  type="checkbox"
+                  checked={novaVersao.isExibirLogista}
+                  onChange={e => setNovaVersao({ ...novaVersao, isExibirLogista: e.target.checked })}
+                  style={styles.checkboxInput}
+                />
+                <span>Exibir esta atualização publicamente no painel do Lojista?</span>
+              </label>
+            </div>
 
-                  <span style={{ ...styles.tipoVersao, color: theme.textSec }}>{formatarNomeModuloParaLojista(item.dsPaginaAfetada)}</span>
+            <button type="submit" style={{ ...styles.btnSalvar, background: theme.primary }} disabled={loading}>
+              <FiSave size={16} /> {loading ? "Salvando versão..." : "Salvar e Publicar Versão"}
+            </button>
+          </form>
+        </div>
+      )}
 
-                  <ul style={styles.listaMudancas}>
-                    {item.dsDescricao?.map((mudanca: string, idx: number) => (
-                      <li key={idx} style={{ ...styles.itemMudanca, color: theme.textMain }}>
-                        <FiCheckCircle size={14} color="#10b981" style={{ marginTop: '2px', flexShrink: 0 }} />
-                        <span>{mudanca}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
+      {/* ABA 2: HISTÓRICO DE ATUALIZAÇÕES */}
+      {abaAtiva === "historico" && (
+        <div style={styles.timelineContainer}>
+          
+          {/* BARRA DE PESQUISA */}
+          <div style={{ ...styles.searchBox, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+            <FiSearch color={theme.textSec} size={18} />
+            <input
+              type="text"
+              placeholder="Pesquisar por número da versão, módulo ou alteração..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              style={{ ...styles.searchInput, color: theme.textMain }}
+            />
+            {busca && (
+              <button onClick={() => setBusca("")} style={{ ...styles.clearSearchBtn, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}>
+                Limpar
+              </button>
+            )}
           </div>
-        )}
 
-        {/* BOTÃO CARREGAR MAIS (Paginação) */}
-        {!busca && hasMore && versoes.length > 0 && (
-          <button 
-            onClick={carregarMaisVersoes} 
-            disabled={loadingMore}
-            style={{ ...styles.btnCarregarMais, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textMain }}
-          >
-            {loadingMore ? "Carregando mais..." : <>Carregar mais versões antigas <FiChevronDown /></>}
-          </button>
-        )}
-      </div>
+          <div style={styles.listHeaderSection}>
+            <h4 style={{ ...styles.subTitleHeading, color: theme.textMain }}>Histórico de Atualizações Publicadas</h4>
+            <span style={{ ...styles.badgeCount, background: isModoNoturno ? '#334155' : '#e2e8f0', color: theme.textSec }}>{versoesFiltradas.length} versões listadas</span>
+          </div>
+
+          {versoesFiltradas.length === 0 ? (
+            <div style={{ ...styles.emptyContainer, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+              <FiClock size={32} color={theme.textSec} />
+              <p style={{ ...styles.emptyText, color: theme.textSec }}>Nenhuma versão encontrada no histórico.</p>
+            </div>
+          ) : (
+            <div style={styles.listGrid}>
+              {versoesFiltradas.map((item) => {
+                const versaoAtualItem = item.nrVersaoSistemaSistema;
+                const isAtiva = versaoAtivaGlobal === versaoAtualItem;
+                return (
+                  <div 
+                    key={item.id || versaoAtualItem} 
+                    onClick={() => setVersaoSelecionada(item)}
+                    style={{
+                      ...styles.cardVersao,
+                      cursor: 'pointer',
+                      background: theme.bgCard,
+                      borderColor: isAtiva ? theme.primary : theme.border,
+                      boxShadow: isAtiva ? `0 4px 12px rgba(59, 130, 246, 0.08)` : '0 1px 3px rgba(0,0,0,0.02)'
+                    }}
+                  >
+                    <div style={styles.versaoHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <div style={{ ...styles.versionIconBadge, background: isModoNoturno ? '#1e293b' : '#eff6ff' }}>
+                          <FiGitCommit size={16} color={theme.primary} />
+                          <span style={{ ...styles.tituloVersao, color: theme.primary }}>v{versaoAtualItem}</span>
+                        </div>
+
+                        {item.nrVersaoSchemaSistema !== undefined && (
+                          <span style={styles.badgeSchema}>
+                            Schema v{item.nrVersaoSchemaSistema}
+                          </span>
+                        )}
+
+                        {isAtiva && (
+                          <span style={styles.badgeOficial}>Versão Atual Ativa</span>
+                        )}
+                        
+                        {item.isExibirLogista ? (
+                          <span style={styles.badgeVisivel}>
+                            <FiEye size={12} /> Visível para Lojistas
+                          </span>
+                        ) : (
+                          <span style={{ ...styles.badgeOculto, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}>
+                            <FiEyeOff size={12} /> Oculta (Apenas Master)
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ ...styles.dataVersao, color: theme.textSec }}>{item.tsDataAtualizacao}</span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            excluirVersao(versaoAtualItem);
+                          }} 
+                          style={styles.btnExcluir} 
+                          title="Excluir Versão do Histórico"
+                        >
+                          <FiTrash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <span style={{ ...styles.tipoVersao, color: theme.textSec }}>{formatarNomeModuloParaLojista(item.dsPaginaAfetada)}</span>
+
+                    <ul style={styles.listaMudancas}>
+                      {item.dsDescricao?.map((mudanca: string, idx: number) => (
+                        <li key={idx} style={{ ...styles.itemMudanca, color: theme.textMain }}>
+                          <FiCheckCircle size={14} color="#10b981" style={{ marginTop: '2px', flexShrink: 0 }} />
+                          <span>{mudanca}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* BOTÃO CARREGAR MAIS (Paginação de 5 em 5) */}
+          {!busca && hasMore && versoes.length > 0 && (
+            <button 
+              onClick={carregarMaisVersoes} 
+              disabled={loadingMore}
+              style={{ ...styles.btnCarregarMais, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textMain, border: `1px solid ${theme.border}` }}
+            >
+              {loadingMore ? "Carregando mais..." : <>Carregar mais versões antigas <FiChevronDown /></>}
+            </button>
+          )}
+        </div>
+      )}
+
     </section>
   );
 }
@@ -693,6 +715,35 @@ const styles: any = {
     maxWidth: '1000px',
     margin: '0 auto',
     width: '100%'
+  },
+  subTabsHeader: { 
+    display: 'flex', 
+    gap: '10px', 
+    marginBottom: '5px', 
+    borderBottom: '1px solid rgba(0,0,0,0.05)', 
+    paddingBottom: '15px' 
+  },
+  subTabBtn: { 
+    padding: '10px 16px', 
+    borderRadius: '10px', 
+    border: 'none', 
+    cursor: 'pointer', 
+    fontWeight: '700', 
+    fontSize: '13px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '8px' 
+  },
+  subTabBtnActive: { 
+    padding: '10px 16px', 
+    borderRadius: '10px', 
+    border: 'none', 
+    cursor: 'pointer', 
+    fontWeight: '700', 
+    fontSize: '13px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '8px' 
   },
   searchBox: { 
     display: 'flex', 
@@ -830,8 +881,7 @@ const styles: any = {
   timelineContainer: { 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '15px',
-    marginTop: '10px'
+    gap: '15px'
   },
   listHeaderSection: {
     display: 'flex',
@@ -987,7 +1037,6 @@ const styles: any = {
     marginTop: '10px',
     transition: 'background 0.2s'
   },
-  // 🌟 Estilos padronizados iguais aos do modal de Avisos
   overlayMaster: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
   modalVisualizar: { padding: '30px', borderRadius: '24px', maxWidth: '600px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' },
   modalVisHeader: { fontSize: '14px', fontWeight: '900', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px', textTransform: 'uppercase' },

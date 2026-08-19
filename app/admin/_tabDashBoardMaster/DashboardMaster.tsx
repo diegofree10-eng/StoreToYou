@@ -132,9 +132,9 @@ export default function PainelMasterFesta() {
         {/* BLOCO DIREITO: VERSÃO RECENTE */}
         <div style={styles.headerRightContainer}>
           {versaoAtualMaster && (
-            <div style={{ 
-              ...styles.versionBadge, 
-              background: isModoNoturno ? '#1e293b' : '#eff6ff', 
+            <div style={{
+              ...styles.versionBadge,
+              background: isModoNoturno ? '#1e293b' : '#eff6ff',
               border: `1px solid ${isModoNoturno ? '#334155' : '#bfdbfe'}`,
               color: isModoNoturno ? '#60a5fa' : '#1e40af'
             }}>
@@ -202,7 +202,7 @@ export default function PainelMasterFesta() {
         )}
 
         {activeTab === "AVISOS" && (
-          <TabAvisos lojistas={lojistas} mostrarAviso={mostrarAviso} />
+          <TabAvisos mostrarAviso={mostrarAviso} />
         )}
 
         {activeTab === "DENUNCIAS" && (
@@ -234,9 +234,9 @@ const styles: any = {
   versionBadge: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '10px', fontWeight: '800', fontSize: '13px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
   loader: { height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' },
   toast: { position: 'fixed', top: '20px', right: '20px', padding: '15px 25px', borderRadius: '10px', color: '#fff', fontWeight: 'bold', zIndex: 1000, boxShadow: '0 10px 15px rgba(0,0,0,0.1)' },
-  
+
   tabContainer: { display: "flex", gap: "10px", flexWrap: 'wrap', marginBottom: "25px", paddingBottom: '0px' },
-  
+
   tab: { padding: "12px 20px", border: "none", borderBottom: "3px solid transparent", background: "none", cursor: "pointer", display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', transition: '0.2s' },
   mainContent: { maxWidth: '1200px', margin: '0 auto' },
 };
