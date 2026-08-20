@@ -2,22 +2,23 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { db } from "@/lib/firebase";
-import { 
-  collection, 
-  doc, 
-  onSnapshot, 
-  setDoc, 
-  deleteDoc, 
-  updateDoc, 
-  deleteField, 
-  query, 
-  orderBy, 
+import {
+  collection,
+  doc,
+  onSnapshot,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  deleteField,
+  query,
+  orderBy,
   serverTimestamp,
   limit,
   startAfter,
-  getDocs
+  getDocs,
+  getDoc
 } from "firebase/firestore";
-import { FiGitCommit, FiCheckCircle, FiSave, FiSearch, FiTrash2, FiClock, FiTag, FiCalendar, FiEye, FiEyeOff, FiChevronDown, FiDatabase, FiPlusCircle, FiList } from "react-icons/fi";
+import { FiGitCommit, FiCheckCircle, FiSave, FiSearch, FiTrash2, FiClock, FiTag, FiCalendar, FiEye, FiEyeOff, FiChevronDown, FiDatabase, FiPlusCircle, FiList, FiSliders } from "react-icons/fi";
 import { useTheme } from "@/context/ThemeContext";
 
 // Categorias e subpastas estruturadas do sistema para o select agrupado
@@ -116,7 +117,7 @@ const nomesAmigaveisModulo: { [key: string]: string } = {
   "TabHistoricoVersao": "Histórico de Versões",
   "TabPanorama": "Panorama Geral",
   "TabPlanos.tsx": "Gerenciamento de Planos",
-   
+
   "TabCatalogo": "Catálogo de Produtos",
   "TabClientes": "Gestão de Clientes",
   "TabDespesas": "Controle de Despesas",
@@ -179,9 +180,7 @@ interface VersaoItem {
 export default function TabHistoricoVersao() {
   const { theme, isModoNoturno } = useTheme();
 
-  // 🌟 Abas internas: 'cadastrar' ou 'historico'
   const [abaAtiva, setAbaAtiva] = useState<"cadastrar" | "historico">("cadastrar");
-
   const [versoes, setVersoes] = useState<VersaoItem[]>([]);
   const [versaoAtivaGlobal, setVersaoAtivaGlobal] = useState<string>("");
   const [busca, setBusca] = useState("");
@@ -193,10 +192,13 @@ export default function TabHistoricoVersao() {
   // Modal de detalhes
   const [versaoSelecionada, setVersaoSelecionada] = useState<VersaoItem | null>(null);
 
+  // Novo estado para controlar o tipo de incremento automático
+  const [tipoMudanca, setTipoMudanca] = useState<'patch' | 'minor' | 'major'>('patch');
+
   const ITENS_POR_PAGINA = 5;
 
   const [novaVersao, setNovaVersao] = useState({
-    ano: "26",
+    ano: new Date().getFullYear().toString().slice(-2),
     major: "0",
     minor: "0",
     patch: "0",
@@ -206,6 +208,61 @@ export default function TabHistoricoVersao() {
     mudancas: "",
     isExibirLogista: false
   });
+
+  // Função para calcular a próxima versão com base na última cadastrada
+  const calcularProximaVersao = (versaoAnterior: string, tipo: 'patch' | 'minor' | 'major', schemaAnterior: number) => {
+    const partes = (versaoAnterior || "26.0.0.0").split('.').map(Number);
+    const ano = new Date().getFullYear().toString().slice(-2);
+    let major = partes[1] || 0;
+    let minor = partes[2] || 0;
+    let patch = partes[3] || 0;
+    let novoSchema = schemaAnterior || 2;
+
+    if (tipo === 'major') {
+      major += 1;
+      minor = 0;
+      patch = 0;
+      novoSchema += 1;
+    } else if (tipo === 'minor') {
+      minor += 1;
+      patch = 0;
+    } else {
+      patch += 1;
+    }
+
+    return {
+      ano,
+      major: major.toString(),
+      minor: minor.toString(),
+      patch: patch.toString(),
+      schemaCode: novoSchema
+    };
+  };
+
+  // Buscar última versão ao carregar para auto-preencher
+  useEffect(() => {
+    const buscarUltimaVersaoParaSugestao = async () => {
+      try {
+        const q = query(collection(db, "configuracoes", "sistema", "historicoVersoes"), orderBy("nrVersaoSistemaSistema", "desc"), limit(1));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const dadosUltima = snap.docs[0].data();
+          const ultimaVersaoStr = dadosUltima.nrVersaoSistemaSistema || "26.0.0.0";
+          const ultimoSchema = dadosUltima.nrVersaoSchemaSistema || 2;
+
+          const calculada = calcularProximaVersao(ultimaVersaoStr, tipoMudanca, ultimoSchema);
+          setNovaVersao(prev => ({
+            ...prev,
+            ...calculada
+          }));
+        }
+      } catch (e) {
+        console.error("Erro ao buscar sugestão de versão:", e);
+      }
+    };
+    buscarUltimaVersaoParaSugestao();
+  }, [tipoMudanca]);
 
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, "configuracoes", "sistema"), (docSnap) => {
@@ -225,19 +282,19 @@ export default function TabHistoricoVersao() {
   const carregarHistoricoInicial = async () => {
     try {
       const q = query(
-        collection(db, "configuracoes", "sistema", "historicoVersoes"), 
-        orderBy("nrVersaoSistemaSistema", "desc"), 
+        collection(db, "configuracoes", "sistema", "historicoVersoes"),
+        orderBy("nrVersaoSistemaSistema", "desc"),
         limit(ITENS_POR_PAGINA)
       );
 
       const snapshot = await getDocs(q);
       const lista: VersaoItem[] = [];
-      
+
       snapshot.forEach((docSnap) => {
         const dados = docSnap.data();
         if (dados) {
-          lista.push({ 
-            id: docSnap.id, 
+          lista.push({
+            id: docSnap.id,
             nrVersaoSistemaSistema: dados.nrVersaoSistemaSistema || dados.dsVersaoSistema || "0.0.0",
             tsDataAtualizacao: dados.tsDataAtualizacao || "",
             dsPaginaAfetada: dados.dsPaginaAfetada || "",
@@ -267,8 +324,8 @@ export default function TabHistoricoVersao() {
 
     try {
       const q = query(
-        collection(db, "configuracoes", "sistema", "historicoVersoes"), 
-        orderBy("nrVersaoSistemaSistema", "desc"), 
+        collection(db, "configuracoes", "sistema", "historicoVersoes"),
+        orderBy("nrVersaoSistemaSistema", "desc"),
         startAfter(lastVisible),
         limit(ITENS_POR_PAGINA)
       );
@@ -279,8 +336,8 @@ export default function TabHistoricoVersao() {
       snapshot.forEach((docSnap) => {
         const dados = docSnap.data();
         if (dados) {
-          lista.push({ 
-            id: docSnap.id, 
+          lista.push({
+            id: docSnap.id,
             nrVersaoSistemaSistema: dados.nrVersaoSistemaSistema || dados.dsVersaoSistema || "0.0.0",
             tsDataAtualizacao: dados.tsDataAtualizacao || "",
             dsPaginaAfetada: dados.dsPaginaAfetada || "",
@@ -322,6 +379,14 @@ export default function TabHistoricoVersao() {
       const versaoId = `${novaVersao.ano}.${novaVersao.major}.${novaVersao.minor}.${novaVersao.patch}`;
       const schemaNum = Number(novaVersao.schemaCode) || 0;
 
+      const versaoRef = doc(db, "configuracoes", "sistema", "historicoVersoes", versaoId);
+      const docExistente = await getDoc(versaoRef);
+      if (docExistente.exists()) {
+        alert(`Erro: A versão ${versaoId} já existe no histórico! Escolha outro número.`);
+        setLoading(false);
+        return;
+      }
+
       const dadosVersao: VersaoItem = {
         nrVersaoSistemaSistema: versaoId,
         tsDataAtualizacao: formatarDataBR(novaVersao.data),
@@ -332,8 +397,7 @@ export default function TabHistoricoVersao() {
         createdAt: serverTimestamp()
       };
 
-      const versaoRef = doc(db, "configuracoes", "sistema", "historicoVersoes", versaoId);
-      await setDoc(versaoRef, dadosVersao, { merge: true });
+      await setDoc(versaoRef, dadosVersao);
 
       const configRef = doc(db, "configuracoes", "sistema");
       await setDoc(configRef, {
@@ -342,7 +406,7 @@ export default function TabHistoricoVersao() {
       }, { merge: true });
 
       alert(`Versão ${versaoId} (Schema ${schemaNum}) cadastrada e definida como oficial com sucesso!`);
-      
+
       setNovaVersao(prev => ({
         ...prev,
         patch: (parseInt(prev.patch || "0") + 1).toString(),
@@ -351,7 +415,7 @@ export default function TabHistoricoVersao() {
       }));
 
       carregarHistoricoInicial();
-      setAbaAtiva("historico"); // Alterna automaticamente para a aba de histórico após salvar
+      setAbaAtiva("historico");
     } catch (error) {
       console.error("Erro ao salvar versão:", error);
       alert("Erro ao salvar a versão no banco de dados.");
@@ -384,7 +448,7 @@ export default function TabHistoricoVersao() {
   const versoesFiltradas = useMemo(() => {
     if (!busca.trim()) return versoes;
     const termo = busca.toLowerCase();
-    return versoes.filter(v => 
+    return versoes.filter(v =>
       v.nrVersaoSistemaSistema?.toLowerCase().includes(termo) ||
       v.dsPaginaAfetada?.toLowerCase().includes(termo) ||
       v.dsDescricao?.some(d => d.toLowerCase().includes(termo))
@@ -393,16 +457,16 @@ export default function TabHistoricoVersao() {
 
   return (
     <section style={styles.wrapper}>
-      
-      {/* 🌟 ABAS INTERNAS */}
+
+      {/* ABAS INTERNAS */}
       <div style={styles.subTabsHeader}>
-        <button 
+        <button
           onClick={() => setAbaAtiva("cadastrar")}
           style={abaAtiva === "cadastrar" ? { ...styles.subTabBtnActive, background: theme.primary, color: '#fff' } : { ...styles.subTabBtn, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec }}
         >
           <FiPlusCircle size={14} /> Cadastrar Nova Versão
         </button>
-        <button 
+        <button
           onClick={() => setAbaAtiva("historico")}
           style={abaAtiva === "historico" ? { ...styles.subTabBtnActive, background: theme.primary, color: '#fff' } : { ...styles.subTabBtn, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec }}
         >
@@ -436,8 +500,8 @@ export default function TabHistoricoVersao() {
                 ))}
               </div>
             </div>
-            <button 
-              style={{ ...styles.modalVisBtn, background: isModoNoturno ? theme.bgApp : '#0f172a', color: theme.textMain, border: `1px solid ${theme.border}` }} 
+            <button
+              style={{ ...styles.modalVisBtn, background: isModoNoturno ? theme.bgApp : '#0f172a', color: theme.textMain, border: `1px solid ${theme.border}` }}
               onClick={() => setVersaoSelecionada(null)}
             >
               FECHAR
@@ -454,15 +518,53 @@ export default function TabHistoricoVersao() {
             <h3 style={{ ...styles.h3, color: theme.textMain }}>Cadastrar Nova Versão do Sistema</h3>
           </div>
           <p style={{ ...styles.helpText, color: theme.textSec }}>
-            Insira uma nova tag de atualização e informe se há alterações estruturais no banco de dados através da Versão do Schema.
+            O sistema gera automaticamente o próximo número de versão e schema com base no seu último lançamento.
           </p>
+
+          {/* SELETOR DO TIPO DE MUDANÇA */}
+          <div style={{ ...styles.tipoMudancaBox, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FiSliders size={14} /> Tipo de Atualização:
+            </span>
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setTipoMudanca('patch')}
+                style={tipoMudanca === 'patch' ? { ...styles.badgeTipoActive, background: theme.primary, color: '#fff' } : { ...styles.badgeTipo, background: isModoNoturno ? theme.bgCard : '#fff', color: theme.textSec, border: `1px solid ${theme.border}` }}
+              >
+                Patch (Correção)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoMudanca('minor')}
+                style={tipoMudanca === 'minor' ? { ...styles.badgeTipoActive, background: theme.primary, color: '#fff' } : { ...styles.badgeTipo, background: isModoNoturno ? theme.bgCard : '#fff', color: theme.textSec, border: `1px solid ${theme.border}` }}
+              >
+                Minor (Nova Função)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoMudanca('major')}
+                style={tipoMudanca === 'major' ? { ...styles.badgeTipoActive, background: theme.primary, color: '#fff' } : { ...styles.badgeTipo, background: isModoNoturno ? theme.bgCard : '#fff', color: theme.textSec, border: `1px solid ${theme.border}` }}
+              >
+                Major (Mudança Estrutural)
+              </button>
+            </div>
+          </div>
+
+          {/* DESCRIÇÃO DINÂMICA DO QUE O BOTÃO FAZ */}
+          <div style={{ padding: '10px', marginBottom: '20px', fontSize: '12px', color: theme.textSec, fontStyle: 'italic', borderLeft: `3px solid ${theme.primary}` }}>
+            {tipoMudanca === 'patch' && "Patch: Correções de bugs e ajustes de performance. Não altera a estrutura do banco e é transparente ao lojista."}
+            {tipoMudanca === 'minor' && "Minor: Adição de novas ferramentas ou menus. Sem impacto no banco de dados, mas altera o fluxo de uso do lojista."}
+            {tipoMudanca === 'major' && "Major: Mudanças estruturais profundas. Exige migração de dados e altera o Schema do banco de dados."}
+          </div>
 
           <form onSubmit={salvarVersao} style={styles.formGrid}>
             <div style={styles.inputRowDesktop}>
-              
+
               <div style={styles.inputGroup}>
                 <label style={{ ...styles.label, color: theme.textSec }}>
-                  <FiTag size={12} /> Composição da Versão
+                  <FiTag size={12} /> Composição Automática
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <input
@@ -470,12 +572,10 @@ export default function TabHistoricoVersao() {
                     value={novaVersao.ano}
                     readOnly
                     style={{ ...styles.input, width: '45px', textAlign: 'center', background: isModoNoturno ? theme.bgApp : '#f1f5f9', fontWeight: 'bold', color: theme.textMain, border: `1px solid ${theme.border}` }}
-                    title="Ano base"
                   />
                   <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
                   <input
                     type="number"
-                    min="0"
                     value={novaVersao.major}
                     onChange={e => setNovaVersao({ ...novaVersao, major: e.target.value })}
                     style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
@@ -484,7 +584,6 @@ export default function TabHistoricoVersao() {
                   <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
                   <input
                     type="number"
-                    min="0"
                     value={novaVersao.minor}
                     onChange={e => setNovaVersao({ ...novaVersao, minor: e.target.value })}
                     style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
@@ -493,7 +592,6 @@ export default function TabHistoricoVersao() {
                   <span style={{ fontWeight: 'bold', color: theme.textSec }}>.</span>
                   <input
                     type="number"
-                    min="0"
                     value={novaVersao.patch}
                     onChange={e => setNovaVersao({ ...novaVersao, patch: e.target.value })}
                     style={{ ...styles.input, width: '55px', textAlign: 'center', background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
@@ -504,12 +602,11 @@ export default function TabHistoricoVersao() {
 
               <div style={styles.inputGroup}>
                 <label style={{ ...styles.label, color: theme.textSec }}>
-                  <FiDatabase size={12} /> Versão do Schema (Banco)
+                  <FiDatabase size={12} /> Versão do Schema
                 </label>
                 <input
                   type="number"
                   min="0"
-                  placeholder="Ex: 2"
                   value={novaVersao.schemaCode}
                   onChange={e => setNovaVersao({ ...novaVersao, schemaCode: Number(e.target.value) })}
                   style={{ ...styles.input, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
@@ -531,7 +628,7 @@ export default function TabHistoricoVersao() {
               </div>
 
               <div style={styles.inputGroup}>
-                <label style={{ ...styles.label, color: theme.textSec }}>Área / Módulo Afetado</label>
+                <label style={{ ...styles.label, color: theme.textSec }}>Módulo Afetado</label>
                 <select
                   value={novaVersao.tipo}
                   onChange={e => setNovaVersao({ ...novaVersao, tipo: e.target.value })}
@@ -554,7 +651,7 @@ export default function TabHistoricoVersao() {
             </div>
 
             <div style={styles.inputGroup}>
-              <label style={{ ...styles.label, color: theme.textSec }}>O que mudou? (Digite uma alteração por linha)</label>
+              <label style={{ ...styles.label, color: theme.textSec }}>O que mudou? (Uma alteração por linha)</label>
               <textarea
                 placeholder={"- Adicionado suporte ao novo painel financeiro\n- Correção de bugs no fluxo de pedidos"}
                 value={novaVersao.mudancas}
@@ -586,8 +683,6 @@ export default function TabHistoricoVersao() {
       {/* ABA 2: HISTÓRICO DE ATUALIZAÇÕES */}
       {abaAtiva === "historico" && (
         <div style={styles.timelineContainer}>
-          
-          {/* BARRA DE PESQUISA */}
           <div style={{ ...styles.searchBox, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
             <FiSearch color={theme.textSec} size={18} />
             <input
@@ -620,8 +715,8 @@ export default function TabHistoricoVersao() {
                 const versaoAtualItem = item.nrVersaoSistemaSistema;
                 const isAtiva = versaoAtivaGlobal === versaoAtualItem;
                 return (
-                  <div 
-                    key={item.id || versaoAtualItem} 
+                  <div
+                    key={item.id || versaoAtualItem}
                     onClick={() => setVersaoSelecionada(item)}
                     style={{
                       ...styles.cardVersao,
@@ -639,35 +734,29 @@ export default function TabHistoricoVersao() {
                         </div>
 
                         {item.nrVersaoSchemaSistema !== undefined && (
-                          <span style={styles.badgeSchema}>
-                            Schema v{item.nrVersaoSchemaSistema}
-                          </span>
+                          <span style={styles.badgeSchema}>Schema v{item.nrVersaoSchemaSistema}</span>
                         )}
 
                         {isAtiva && (
                           <span style={styles.badgeOficial}>Versão Atual Ativa</span>
                         )}
-                        
+
                         {item.isExibirLogista ? (
-                          <span style={styles.badgeVisivel}>
-                            <FiEye size={12} /> Visível para Lojistas
-                          </span>
+                          <span style={styles.badgeVisivel}><FiEye size={12} /> Visível para Lojistas</span>
                         ) : (
-                          <span style={{ ...styles.badgeOculto, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}>
-                            <FiEyeOff size={12} /> Oculta (Apenas Master)
-                          </span>
+                          <span style={{ ...styles.badgeOculto, background: isModoNoturno ? '#334155' : '#f1f5f9', color: theme.textSec }}><FiEyeOff size={12} /> Oculta</span>
                         )}
                       </div>
-                      
+
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <span style={{ ...styles.dataVersao, color: theme.textSec }}>{item.tsDataAtualizacao}</span>
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             excluirVersao(versaoAtualItem);
-                          }} 
-                          style={styles.btnExcluir} 
-                          title="Excluir Versão do Histórico"
+                          }}
+                          style={styles.btnExcluir}
+                          title="Excluir Versão"
                         >
                           <FiTrash2 size={14} />
                         </button>
@@ -690,10 +779,9 @@ export default function TabHistoricoVersao() {
             </div>
           )}
 
-          {/* BOTÃO CARREGAR MAIS (Paginação de 5 em 5) */}
           {!busca && hasMore && versoes.length > 0 && (
-            <button 
-              onClick={carregarMaisVersoes} 
+            <button
+              onClick={carregarMaisVersoes}
               disabled={loadingMore}
               style={{ ...styles.btnCarregarMais, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textMain, border: `1px solid ${theme.border}` }}
             >
@@ -708,335 +796,52 @@ export default function TabHistoricoVersao() {
 }
 
 const styles: any = {
-  wrapper: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-    maxWidth: '1000px',
-    margin: '0 auto',
-    width: '100%'
-  },
-  subTabsHeader: { 
-    display: 'flex', 
-    gap: '10px', 
-    marginBottom: '5px', 
-    borderBottom: '1px solid rgba(0,0,0,0.05)', 
-    paddingBottom: '15px' 
-  },
-  subTabBtn: { 
-    padding: '10px 16px', 
-    borderRadius: '10px', 
-    border: 'none', 
-    cursor: 'pointer', 
-    fontWeight: '700', 
-    fontSize: '13px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '8px' 
-  },
-  subTabBtnActive: { 
-    padding: '10px 16px', 
-    borderRadius: '10px', 
-    border: 'none', 
-    cursor: 'pointer', 
-    fontWeight: '700', 
-    fontSize: '13px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '8px' 
-  },
-  searchBox: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '12px', 
-    padding: '14px 18px', 
-    borderRadius: '12px', 
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)' 
-  },
-  searchInput: { 
-    border: 'none', 
-    outline: 'none', 
-    width: '100%', 
-    fontSize: '14px', 
-    background: 'transparent'
-  },
-  clearSearchBtn: {
-    border: 'none',
-    padding: '4px 10px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    cursor: 'pointer',
-    fontWeight: '600'
-  },
-  cardCadastro: { 
-    padding: '28px', 
-    borderRadius: '16px', 
-    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' 
-  },
-  cardHeaderTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginBottom: '6px'
-  },
-  h3: { 
-    fontSize: "15px", 
-    fontWeight: "800", 
-    textTransform: 'uppercase',
-    letterSpacing: '0.3px'
-  },
-  helpText: { 
-    fontSize: '13px', 
-    marginBottom: '22px',
-    lineHeight: '1.5'
-  },
-  formGrid: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '18px' 
-  },
-  inputRowDesktop: { 
-    display: 'grid', 
-    gridTemplateColumns: '1.4fr 1.1fr 1fr 1.5fr', 
-    gap: '12px',
-    alignItems: 'end'
-  },
-  inputGroup: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '6px' 
-  },
-  label: { 
-    fontSize: '11px', 
-    fontWeight: '700', 
-    textTransform: 'uppercase',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    letterSpacing: '0.4px',
-    whiteSpace: 'nowrap'
-  },
-  input: { 
-    padding: '11px 12px', 
-    borderRadius: '8px', 
-    fontSize: '13px', 
-    outline: 'none', 
-    width: '100%',
-    boxSizing: 'border-box',
-    transition: 'border-color 0.2s'
-  },
-  select: { 
-    padding: '11px 12px', 
-    borderRadius: '8px', 
-    fontSize: '13px', 
-    outline: 'none', 
-    cursor: 'pointer',
-    width: '100%',
-    boxSizing: 'border-box'
-  },
-  textarea: { 
-    padding: '12px 14px', 
-    borderRadius: '8px', 
-    fontSize: '13px', 
-    height: '110px', 
-    outline: 'none', 
-    resize: 'vertical',
-    fontFamily: 'inherit',
-    lineHeight: '1.5'
-  },
-  checkboxContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '12px 14px',
-    borderRadius: '8px'
-  },
-  checkboxLabel: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '600'
-  },
-  checkboxInput: {
-    width: '16px',
-    height: '16px',
-    cursor: 'pointer'
-  },
-  btnSalvar: { 
-    color: '#fff', 
-    padding: '13px 22px', 
-    borderRadius: '9px', 
-    border: 'none', 
-    cursor: 'pointer', 
-    fontWeight: '700', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    gap: '8px', 
-    fontSize: '13px', 
-    transition: 'background 0.2s',
-    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)'
-  },
-  timelineContainer: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '15px'
-  },
-  listHeaderSection: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0 4px'
-  },
-  subTitleHeading: {
-    fontSize: '14px',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: '0.3px'
-  },
-  badgeCount: {
-    fontSize: '12px',
-    fontWeight: '600',
-    padding: '3px 10px',
-    borderRadius: '20px'
-  },
-  listGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '15px'
-  },
-  cardVersao: { 
-    padding: '22px', 
-    borderRadius: '14px', 
-    border: '1px solid',
-    transition: 'all 0.2s'
-  },
-  versaoHeader: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: '8px', 
-    flexWrap: 'wrap', 
-    gap: '10px' 
-  },
-  versionIconBadge: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '4px 10px',
-    borderRadius: '8px'
-  },
-  tituloVersao: { 
-    fontSize: '14px', 
-    fontWeight: '800' 
-  },
-  badgeSchema: {
-    fontSize: '10px',
-    fontWeight: '700',
-    background: '#fef3c7',
-    color: '#d97706',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    textTransform: 'uppercase'
-  },
-  badgeOficial: {
-    fontSize: '10px',
-    fontWeight: '700',
-    background: '#dcfce7',
-    color: '#15803d',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    textTransform: 'uppercase'
-  },
-  badgeVisivel: {
-    fontSize: '10px',
-    fontWeight: '700',
-    background: '#e0f2fe',
-    color: '#0369a1',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    textTransform: 'uppercase'
-  },
-  badgeOculto: {
-    fontSize: '10px',
-    fontWeight: '700',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    textTransform: 'uppercase'
-  },
-  dataVersao: { 
-    fontSize: '12px', 
-    fontWeight: '600' 
-  },
-  tipoVersao: { 
-    fontSize: '11px', 
-    fontWeight: '700', 
-    textTransform: 'uppercase', 
-    display: 'block', 
-    marginBottom: '14px',
-    letterSpacing: '0.4px'
-  },
-  listaMudancas: { 
-    listStyle: 'none', 
-    padding: '0', 
-    margin: '0', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '8px' 
-  },
-  itemMudanca: { 
-    display: 'flex', 
-    alignItems: 'flex-start', 
-    gap: '10px', 
-    fontSize: '13px', 
-    lineHeight: '1.4'
-  },
-  emptyContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px',
-    borderRadius: '12px',
-    gap: '10px'
-  },
-  emptyText: { 
-    textAlign: 'center', 
-    fontSize: '13px' 
-  },
-  btnExcluir: { 
-    background: '#fee2e2', 
-    color: '#ef4444', 
-    border: 'none', 
-    padding: '8px', 
-    borderRadius: '8px', 
-    cursor: 'pointer', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center',
-    transition: 'background 0.2s'
-  },
-  btnCarregarMais: {
-    padding: '12px',
-    borderRadius: '8px',
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: '700',
-    fontSize: '13px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    marginTop: '10px',
-    transition: 'background 0.2s'
-  },
+  wrapper: { display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1000px', margin: '0 auto', width: '100%' },
+  subTabsHeader: { display: 'flex', gap: '10px', marginBottom: '5px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '15px' },
+  subTabBtn: { padding: '10px 16px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' },
+  subTabBtnActive: { padding: '10px 16px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' },
+  tipoMudancaBox: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: '10px', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' },
+  badgeTipo: { padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', border: 'none', transition: 'all 0.2s' },
+  badgeTipoActive: { padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
+  searchBox: { display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 18px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' },
+  searchInput: { border: 'none', outline: 'none', width: '100%', fontSize: '14px', background: 'transparent' },
+  clearSearchBtn: { border: 'none', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: '600' },
+  cardCadastro: { padding: '28px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' },
+  cardHeaderTitle: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' },
+  h3: { fontSize: "15px", fontWeight: "800", textTransform: 'uppercase', letterSpacing: '0.3px' },
+  helpText: { fontSize: '13px', marginBottom: '18px', lineHeight: '1.5' },
+  formGrid: { display: 'flex', flexDirection: 'column', gap: '18px' },
+  inputRowDesktop: { display: 'grid', gridTemplateColumns: '1.4fr 1.1fr 1fr 1.5fr', gap: '12px', alignItems: 'end' },
+  inputGroup: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  label: { fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '5px', letterSpacing: '0.4px', whiteSpace: 'nowrap' },
+  input: { padding: '11px 12px', borderRadius: '8px', fontSize: '13px', outline: 'none', width: '100%', boxSizing: 'border-box' },
+  select: { padding: '11px 12px', borderRadius: '8px', fontSize: '13px', outline: 'none', cursor: 'pointer', width: '100%', boxSizing: 'border-box' },
+  textarea: { padding: '12px 14px', borderRadius: '8px', fontSize: '13px', height: '110px', outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.5' },
+  checkboxContainer: { display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '8px' },
+  checkboxLabel: { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' },
+  checkboxInput: { width: '16px', height: '16px', cursor: 'pointer' },
+  btnSalvar: { color: '#fff', padding: '13px 22px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13px', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)' },
+  timelineContainer: { display: 'flex', flexDirection: 'column', gap: '15px' },
+  listHeaderSection: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' },
+  subTitleHeading: { fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.3px' },
+  badgeCount: { fontSize: '12px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px' },
+  listGrid: { display: 'flex', flexDirection: 'column', gap: '15px' },
+  cardVersao: { padding: '22px', borderRadius: '14px', border: '1px solid', transition: 'all 0.2s' },
+  versaoHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '10px' },
+  versionIconBadge: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 10px', borderRadius: '8px' },
+  tituloVersao: { fontSize: '14px', fontWeight: '800' },
+  badgeSchema: { fontSize: '10px', fontWeight: '700', background: '#fef3c7', color: '#d97706', padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' },
+  badgeOficial: { fontSize: '10px', fontWeight: '700', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' },
+  badgeVisivel: { fontSize: '10px', fontWeight: '700', background: '#e0f2fe', color: '#0369a1', padding: '3px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' },
+  badgeOculto: { fontSize: '10px', fontWeight: '700', padding: '3px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' },
+  dataVersao: { fontSize: '12px', fontWeight: '600' },
+  tipoVersao: { fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', display: 'block', marginBottom: '14px', letterSpacing: '0.4px' },
+  listaMudancas: { listStyle: 'none', padding: '0', margin: '0', display: 'flex', flexDirection: 'column', gap: '8px' },
+  itemMudanca: { display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', lineHeight: '1.4' },
+  emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', borderRadius: '12px', gap: '10px' },
+  emptyText: { textAlign: 'center', fontSize: '13px' },
+  btnExcluir: { background: '#fee2e2', color: '#ef4444', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  btnCarregarMais: { padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '10px' },
   overlayMaster: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
   modalVisualizar: { padding: '30px', borderRadius: '24px', maxWidth: '600px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' },
   modalVisHeader: { fontSize: '14px', fontWeight: '900', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px', textTransform: 'uppercase' },
@@ -1045,20 +850,20 @@ const styles: any = {
   modalVisBtn: { width: '100%', padding: '15px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }
 };
 // Este componente (TabHistoricoVersao.tsx) é o painel de gerenciamento e controle do histórico de versões do sistema.
-// Ele permite que o administrador Master cadastre novas tags de atualização (composição de versão semântica), 
-// defina a versão do Schema do banco de dados, selecione o módulo/área afetada, descreva as alterações linha a linha 
-// e decida se a atualização ficará visível publicamente no painel dos lojistas. 
+// Ele permite que o administrador Master cadastre novas tags de atualização (composição de versão semântica),
+// defina a versão do Schema do banco de dados, selecione o módulo/área afetada, descreva as alterações linha a linha
+// e decida se a atualização ficará visível publicamente no painel dos lojistas.
 // Além disso, oferece ferramentas de busca, paginação e exclusão de registros históricos diretamente integradas ao Firestore.
 
 // Este componente (TabHistoricoVersao.tsx) é o painel de gerenciamento e controle do histórico de versões do sistema.
-// Ele permite que o administrador Master cadastre novas tags de atualização (composição de versão semântica), 
-// defina a versão do Schema do banco de dados, selecione o módulo/área afetada, descreva as alterações linha a linha 
-// e decida se a atualização ficará visível publicamente no painel dos lojistas. 
+// Ele permite que o administrador Master cadastre novas tags de atualização (composição de versão semântica),
+// defina a versão do Schema do banco de dados, selecione o módulo/área afetada, descreva as alterações linha a linha
+// e decida se a atualização ficará visível publicamente no painel dos lojistas.
 // Além disso, oferece ferramentas de busca, paginação e exclusão de registros históricos diretamente integradas ao Firestore.
 // atualizar todo o sistema e lancar em qual pagina foi feito, gerar uma nova sequencia da versao do
 // sistema, depois de o DEPLOY, os logista vao receber essa nova atualizaçao e exibir a versão recente.
 // Este componente (TabHistoricoVersao.tsx) é o painel de gerenciamento e controle do histórico de versões do sistema.
-// Ele permite que o administrador Master cadastre novas tags de atualização (composição de versão semântica), 
-// defina a versão do Schema do banco de dados, selecione o módulo/área afetada, descreva as alterações linha a linha 
-// e decida se a atualização ficará visível publicamente no painel dos lojistas. 
+// Ele permite que o administrador Master cadastre novas tags de atualização (composição de versão semântica),
+// defina a versão do Schema do banco de dados, selecione o módulo/área afetada, descreva as alterações linha a linha
+// e decida se a atualização ficará visível publicamente no painel dos lojistas.
 // Além disso, oferece ferramentas de busca, paginação e exclusão de registros históricos diretamente integradas ao Firestore.

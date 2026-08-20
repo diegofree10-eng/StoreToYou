@@ -1,12 +1,15 @@
+// components/TabVendas.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { Pedido } from "@/types/pedido"; // Importe seu tipo Pedido se necessário
 
 export interface TabVendasProps {
   pedidos: any[];
   formatarDataExibicao: (data: any) => string;
   formatarMoeda: (valor: any) => string;
-  alternarDevolucao: (id: string, statusAtual: boolean) => void;
+  // Alterado para receber a função que estorna/exclui ou faz a devolução com estorno
+  alternarDevolucao: (pedido: Pedido) => void; // Agora passa o objeto pedido inteiro
   pedidoExpandido: string | null;
   setPedidoExpandido: React.Dispatch<React.SetStateAction<string | null>>;
   LinhaPedido: React.ComponentType<any>;
@@ -41,12 +44,10 @@ export const TabVendas = ({
 
   const [paginaAtual, setPaginaAtual] = useState(1);
 
-  // Resetar página ao mudar os pedidos filtrados do pai ou a quantidade por página
   useEffect(() => {
     setPaginaAtual(1);
   }, [pedidos, itensPorPagina]);
 
-  // Lógica de Paginação sobre os pedidos já filtrados
   const totalPaginas = Math.ceil(pedidos.length / itensPorPagina);
   const pedidosPaginados = useMemo(() => {
     const inicio = (paginaAtual - 1) * itensPorPagina;
@@ -74,7 +75,8 @@ export const TabVendas = ({
                 dataFormatada={formatarDataExibicao(p.data)}
                 expandido={pedidoExpandido === p.id}
                 onExpandir={(id: string) => setPedidoExpandido(pedidoExpandido === id ? null : id)}
-                onDevolver={alternarDevolucao}
+                // Passando o pedido inteiro para a função de devolução/estorno usar os itens
+                onDevolver={() => alternarDevolucao(p)}
                 theme={theme}
                 isModoNoturno={isModoNoturno}
               />

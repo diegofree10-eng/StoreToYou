@@ -28,6 +28,15 @@ export const executarFluxoPedido = async ({
   dsFormaPagamentoCarrinho = "pix", // 🌟 Parâmetro flexível com "pix" como padrão atual
 }: any) => {
   try {
+    // 🛡️ BLINDAGEM FINANCEIRA: Garantia de precisão matemática antes de salvar
+    const subtotalFinal = Number(Number(valorSubtotalProdutos || 0).toFixed(2));
+    const descontoFinal = Number(Number(valorDesconto || 0).toFixed(2));
+    const freteFinal = Number(Number(logistica?.valorFrete || logistica?.vlFrete || 0).toFixed(2));
+    
+    // Cálculo de controle para total líquido (Subtotal - Desconto + Frete)
+    const totalCalculadoManual = Number((subtotalFinal - descontoFinal + freteFinal).toFixed(2));
+    const totalGeralFinal = Number(Number(totalGeral || totalCalculadoManual).toFixed(2));
+
     const contadorRef = doc(
       db,
       "lojistas",
@@ -176,7 +185,7 @@ export const executarFluxoPedido = async ({
         idProduto: item.idProduto || item.id,
         nome: item.dsNomeProduto || item.nome || item.title || "Produto",
         qty: Number(item.qty || item.quantidade || 1),
-        preco: Number(item.preco || item.price || 0),
+        preco: Number(Number(item.preco || item.price || 0).toFixed(2)),
         variacao: item.variacao || "",
         precisaFrete: item.precisaFrete !== false,
         respostasFormatadas: respostasFormatadas,
@@ -190,15 +199,9 @@ export const executarFluxoPedido = async ({
           item.dsTipoProduto || item.tipoProduto || "Fisico_Sem",
         ),
 
-        weight: Number(
-          item.weight || item.peso || item.variacaoSelecionada?.peso || 0.3,
-        ),
-        height: Number(
-          item.height || item.altura || item.variacaoSelecionada?.altura || 4,
-        ),
-        width: Number(
-          item.width || item.largura || item.variacaoSelecionada?.largura || 11,
-        ),
+        weight: Number(item.weight || item.peso || item.variacaoSelecionada?.peso || 0.3),
+        height: Number(item.height || item.altura || item.variacaoSelecionada?.altura || 4),
+        width: Number(item.width || item.largura || item.variacaoSelecionada?.largura || 11),
         length: Number(
           item.length ||
             item.comprimento ||
@@ -248,12 +251,12 @@ export const executarFluxoPedido = async ({
       timestamp: serverTimestamp(),
       
       financeiro: {
-        vlSubtotal: Number(valorSubtotalProdutos || 0),
-        vlDesconto: Number(valorDesconto || 0),
-        vlFrete: Number(logistica?.valorFrete || 0),
-        vlTotal: Number(totalGeral || 0),
+        vlSubtotal: subtotalFinal,
+        vlDesconto: descontoFinal,
+        vlFrete: freteFinal,
+        vlTotal: totalGeralFinal,
         dsCupom: cupomDigitado || null,
-        dsFormaPagamentoCarrinho: dsFormaPagamentoCarrinho, // 🌟 Salva a forma de pagamento selecionada (ex: 'pix', 'dinheiro', 'cartao_credito', etc)
+        dsFormaPagamentoCarrinho: dsFormaPagamentoCarrinho,
       },
 
       logistica: {
@@ -261,13 +264,8 @@ export const executarFluxoPedido = async ({
         dsFormaEntrega: dsFormaEntregaPadrao,
         isFreteGratis: freteGratisConfig?.atingido || false,
         dsServico: logistica?.servico || logistica?.dsServico || "N/A",
-        vlFrete: Number(logistica?.valorFrete || logistica?.vlFrete || 0),
-        vlPrazo: Number(
-          logistica?.prazoEntrega ||
-            logistica?.prazo ||
-            logistica?.vlPrazo ||
-            0,
-        ),
+        vlFrete: freteFinal,
+        vlPrazo: Number(logistica?.prazoEntrega || logistica?.prazo || logistica?.vlPrazo || 0),
         dsFormaPagamentoEtiqueta:
           logistica?.formaPagamentoEtiqueta || "saldo_melhor_envio",
         dsTransportadoraId:
@@ -318,9 +316,7 @@ export const executarFluxoPedido = async ({
 ${dadosCliente.dsEmailCliente ? `✉️ *E-MAIL:* ${dadosCliente.dsEmailCliente}\n` : ""}📦 *ITENS:*
 ${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.title || "Produto"}`).join("\n")}
 
-💰 *TOTAL:* R$ ${Number(totalGeral || 0)
-      .toFixed(2)
-      .replace(".", ",")}
+💰 *TOTAL:* R$ ${totalGeralFinal.toFixed(2).replace(".", ",")}
 Acesse seu painel para processar este pedido!`;
 
     const urlLojista = `https://wa.me/${String(whatsappNumero || "").replace(/\D/g, "")}?text=${encodeURIComponent(msgLojista)}`;
@@ -346,9 +342,7 @@ Acesse seu painel para processar este pedido!`;
 📦 *RESUMO DO PEDIDO:*
 ${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.title || "Produto"} - R$ ${(Number(i.preco || i.price || 0) * Number(i.qty || 1)).toFixed(2).replace(".", ",")}`).join("\n")}
 
-💰 *TOTAL DO PEDIDO:* R$ ${Number(totalGeral || 0)
-        .toFixed(2)
-        .replace(".", ",")}`;
+💰 *TOTAL DO PEDIDO:* R$ ${totalGeralFinal.toFixed(2).replace(".", ",")}`;
 
       if (payloadPixBruto) {
         msgCliente += `

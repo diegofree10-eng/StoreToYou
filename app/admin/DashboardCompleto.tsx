@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { doc, updateDoc, getDoc, collection, onSnapshot, addDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, onSnapshot, addDoc, arrayUnion, serverTimestamp, getDocs } from "firebase/firestore";
 // Como a pasta hooks está dentro de app:
 import { useDashboardInteligencia } from "@/hooks/useDashboardInteligencia";
 import { useGerenciarPedido } from "@/hooks/useGerenciarPedido";
@@ -21,8 +21,10 @@ import { TabFaturamentoCanais } from "./_tabsDashBoardLogista/TabFaturamentoCana
 import { TabDespesas } from "./_tabsDashBoardLogista/TabDespesas";
 import { TabRelatorioHistorico } from "./_tabsDashBoardLogista/TabRelatorioHistorico";
 import { TabVendas } from "./_tabsDashBoardLogista/TabVendas";
+import { ModalDevolucao } from "./_tabsDashBoardLogista/ModalDevolucao";
 
 import { Pedido } from "@/types/pedido";
+import { FiSearch, FiChevronLeft, FiChevronRight, FiList, FiBarChart2, FiChevronDown, FiChevronUp, FiUser, FiMapPin, FiPhone, FiMail } from "react-icons/fi";
 
 
 // ============================================================================
@@ -41,6 +43,8 @@ interface ItemPedido {
   qty: number;
   quantidade?: number;
   preco?: number;
+  valor?: number;         // 🌟 Adicionado para corrigir o erro
+  valorUnitario?: number; // 🌟 Adicionado para corrigir o erro
   variacao?: string;
   requisitos?: any[];
   foto?: string;
@@ -52,9 +56,8 @@ interface ItemPedido {
   variacaoSelecionada?: {
     foto?: string;
   };
+
 }
-
-
 
 interface CanalRenda {
   canal: string;
@@ -87,19 +90,39 @@ const extrairFotoDoItem = (item: any): string => {
 const ItemResumido = React.memo(({ item }: { item: ItemPedido }) => {
   const { theme } = useTheme();
   const qtd = item.quantidade || item.qty || 1;
+
+  // 🌟 Captura o preço unitário do item padronizado (compatível com 'preco', 'valor', etc.)
+  const precoUnitario = Number(item.preco || item.valor || item.valorUnitario || 0);
+  const valorTotalItem = precoUnitario * qtd;
+
   const fotoUrl = useMemo(() => extrairFotoDoItem(item), [item]);
 
   return (
-    <li style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <img 
-        src={fotoUrl || "https://placehold.co/30x30?text=Prod"} 
-        alt="" 
-        style={{ width: '30px', height: '30px', borderRadius: '4px', objectFit: 'cover' }} 
-      />
-      <span style={{ color: theme.textMain }}>
-        {Number(qtd)}x {item.nome || "Produto"}
-        {item.variacao && <span style={{ color: '#0284c7' }}> ({item.variacao})</span>}
-      </span>
+    <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+        <img
+          src={fotoUrl || "https://placehold.co/30x30?text=Prod"}
+          alt=""
+          style={{ width: '30px', height: '30px', borderRadius: '4px', objectFit: 'cover' }}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ color: theme.textMain, fontWeight: 'bold', fontSize: '13px' }}>
+            {Number(qtd)}x {item.nome || "Produto"}
+          </span>
+          {item.variacao && (
+            <span style={{ color: '#0284c7', fontSize: '12px' }}>
+              Variação: {item.variacao}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* 🌟 Exibição padronizada do valor unitário e total do item */}
+      <div style={{ textAlign: 'right' }}>
+        <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary || '#3b82f6' }}>
+          R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
+        </span>
+      </div>
     </li>
   );
 });
@@ -107,14 +130,13 @@ const ItemResumido = React.memo(({ item }: { item: ItemPedido }) => {
 ItemResumido.displayName = "ItemResumido";
 
 const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dataFormatada }: any) => {
-  const { theme } = useTheme();
+  const { theme, isModoNoturno } = useTheme();
   const clienteObj = typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : {};
   const nomeExibicao = clienteObj.nmNomeCliente || clienteObj.nome || (typeof pedido.cliente === 'string' ? pedido.cliente : "Cliente Sem Nome");
 
   const fin = pedido.financeiro || {};
   const log = pedido.logistica || {};
 
-  // 🛡️ Extração robusta unificada com os campos reais do Firebase (vlSubtotal, vlFrete, etc.)
   const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? fin.valorSubtotal ?? 0);
   const descontoVal = Number(fin.vlDesconto ?? fin.discount ?? fin.descontos ?? 0);
   const freteVal = Number(log.vlFrete ?? fin.frete ?? fin.vlFrete ?? 0);
@@ -125,77 +147,142 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
 
   return (
     <React.Fragment>
-      <tr style={{ ...styles.tr, background: expandido ? theme.inputBg : 'transparent', transition: '0.3s', borderBottom: `1px solid ${theme.border}` }}>
-        <td style={{ ...styles.td, color: theme.textMain }}>{dataFormatada}</td>
-        <td style={styles.td}><span style={{ ...styles.pedidoBadge, backgroundColor: theme.inputBg, color: theme.textMain }}>#{pedido.numeroPedido}</span></td>
-        <td style={{ ...styles.td, cursor: 'pointer', color: '#3498db', fontWeight: 'bold' }} onClick={() => onExpandir(pedido.id)}>
-          👤 {nomeExibicao} {expandido ? '🔼' : '🔽'}
+      {/* LINHA PRINCIPAL DO PEDIDO */}
+      <tr
+        onClick={() => onExpandir(pedido.id)}
+        style={{
+          backgroundColor: isModoNoturno ? '#1e293b' : '#ffffff',
+          cursor: 'pointer',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          borderRadius: '12px',
+          transition: 'all 0.2s ease',
+          borderBottom: `8px solid ${theme.bgMain || (isModoNoturno ? '#0f172a' : '#f8fafc')}`
+        }}
+      >
+        <td style={{ padding: '16px', borderRadius: '12px 0 0 12px', fontSize: '13px', color: theme.textMain }}>{dataFormatada}</td>
+        <td style={{ padding: '16px', fontSize: '13px', fontWeight: '700' }}>
+          <span style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: theme.inputBg, color: theme.textMain }}>
+            #{pedido.numeroPedido}
+          </span>
         </td>
-        <td style={{ ...styles.td, color: theme.textMain }}>{formatarMoeda(totalFinal)}</td>
-        <td style={styles.td}>
-          <button onClick={(e) => { e.stopPropagation(); onDevolver(pedido.id, pedido.devolvido); }} style={{ ...styles.btnDevolver, backgroundColor: pedido.devolvido ? '#e0f2fe' : '#fee2e2', color: pedido.devolvido ? '#0ea5e9' : '#ef4444' }}>
+        <td style={{ padding: '16px', fontSize: '13px', color: theme.primary, fontWeight: '600' }}>
+
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <FiUser size={14} /> {nomeExibicao} {expandido ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+          </span>
+
+        </td>
+        <td style={{ padding: '16px', fontSize: '13px', fontWeight: 'bold', color: theme.textMain }}>{formatarMoeda(totalFinal)}</td>
+        <td style={{ padding: '16px', borderRadius: '0 12px 12px 0', fontSize: '13px' }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDevolver(pedido); }}
+            style={{ ...styles.btnDevolver, backgroundColor: pedido.devolvido ? '#e0f2fe' : '#fee2e2', color: pedido.devolvido ? '#0ea5e9' : '#ef4444' }}
+          >
             {pedido.devolvido ? 'Restaurar' : 'Devolver'}
           </button>
         </td>
       </tr>
 
+      {/* PAINEL EXPANDIDO COM O MESMO DESIGN DA DEVOLUÇÃO */}
       {expandido && (
         <tr>
-          <td colSpan={5} style={{ ...styles.detalheBox, backgroundColor: theme.inputBg, borderBottom: `1px solid ${theme.border}` }}>
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <td colSpan={5} style={{ padding: '0 8px' }}>
+            <div style={{
+              padding: '20px',
+              backgroundColor: isModoNoturno ? '#0f172a' : '#f8fafc',
+              border: `1px solid ${theme.border}`,
+              borderRadius: '0 0 12px 12px',
+              marginTop: '-8px',
+              marginBottom: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
 
-              <div style={{ flex: 2, backgroundColor: theme.bgCard, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
-                <strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px', color: theme.textMain }}>Itens do Pedido:</strong>
-                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: theme.textMain, marginBottom: '12px', listStyleType: 'none' }}>
-                  {(pedido.itens || []).map((it: ItemPedido, idx: number) => (
-                    <ItemResumido key={idx} item={it} />
-                  ))}
-                </ul>
+              {/* PARTE SUPERIOR: ITENS E RESUMO FINANCEIRO */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
 
-                {/* 🛠️ ID do Pedido adicionado abaixo dos itens */}
-                <div style={{ fontSize: '13px', color: theme.textMain, borderTop: `1px dashed ${theme.border}`, paddingTop: '8px' }}>
-                  <strong>ID do Pedido:</strong> <span style={{ fontFamily: 'monospace', backgroundColor: theme.inputBg, padding: '2px 4px', borderRadius: '4px', color: theme.textMain }}>{pedido.id}</span>
+                {/* Bloco Esquerdo: Itens do Pedido com Preço Unitário e Total */}
+                <div style={{ backgroundColor: theme.bgCard, padding: '14px', borderRadius: '10px', border: `1px solid ${theme.border}` }}>
+                  <p style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, marginBottom: '10px' }}>ITENS DO PEDIDO:</p>
+                  {(pedido.itens || []).map((item: ItemPedido, idx: number) => {
+                    const qtd = Number(item.quantidade || item.qty || 1);
+                    const precoUnitario = Number(item.preco || item.valor || item.valorUnitario || 0);
+                    const valorTotalItem = precoUnitario * qtd;
+                    const fotoUrl = extrairFotoDoItem(item);
+
+                    return (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <img
+                            src={fotoUrl || "https://placehold.co/32x32?text=Prod"}
+                            alt=""
+                            style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
+                          />
+                          <div>
+                            <span style={{ fontSize: '13px', fontWeight: '600', display: 'block', color: theme.textMain }}>
+                              {qtd}x {item.nome || "Produto"}
+                            </span>
+                            {item.variacao && (
+                              <span style={{ fontSize: '11px', color: '#0284c7', display: 'block' }}>
+                                Variação: {item.variacao}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary }}>
+                            R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${theme.border}`, fontSize: '11px', color: theme.textSec }}>
+                    <strong>ID do Pedido:</strong> <span style={{ fontFamily: 'monospace' }}>{pedido.id}</span>
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ flex: 1, backgroundColor: theme.bgCard, padding: '15px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
-                <strong style={{ display: 'block', marginBottom: '10px', fontSize: '13px', color: theme.textMain }}>Resumo Financeiro:</strong>
+                {/* Bloco Direito: Resumo Financeiro */}
+                <div style={{ backgroundColor: theme.bgCard, padding: '14px', borderRadius: '10px', border: `1px solid ${theme.border}` }}>
+                  <p style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, marginBottom: '10px' }}>RESUMO FINANCEIRO:</p>
 
-                <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ ...styles.finRow, color: theme.textSec }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: theme.textSec }}>
                     <span>Total dos Produtos:</span>
                     <span style={{ color: theme.textMain }}>{formatarMoeda(subtotalVal)}</span>
                   </div>
 
                   {descontoVal > 0 ? (
-                    <div style={{ ...styles.finRow, color: '#16a34a' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: '#16a34a' }}>
                       <span>Cupom de Desconto:</span>
                       <span>- {formatarMoeda(descontoVal)}</span>
                     </div>
                   ) : (
-                    <div style={{ ...styles.finRow, color: theme.textSec, fontStyle: 'italic' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: theme.textSec, fontStyle: 'italic' }}>
                       <span>Cupom de Desconto:</span>
                       <span>Não aplicado</span>
                     </div>
                   )}
 
-                  <div style={{ ...styles.finRow, color: theme.textSec }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: theme.textSec }}>
                     <span>Sub total:</span>
                     <span style={{ color: theme.textMain }}>{formatarMoeda(subtotalVal - descontoVal)}</span>
                   </div>
 
-                  <div style={{ ...styles.finRow, color: theme.textSec }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: theme.textSec }}>
                     <span>Total de Frete:</span>
                     <strong style={{ color: theme.textMain }}>{freteGratisFlag ? "Grátis" : formatarMoeda(freteVal)}</strong>
                   </div>
 
-                  <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
+                  <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '8px 0' }} />
 
-                  <div style={{ ...styles.finRow, fontSize: '14px', fontWeight: 'bold', color: '#78350f' }}>
-                    <span>Pagamento total:</span> <span style={{ color: theme.textMain }}>{formatarMoeda(totalFinal)}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold', color: theme.textMain }}>
+                    <span>Pagamento total:</span> <span style={{ color: theme.primary }}>{formatarMoeda(totalFinal)}</span>
                   </div>
                 </div>
               </div>
+
             </div>
           </td>
         </tr>
@@ -219,6 +306,7 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
+  const [pedidoParaDevolverModal, setPedidoParaDevolverModal] = useState<Pedido | null>(null);
 
   const [itensPorPagina, setItensPorPagina] = useState(20);
 
@@ -235,17 +323,18 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
   const [calcImpostos, setCalcImpostos] = useState("6");
   const [calcTaxaMarketplace, setCalcTaxaMarketplace] = useState("0");
 
-  // Estado local de pedidos para sincronização otimista
+  const [versoesPendentes, setVersoesPendentes] = useState<any[]>([]);
+  const [mostrarModalNovidades, setMostrarModalNovidades] = useState(false);
+  const [salvandoLeitura, setSalvandoLeitura] = useState(false);
+
   const [localPedidos, setLocalPedidos] = useState<Pedido[]>(pedidos);
   useEffect(() => { setLocalPedidos(pedidos); }, [pedidos]);
 
-  // 🛠️ Hook para gerenciar e estornar estoque de pedidos
   const { estornarEstoqueDoPedido } = useGerenciarPedido({
     db,
     lojistaIdApp: lojistaId || "",
     setLocalPedidos
   });
-
 
   const carregarDadosTeste = async () => {
     if (!lojistaId) return;
@@ -267,55 +356,32 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
     }
   };
 
-  // ============================================================================
-  // CARREGAMENTO OTIMIZADO COM PROMISE.ALL E MIGRAÇÃO AUTOMÁTICA DE SCHEMA
-  // ============================================================================
   useEffect(() => {
     if (!lojistaId) return;
 
     const carregarEVerificarLojista = async () => {
       try {
-        // Busca paralela: Perfil do lojista + Configurações globais do sistema
-        const [lojistaSnap, planosSnap] = await Promise.all([
+        const [lojistaSnap, planosSnap, sistemaSnap] = await Promise.all([
           getDoc(doc(db, "lojistas", lojistaId)),
-          getDoc(doc(db, "configuracoes", "planos"))
+          getDoc(doc(db, "configuracoes", "planos")),
+          getDoc(doc(db, "configuracoes", "sistema"))
         ]);
 
         if (lojistaSnap.exists()) {
           const dadosLojista = lojistaSnap.data();
           const nomePlanoLojista = dadosLojista.plano || "Bronze";
-
-          // Verificação da versão de schema para contas antigas
           const versaoSchemaBanco = dadosLojista.sistema?.versaoSchema || 0;
 
           if (versaoSchemaBanco < VERSAO_SCHEMA_CODE) {
-            console.log("🔄 Sincronizando campos novos na conta do lojista...");
             let houveAlteracao = false;
             const dadosAtualizados = { ...dadosLojista };
-
-            if (!dadosAtualizados.sistema) {
-              dadosAtualizados.sistema = {};
-            }
-
-            // Exemplo de campo estrutural novo adicionado em versões futuras
-            if (!dadosAtualizados.aparencia) {
-              dadosAtualizados.aparencia = {};
-              houveAlteracao = true;
-            }
-            if (dadosAtualizados.aparencia.isModoNoturno === undefined) {
-              dadosAtualizados.aparencia.isModoNoturno = false;
-              houveAlteracao = true;
-            }
-
-            // Atualiza a versão do schema no objeto
+            if (!dadosAtualizados.sistema) dadosAtualizados.sistema = {};
+            if (!dadosAtualizados.aparencia) dadosAtualizados.aparencia = {};
+            if (dadosAtualizados.aparencia.isModoNoturno === undefined) dadosAtualizados.aparencia.isModoNoturno = false;
             dadosAtualizados.sistema.versaoSchema = VERSAO_SCHEMA_CODE;
             houveAlteracao = true;
-
             if (houveAlteracao) {
-              await updateDoc(doc(db, "lojistas", lojistaId), {
-                ...dadosAtualizados,
-                updatedAt: new Date().toISOString()
-              });
+              await updateDoc(doc(db, "lojistas", lojistaId), { ...dadosAtualizados, updatedAt: new Date().toISOString() });
             }
           }
 
@@ -324,53 +390,54 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
             setInputMeta(String(dadosLojista.metaFaturamentoMensal));
           }
 
-          // Atribuição de recursos baseados no plano
           if (planosSnap.exists()) {
             const masterPlanos = planosSnap.data();
             const configDoPlanoAtual = masterPlanos[nomePlanoLojista] || {};
+            setRecursosLiberados({ temCanaisRenda: !!configDoPlanoAtual.temCanaisRenda, temDespesas: !!configDoPlanoAtual.temDespesas });
+          }
 
-            setRecursosLiberados({
-              temCanaisRenda: !!configDoPlanoAtual.temCanaisRenda,
-              temDespesas: !!configDoPlanoAtual.temDespesas
-            });
+          if (sistemaSnap.exists()) {
+            const dadosSistema = sistemaSnap.data();
+            const versaoGlobalSistema = dadosSistema.dsVersaoSistema || "";
+            const versoesLidasPeloLojista = dadosLojista.atualizacao?.versoesLidas || [];
+            if (versaoGlobalSistema && !versoesLidasPeloLojista.includes(versaoGlobalSistema)) {
+              const historicoSnap = await getDocs(collection(db, "configuracoes", "sistema", "historicoVersoes"));
+              const todasPublicadas = historicoSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+              const naoLidas = todasPublicadas.filter(v => v.isExibirLogista === true && !versoesLidasPeloLojista.includes(v.nrVersaoSistemaSistema));
+              if (naoLidas.length > 0) {
+                setVersoesPendentes(naoLidas);
+                setMostrarModalNovidades(true);
+              }
+            }
           }
         }
-      } catch (error) {
-        console.error("Erro ao carregar ou sincronizar dados do lojista:", error);
-      }
+      } catch (error) { console.error("Erro ao carregar ou sincronizar dados:", error); }
     };
-
     carregarEVerificarLojista();
   }, [lojistaId]);
 
-  useEffect(() => {
-    if (!lojistaId) return;
-    const unsubCanais = onSnapshot(collection(db, "lojistas", lojistaId, "faturamento_canais"), (snap) => {
-      const dados = snap.docs.map(doc => doc.data() as CanalRenda);
-      setCanaisExternos(dados);
-    });
-    return () => unsubCanais();
-  }, [lojistaId]);
+  const marcarNovidadesComoLidas = async () => {
+    if (!lojistaId || versoesPendentes.length === 0) return;
+    setSalvandoLeitura(true);
+    try {
+      const idsPendentes = versoesPendentes.map(v => v.nrVersaoSistemaSistema);
+      await updateDoc(doc(db, "lojistas", lojistaId), { "atualizacao.versoesLidas": arrayUnion(...idsPendentes), "atualizacao.ultimaLeitura": serverTimestamp() });
+      setMostrarModalNovidades(false);
+      setVersoesPendentes([]);
+    } catch (e) { console.error("Erro:", e); alert("Erro ao confirmar leitura."); } finally { setSalvandoLeitura(false); }
+  };
 
   useEffect(() => {
     if (!lojistaId) return;
-    const unsubDespesas = onSnapshot(collection(db, "lojistas", lojistaId, "despesas"), (snap) => {
-      const dados = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as any);
-      setDespesasLojista(dados);
-    });
-    return () => unsubDespesas();
+    const unsubCanais = onSnapshot(collection(db, "lojistas", lojistaId, "faturamento_canais"), (snap) => setCanaisExternos(snap.docs.map(doc => doc.data() as CanalRenda)));
+    const unsubDespesas = onSnapshot(collection(db, "lojistas", lojistaId, "despesas"), (snap) => setDespesasLojista(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as any)));
+    return () => { unsubCanais(); unsubDespesas(); };
   }, [lojistaId]);
 
   const handleSalvarMeta = async () => {
     if (!lojistaId) return;
     const novaMeta = Number(inputMeta) || 0;
-    try {
-      await updateDoc(doc(db, "lojistas", lojistaId), { metaFaturamentoMensal: novaMeta });
-      setMetaFaturamento(novaMeta);
-      setEditandoMeta(false);
-    } catch (e) {
-      alert("Erro ao salvar meta.");
-    }
+    try { await updateDoc(doc(db, "lojistas", lojistaId), { metaFaturamentoMensal: novaMeta }); setMetaFaturamento(novaMeta); setEditandoMeta(false); } catch (e) { alert("Erro ao salvar meta."); }
   };
 
   const parseDataPedido = useCallback((dataStr: string) => {
@@ -386,65 +453,43 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
     return dataObj.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
   }, [parseDataPedido]);
 
-  const alternarDevolucao = useCallback(async (id: string, statusAtual: boolean) => {
-    if (!lojistaId) return;
-    const vaiDevolver = !statusAtual;
-    const mensagem = vaiDevolver ? "Confirmar DEVOLUÇÃO? (Os itens retornarão ao estoque)" : "Reativar este pedido?";
-
-    if (confirm(mensagem)) {
-      try {
-        const pedidoRef = doc(db, "lojistas", lojistaId, "pedidos", id);
-        await updateDoc(pedidoRef, { devolvido: vaiDevolver });
-
-        // Se marcou como devolvido, executa o estorno automático para o estoque
-        if (vaiDevolver) {
-          const pedidoObj = localPedidos.find(p => p.id === id);
-          if (pedidoObj) {
-            await estornarEstoqueDoPedido(pedidoObj);
-          }
-        }
-
-        alert("✅ Status de devolução alterado com sucesso!");
-      } catch (e: any) {
-        alert("Erro ao processar devolução: " + e.message);
+  const alternarDevolucao = useCallback(async (pedidoObj: Pedido) => {
+    if (!pedidoObj.devolvido) {
+      setPedidoParaDevolverModal(pedidoObj);
+    } else {
+      if (confirm("Confirmar RESTAURAÇÃO deste pedido?")) {
+        try {
+          const pedidoRef = doc(db, "lojistas", lojistaId!, "pedidos", pedidoObj.id);
+          await updateDoc(pedidoRef, { devolvido: false, dadosDevolucao: null });
+          alert("✅ Pedido restaurado com sucesso!");
+        } catch (e: any) { alert("Erro: " + e.message); }
       }
     }
-  }, [lojistaId, localPedidos, estornarEstoqueDoPedido]);
+  }, [lojistaId]);
 
-  const inteligencia = useDashboardInteligencia(
-    pedidos,
-    canaisExternos,
-    despesasLojista,
-    dataInicio,
-    dataFim,
-    recursosLiberados,
-    parseDataPedido
-  );
+  const confirmarDevolucaoComDados = async (dadosDevolucao: any) => {
+    if (!lojistaId || !pedidoParaDevolverModal) return;
+    try {
+      const pedidoRef = doc(db, "lojistas", lojistaId, "pedidos", pedidoParaDevolverModal.id);
+      await updateDoc(pedidoRef, { devolvido: true, dadosDevolucao: { dataSolicitacao: new Date().toISOString(), ...dadosDevolucao } });
+      await estornarEstoqueDoPedido(pedidoParaDevolverModal);
+      setPedidoParaDevolverModal(null);
+      alert("✅ Devolução registrada com sucesso!");
+    } catch (e: any) { alert("Erro ao registrar devolução: " + e.message); }
+  };
+
+  const inteligencia = useDashboardInteligencia(pedidos, canaisExternos, despesasLojista, dataInicio, dataFim, recursosLiberados, parseDataPedido);
 
   useEffect(() => {
     if (!lojistaId || !inteligencia) return;
-
     const syncFinanceiro = async () => {
       try {
-        const docRef = doc(db, "lojistas", lojistaId);
-
-        const ticketMedioCalculado = inteligencia.totalPedidosValidos > 0
-          ? (inteligencia.faturamentoInternoPuro / inteligencia.totalPedidosValidos)
-          : 0;
-
-        await updateDoc(docRef, {
-          lucroReal: inteligencia.lucroReal,
-          ticketMedio: ticketMedioCalculado,
-          ultimaAtualizacao: new Date().toISOString()
-        });
-      } catch (error) {
-        console.error("Erro ao salvar financeiro no Firebase:", error);
-      }
+        const ticketMedioCalculado = inteligencia.totalPedidosValidos > 0 ? (inteligencia.faturamentoInternoPuro / inteligencia.totalPedidosValidos) : 0;
+        await updateDoc(doc(db, "lojistas", lojistaId), { lucroReal: inteligencia.lucroReal, ticketMedio: ticketMedioCalculado, ultimaAtualizacao: new Date().toISOString() });
+      } catch (error) { console.error("Erro ao salvar financeiro:", error); }
     };
-
     const timer = setTimeout(syncFinanceiro, 2000);
     return () => clearTimeout(timer);
-
   }, [inteligencia.lucroReal, inteligencia.totalPedidosValidos, lojistaId]);
 
   const simuladorPrecoSugerido = useMemo(() => {
@@ -452,17 +497,13 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
     const margem = Number(calcMargemDesejada) || 0;
     const imposto = Number(calcImpostos) || 0;
     const taxaMkt = Number(calcTaxaMarketplace) || 0;
-
     const percentualDeducoes = (margem + imposto + taxaMkt) / 100;
-    if (percentualDeducoes >= 1) return 0;
-
-    return custo / (1 - percentualDeducoes);
+    return percentualDeducoes >= 1 ? 0 : custo / (1 - percentualDeducoes);
   }, [calcCustoInsumo, calcMargemDesejada, calcImpostos, calcTaxaMarketplace]);
 
   const progressoMeta = useMemo(() => {
     if (metaFaturamento <= 0) return 0;
-    const percentual = (inteligencia.faturamento / metaFaturamento) * 100;
-    return Math.min(100, Math.round(percentual));
+    return Math.min(100, Math.round((inteligencia.faturamento / metaFaturamento) * 100));
   }, [inteligencia.faturamento, metaFaturamento]);
 
   const dadosFiltradosBusca = useMemo(() => {
@@ -473,17 +514,11 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
       } else {
         clienteNomeStr = String(p.cliente || "");
       }
-
       const termoBusca = String(buscaNome || "").toLowerCase().trim();
-      const correspondenciaNome = clienteNomeStr.toLowerCase().includes(termoBusca);
-      const correspondenciaNumero = String(p.numeroPedido || "").toLowerCase().includes(termoBusca);
-
-      if (buscaNome && !correspondenciaNome && !correspondenciaNumero) return false;
-
+      if (buscaNome && !clienteNomeStr.toLowerCase().includes(termoBusca) && !String(p.numeroPedido || "").toLowerCase().includes(termoBusca)) return false;
       const dataP = parseDataPedido(p.data);
       if (dataInicio && dataP && dataP < new Date(dataInicio + "T00:00:00")) return false;
       if (dataFim && dataP && dataP > new Date(dataFim + "T23:59:59")) return false;
-
       return true;
     });
   }, [pedidos, buscaNome, dataInicio, dataFim, parseDataPedido]);
@@ -498,6 +533,38 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
   return (
     <div style={{ ...styles.page, backgroundColor: theme.bgMain, color: theme.textMain }} className="dashboard-page-container">
+
+      {mostrarModalNovidades && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, background: theme.bgCard, border: `1px solid ${theme.border}` }}>
+            <div style={styles.modalHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: theme.primary }}>
+                <span style={{ fontSize: '18px' }}>✨</span>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>NOVIDADES NO SISTEMA</h3>
+              </div>
+              <span style={styles.badgeCountNotif}>{versoesPendentes.length} atualizações</span>
+            </div>
+            <p style={{ fontSize: '13px', color: theme.textSec, lineHeight: '1.4', marginBottom: '20px' }}>Preparamos melhorias e novas funcionalidades no painel.</p>
+            <div style={styles.modalScrollArea}>
+              {versoesPendentes.map((versao, idx) => (
+                <div key={idx} style={{ ...styles.versaoCardItem, background: theme.inputBg, border: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '800', color: theme.primary }}>📌 v{versao.nrVersaoSistemaSistema}</span>
+                    <span style={{ fontSize: '11px', fontWeight: '600', color: theme.textSec }}>{versao.tsDataAtualizacao}</span>
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {versao.dsDescricao?.map((desc: string, i: number) => <li key={i} style={{ fontSize: '13px', color: theme.textMain }}>{desc}</li>)}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <button onClick={marcarNovidadesComoLidas} disabled={salvandoLeitura} style={{ ...styles.btnEntendidoModal, background: theme.primary }}>
+              ✅ {salvandoLeitura ? "Salvando..." : "Entendido, continuar para o painel"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. BARRA DE METAS */}
       <div style={{ ...styles.metaContainer, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}` }}>
         <div style={styles.metaInfoRow}>
@@ -534,42 +601,15 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
       {/* 3. FILTROS E ABAS */}
       <header style={styles.header}>
         <div style={{ ...styles.filtrosCard, backgroundColor: theme.bgCard, border: `1px solid ${theme.border}` }} className="filtro-container">
-          <input
-            type="text"
-            placeholder="🔍 Buscar por nome do cliente ou número do pedido..."
-            value={buscaNome}
-            onChange={e => setBuscaNome(e.target.value)}
-            style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
-          />
-          <input
-            type="date"
-            value={dataInicio}
-            onChange={e => setDataInicio(e.target.value)}
-            style={{ ...styles.inputDate, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
-          />
-          <input
-            type="date"
-            value={dataFim}
-            onChange={e => setDataFim(e.target.value)}
-            style={{ ...styles.inputDate, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
-          />
-
-          <select
-            value={itensPorPagina}
-            onChange={(e) => setItensPorPagina(Number(e.target.value))}
-            style={{ ...styles.selectPaginacaoTopo, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
-          >
+          <input type="text" placeholder="🔍 Buscar por nome do cliente ou número do pedido..." value={buscaNome} onChange={e => setBuscaNome(e.target.value)} style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }} />
+          <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={{ ...styles.inputDate, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }} />
+          <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={{ ...styles.inputDate, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }} />
+          <select value={itensPorPagina} onChange={(e) => setItensPorPagina(Number(e.target.value))} style={{ ...styles.selectPaginacaoTopo, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>
             <option value={20}>20 por pág</option>
             <option value={40}>40 por pág</option>
             <option value={100}>100 por pág</option>
           </select>
-
-          <button
-            onClick={() => { setBuscaNome(""); setDataInicio(""); setDataFim(""); }}
-            style={styles.btnLimpar}
-          >
-            Limpar
-          </button>
+          <button onClick={() => { setBuscaNome(""); setDataInicio(""); setDataFim(""); }} style={styles.btnLimpar}>Limpar</button>
         </div>
 
         <div style={{ ...styles.tabBar, borderColor: theme.border }}>
@@ -592,33 +632,20 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
         {abaAtiva === 'vendas' && (
           <TabVendas
             pedidos={pedidos.filter(p => {
-              // 1. Busca por nome (nmNomeCliente ou nome) ou número do pedido
               let clienteNomeStr = "";
               if (p.cliente && typeof p.cliente === 'object') {
                 clienteNomeStr = String((p.cliente as any).nmNomeCliente || (p.cliente as any).nome || "");
               } else {
                 clienteNomeStr = String(p.cliente || "");
               }
-
               const termoBusca = String(buscaNome || "").toLowerCase().trim();
-              const correspondenciaNome = clienteNomeStr.toLowerCase().includes(termoBusca);
-              const correspondenciaNumero = String(p.numeroPedido || "").toLowerCase().includes(termoBusca);
-
-              if (buscaNome && !correspondenciaNome && !correspondenciaNumero) return false;
-
-              // 2. Filtro de Datas
+              if (buscaNome && !clienteNomeStr.toLowerCase().includes(termoBusca) && !String(p.numeroPedido || "").toLowerCase().includes(termoBusca)) return false;
               const dataP = parseDataPedido(p.data);
               if (dataInicio && dataP && dataP < new Date(dataInicio + "T00:00:00")) return false;
               if (dataFim && dataP && dataP > new Date(dataFim + "T23:59:59")) return false;
-
-              // 3. APONTAMENTO SEGURO PARA O STATUS CONCLUÍDO
               const statusProd = String(p.StatusProducao?.dsStatusProducao || "").toLowerCase().trim();
-              const ehConcluido = statusProd === "concluído" || statusProd === "concluido";
-
               const statusRaiz = String(p.status || "").toLowerCase().trim();
-              const ehConcluidoRaiz = statusRaiz === "concluído" || statusRaiz === "concluido";
-
-              return (ehConcluido || ehConcluidoRaiz) && !p.devolvido;
+              return (statusProd === "concluído" || statusProd === "concluido" || statusRaiz === "concluído" || statusRaiz === "concluido") && !p.devolvido;
             })}
             formatarDataExibicao={formatarDataExibicao}
             formatarMoeda={formatarMoeda}
@@ -720,54 +747,64 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
         )}
       </section>
 
+      {/* 🌟 RENDERIZAÇÃO DO MODAL DE DEVOLUÇÃO */}
+      {pedidoParaDevolverModal && (
+        <ModalDevolucao
+          pedido={pedidoParaDevolverModal}
+          isOpen={!!pedidoParaDevolverModal}
+          onClose={() => setPedidoParaDevolverModal(null)}
+          onConfirmar={confirmarDevolucaoComDados}
+        />
+      )}
+
       <button onClick={carregarDadosTeste} style={{ margin: '20px 0', padding: '10px', backgroundColor: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
         🧪 Inserir Dados de Teste
       </button>
 
       <style jsx>{`
-      :global(body), :global(html) {
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow-x: hidden !important;
-      }
-      .dashboard-page-container {
-        box-sizing: border-box;
-        margin-top: 0 !important;
-        width: 100%;
-        max-width: 100vw;
-        overflow-x: hidden;
-      }
-      .dashboard-page-container ::-webkit-scrollbar {
-        height: 4px;
-      }
-      .dashboard-page-container ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 4px;
-      }
-
-      @media (max-width: 768px) {
-        .filtro-container {
-          flex-direction: column !important;
-          align-items: stretch !important;
+        :global(body), :global(html) {
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow-x: hidden !important;
         }
-        .filtro-container input,
-        .filtro-container select,
-        .filtro-container button {
-          width: 100% !important;
-          flex: none !important;
-          min-width: 100% !important;
-        }
-      }
-
-      @media (min-width: 769px) {
         .dashboard-page-container {
-          margin-left: 0px !important;
-          width: 100% !important;
-          max-width: 100% !important;
-          padding-top: 0px !important;
+          box-sizing: border-box;
+          margin-top: 0 !important;
+          width: 100%;
+          max-width: 100vw;
+          overflow-x: hidden;
         }
-      }
-    `}</style>
+        .dashboard-page-container ::-webkit-scrollbar {
+          height: 4px;
+        }
+        .dashboard-page-container ::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 4px;
+        }
+
+        @media (max-width: 768px) {
+          .filtro-container {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .filtro-container input,
+          .filtro-container select,
+          .filtro-container button {
+            width: 100% !important;
+            flex: none !important;
+            min-width: 100% !important;
+          }
+        }
+
+        @media (min-width: 769px) {
+          .dashboard-page-container {
+            margin-left: 0px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            padding-top: 0px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -828,4 +865,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   precificacaoResultCard: { padding: '20px', borderRadius: '14px', border: '2px solid', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
   precoSugeridoGrande: { fontSize: '32px', margin: '8px 0', fontWeight: '900', letterSpacing: '-1px' },
   finRow: { display: 'flex', justifyContent: 'space-between', fontSize: '13px' },
+
+  modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
+  modalContent: { width: '100%', maxWidth: '540px', padding: '28px', borderRadius: '20px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)', display: 'flex', flexDirection: 'column' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
+  badgeCountNotif: { fontSize: '11px', fontWeight: '700', backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '4px 10px', borderRadius: '20px' },
+  modalScrollArea: { maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px', paddingRight: '4px' },
+  versaoCardItem: { padding: '14px', borderRadius: '12px' },
+  btnEntendidoModal: { width: '100%', padding: '14px', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }
 };

@@ -508,6 +508,10 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
     const selo = obterSeloItem(item, pedidoLogistica);
     const qtd = item.quantidade || item.qty || 1;
 
+    // 🌟 Captura o preço unitário do item padronizado (compatível com 'preco', 'valor', etc.)
+    const precoUnitario = Number(item.preco || item.valor || item.valorUnitario || 0);
+    const valorTotalItem = precoUnitario * qtd;
+
     // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido, sem consultas ao Firebase
     const fotoUrl = useMemo(() => {
         return extrairFotoDoItem(item);
@@ -517,10 +521,10 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
 
     return (
         <div style={{ ...localStyles.itemLinhaResumida, backgroundColor: theme.inputBg, borderColor: theme.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
                 <img src={fotoUrl || "https://placehold.co/40x40?text=Prod"} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', backgroundColor: selo.cor, color: '#fff' }}>
                             {selo.texto}
                         </span>
@@ -528,11 +532,18 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
                             {qtd}x {item.nome || item.title}
                         </span>
                     </div>
-                    {item.variacao && (
-                        <span style={{ fontSize: '12px', color: theme.textSec, marginLeft: '2px' }}>
-                            Variação: {item.variacao}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {item.variacao && (
+                            <span style={{ fontSize: '12px', color: theme.textSec, marginLeft: '2px' }}>
+                                Variação: {item.variacao}
+                            </span>
+                        )}
+                        {/* 🌟 Exibição padronizada do valor unitário e total do item */}
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary }}>
+                            R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
                         </span>
-                    )}
+                    </div>
                 </div>
             </div>
 

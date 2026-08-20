@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import ModalProcessamento from '../ModalProcessamento';
 import AlertaErrosMelhorEnvio from './AlertaErrosMelhorEnvio';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
@@ -456,6 +456,36 @@ export default function BarraAcoesTabEtiquetas({
             return;
         }
 
+        // 🗑️ Tratamento para Excluir Pedido(s) em Massa
+        if (valorAcao === 'excluir') {
+            if (!confirm(`⚠️ ATENÇÃO: Deseja realmente excluir permanentemente ${selecionadosCount} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`)) {
+                e.target.value = "";
+                return;
+            }
+
+            setCarregandoAcao(true);
+            try {
+                for (const pedidoId of selecionadosNestaAba) {
+                    if (db && lojistaIdApp) {
+                        const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
+                        await deleteDoc(pedidoRef);
+                    }
+                }
+
+                // Remove os pedidos excluídos da listagem local e limpa a seleção
+                setLocalPedidos(prev => prev.filter(p => !selecionadosNestaAba.includes(p.id)));
+                setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
+
+                alert(`✅ ${selecionadosCount} pedido(s) excluído(s) com sucesso!`);
+            } catch (err: any) {
+                alert("Erro ao excluir pedidos: " + err.message);
+            } finally {
+                setCarregandoAcao(false);
+                e.target.value = "";
+            }
+            return;
+        }
+
         // 🛡️ TRAVAS DE FLUXO ESTRITO (Pago ➔ Pendente ➔ Produção ➔ Pronto)
         for (const pedidoId of selecionadosNestaAba) {
             const ped = localPedidos.find(p => p.id === pedidoId);
@@ -562,6 +592,7 @@ export default function BarraAcoesTabEtiquetas({
                         {abaAtiva === 'etiquetas' && (
                             <option value="resetar_etiqueta">🔄 Resetar Etiqueta (Reemitir)</option>
                         )}
+                        <option value="excluir">🗑️ Excluir Pedido(s)</option>
                     </select>
 
                     <div style={{ width: '55px', display: 'flex', justifyContent: 'center' }}>

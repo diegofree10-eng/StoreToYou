@@ -14,6 +14,7 @@ export interface TabLucroRealProps {
   despesasVariaveis: number;
   formatarMoeda: (valor: number) => string;
   evolucaoMensal: Record<string, any>;
+  totalPedidos?: number; // Adicionado para calcular métricas de pedidos
 }
 
 // Componente auxiliar de Card com Efeito Flip para Explicação/Dica
@@ -78,7 +79,7 @@ const InfoCard = ({
           title="Clique para ver o que significa"
         >?</button>
         <span style={{ ...localStyles.cardLabel, color: theme.textSec }}>{title}</span>
-        {isCustomContent ? children : <h3 style={{ margin: "10px 0 0 0", fontSize: "28px", color: color || theme.textMain }}>{value}</h3>}
+        {isCustomContent ? children : <h3 style={{ margin: "10px 0 0 0", fontSize: "26px", color: color || theme.textMain }}>{value}</h3>}
       </div>
 
       {/* Lado de Trás (Explicação / Flip) */}
@@ -121,7 +122,8 @@ export const TabLucroReal = ({
   despesasFixas,
   despesasVariaveis,
   formatarMoeda,
-  evolucaoMensal
+  evolucaoMensal,
+  totalPedidos = 0
 }: TabLucroRealProps) => {
 
   const { theme, isModoNoturno } = useTheme();
@@ -130,9 +132,14 @@ export const TabLucroReal = ({
   const [reducaoFixasPercent, setReducaoFixasPercent] = useState<number>(0);
   const [aumentoTicketPercent, setAumentoTicketPercent] = useState<number>(0);
 
+  // Cálculos Avançados de Eficiência
   const totalCustosVariaveis = custoTotal + despesaFreteLojista + despesasVariaveis;
   const margemContribuicao = faturamento - totalCustosVariaveis;
   const margemPercentual = faturamento > 0 ? (margemContribuicao / faturamento) * 100 : 0;
+  const rentabilidadeLiquida = faturamento > 0 ? (lucroReal / faturamento) * 100 : 0;
+
+  const ticketMedioReal = totalPedidos > 0 ? faturamento / totalPedidos : 0;
+  const impactoFretePercentual = faturamento > 0 ? (despesaFreteLojista / faturamento) * 100 : 0;
 
   const pontoEquilequilibrio = margemPercentual > 0 
     ? despesasFixas / (margemPercentual / 100) 
@@ -158,30 +165,44 @@ export const TabLucroReal = ({
   return (
     <div style={{ ...localStyles.container, color: theme.textMain, backgroundColor: 'transparent' }} className="tab-lucro-real-container">
 
-      {/* 1. INDICADORES ATUAIS & PONTO DE EQUILÍBRIO COM FLIP INFO */}
+      {/* 1. INDICADORES CHAVE DE PERFORMANCE (KPIs) */}
       <div style={localStyles.kpiGrid} className="kpi-grid-mobile">
-        <InfoCard 
-          title="Margem de Contribuição" 
-          value={`${margemPercentual.toFixed(1)}%`}
-          color={margemPercentual > 30 ? '#10b981' : '#f59e0b'}
-          explanation="Representa o percentual do faturamento que sobra após pagar todos os custos diretos e variáveis (insumos, fretes, comissões). É o dinheiro disponível para pagar as contas fixas e gerar lucro."
-        />
-
         <InfoCard 
           title="Lucro Líquido Real" 
           value={formatarMoeda(lucroReal)}
           color={lucroReal >= 0 ? '#10b981' : '#ef4444'}
-          explanation="O ganho real do negócio após subtrair todas as despesas fixas, variáveis e custos operacionais do faturamento total."
+          explanation="O ganho real do negócio após subtrair todas as despesas fixas, variáveis, insumos e fretes arcados pelo lojista."
+        />
+
+        <InfoCard 
+          title="Margem de Contribuição" 
+          value={`${margemPercentual.toFixed(1)}%`}
+          color={margemPercentual > 30 ? '#10b981' : '#f59e0b'}
+          explanation="Percentual do faturamento que sobra após pagar os custos diretos. Mostra se a precificação dos produtos cobre a operação."
+        />
+
+        <InfoCard 
+          title="Rentabilidade Líquida" 
+          value={`${rentabilidadeLiquida.toFixed(1)}%`}
+          color={rentabilidadeLiquida > 15 ? '#10b981' : '#3b82f6'}
+          explanation="Quanto cada R$ 1,00 vendido se traduz efetivamente em lucro no bolso do lojista após todas as deduções."
+        />
+
+        <InfoCard 
+          title="Impacto do Frete (Subsídio)" 
+          value={`${impactoFretePercentual.toFixed(1)}%`}
+          color={impactoFretePercentual > 10 ? '#ef4444' : '#10b981'}
+          explanation="Percentual do faturamento comprometido com o frete pago pelo lojista (etiquetas/envios subsidiados)."
         />
 
         <InfoCard 
           title="🎯 Ponto de Equilíbrio (Break-Even)" 
           gridColumn="1 / -1"
           isCustomContent={true}
-          explanation="É o valor exato que a empresa precisa faturar no mês para cobrir todas as despesas (fixas e variáveis), resultando em lucro zero. Vender acima disso significa gerar lucro líquido."
+          explanation="Faturamento mínimo mensal necessário para zerar o prejuízo. Vender acima disso gera lucro líquido real."
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', flexWrap: 'wrap', gap: '10px' }}>
-            <span style={{ fontSize: '13px', color: theme.textSec }}>Faturamento mínimo para cobrir fixas e variáveis:</span>
+            <span style={{ fontSize: '13px', color: theme.textSec }}>Faturamento para cobrir custos fixos e variáveis:</span>
             <strong style={{ fontSize: '18px', color: theme.textMain }}>{formatarMoeda(pontoEquilequilibrio)}</strong>
           </div>
         </InfoCard>
@@ -204,7 +225,7 @@ export const TabLucroReal = ({
           </div>
           <div>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '5px' }}>
-              Aumentar Ticket Médio: {aumentoTicketPercent}%
+              Aumentar Faturamento / Ticket: {aumentoTicketPercent}%
             </label>
             <input 
               type="range" min="0" max="50" step="5" 
@@ -214,7 +235,7 @@ export const TabLucroReal = ({
             />
           </div>
         </div>
-        <div style={{ background: theme.inputBg, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ background: theme.inputBg, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.textMain }}>Lucro Líquido Simulado:</span>
           <span style={{ fontSize: '18px', fontWeight: '800', color: lucroRealSimulado >= lucroReal ? '#10b981' : '#ef4444' }}>
             {formatarMoeda(lucroRealSimulado)} 
@@ -274,34 +295,45 @@ export const TabLucroReal = ({
         </div>
       </div>
 
-      {/* 5. DRE GERENCIAL */}
+      {/* 5. DRE GERENCIAL DETALHADA */}
       <div style={{ ...localStyles.dreCard, marginTop: '20px', background: theme.bgCard, border: `1px solid ${theme.border}` }}>
-        <h4 style={{ ...localStyles.dreTitle, color: theme.textMain, borderBottomColor: theme.border }}>📊 Demonstrativo de Resultados (DRE)</h4>
+        <h4 style={{ ...localStyles.dreTitle, color: theme.textMain, borderBottomColor: theme.border }}>📊 Demonstrativo de Resultados (DRE Gerencial)</h4>
         <div style={localStyles.row}>
-          <span style={{ ...localStyles.rowText, color: theme.textSec }}>Receita Bruta Total</span> 
+          <span style={{ ...localStyles.rowText, color: theme.textSec }}>(=) Receita Bruta Total (Faturamento)</span> 
           <span style={{ ...localStyles.rowVal, color: theme.textMain }}>{formatarMoeda(faturamento)}</span>
         </div>
         <div style={{ ...localStyles.row, color: '#ef4444' }}>
-          <span style={{ ...localStyles.rowText, color: '#ef4444' }}>(-) Custos Variáveis (Insumos + Fretes + Despesas Var.)</span>
-          <span style={localStyles.rowVal}>- {formatarMoeda(totalCustosVariaveis)}</span>
+          <span style={{ ...localStyles.rowText, color: '#ef4444' }}>(-) Custos de Insumos / Produtos Vendidos</span>
+          <span style={localStyles.rowVal}>- {formatarMoeda(custoTotal)}</span>
         </div>
-        <div style={{ ...localStyles.row, background: theme.inputBg, fontWeight: 'bold', padding: '8px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-          <span style={{ ...localStyles.rowText, color: theme.textMain }}>(=) Margem de Contribuição</span>
+        <div style={{ ...localStyles.row, color: '#ef4444' }}>
+          <span style={{ ...localStyles.rowText, color: '#ef4444' }}>(-) Fretes Pagos pelo Lojista (Subsídios / Etiquetas)</span>
+          <span style={localStyles.rowVal}>- {formatarMoeda(despesaFreteLojista)}</span>
+        </div>
+        <div style={{ ...localStyles.row, color: '#ef4444' }}>
+          <span style={{ ...localStyles.rowText, color: '#ef4444' }}>(-) Despesas Variáveis (Taxas de Cartão / Gateway)</span>
+          <span style={localStyles.rowVal}>- {formatarMoeda(despesasVariaveis)}</span>
+        </div>
+        <div style={{ ...localStyles.row, background: theme.inputBg, fontWeight: 'bold', padding: '8px', borderRadius: '6px', border: `1px solid ${theme.border}`, marginTop: '4px' }}>
+          <span style={{ ...localStyles.rowText, color: theme.textMain }}>(=) Margem de Contribuição Total</span>
           <span style={{ ...localStyles.rowVal, color: theme.textMain }}>{formatarMoeda(margemContribuicao)}</span>
         </div>
         <div style={{ ...localStyles.row, color: '#ef4444', marginTop: '10px' }}>
-          <span style={{ ...localStyles.rowText, color: '#ef4444' }}>(-) Despesas Fixas (Aba Despesas)</span>
+          <span style={{ ...localStyles.rowText, color: '#ef4444' }}>(-) Despesas Fixas Operacionais (Aluguel, Salários, etc.)</span>
           <span style={localStyles.rowVal}>- {formatarMoeda(despesasFixas)}</span>
         </div>
         <div style={{ ...localStyles.row, borderTop: `2px solid ${theme.border}`, marginTop: '10px', paddingTop: '10px', fontWeight: 'bold' }}>
-          <span style={{ ...localStyles.rowText, color: theme.textMain }}>(=) LUCRO LÍQUIDO FINAL</span>
-          <span style={{ ...localStyles.rowVal, color: theme.textMain }}>{formatarMoeda(lucroReal)}</span>
+          <span style={{ ...localStyles.rowText, color: theme.textMain }}>(=) LUCRO LÍQUIDO FINAL (REAL)</span>
+          <span style={{ ...localStyles.rowVal, color: lucroReal >= 0 ? '#10b981' : '#ef4444', fontSize: '15px' }}>{formatarMoeda(lucroReal)}</span>
         </div>
       </div>
 
       <div style={{ ...localStyles.auditoriaFooter, background: isModoNoturno ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff', color: isModoNoturno ? '#93c5fd' : '#1e40af', border: `1px solid ${theme.border}` }}>
-        💡 <strong style={{ color: isModoNoturno ? '#bfdbfe' : '#1e3a8a' }}>Dica de Gestão:</strong> Sua Margem de Contribuição ideal deve estar acima de 30%.
-        {margemPercentual < 30 && " Sua margem está baixa. Revise seu preço de venda ou o custo dos insumos."}
+        💡 <strong style={{ color: isModoNoturno ? '#bfdbfe' : '#1e3a8a' }}>Análise de Saúde Financeira:</strong> 
+        {margemPercentual >= 30 
+          ? " Excelente! Sua margem de contribuição está saudável acima de 30%." 
+          : " Atenção: Sua margem está abaixo de 30%. Considere reajustar preços ou negociar custos de fornecedores."}
+        {impactoFretePercentual > 10 && " O peso dos fretes pagos pelo lojista está consumindo uma fatia alta da receita."}
       </div>
 
       <style jsx>{`
@@ -318,11 +350,11 @@ export const TabLucroReal = ({
 const localStyles: Record<string, React.CSSProperties> = {
   container: { padding: "10px 0", fontFamily: "sans-serif" },
   kpiGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "25px" },
-  dreCard: { padding: "24px", borderRadius: "12px", boxSizing: 'border-box' },
+  dreCard: { padding: "24px", borderRadius: '12px', boxSizing: 'border-box' },
   dreTitle: { margin: "0 0 15px 0", borderBottom: "1px solid", paddingBottom: "10px" },
   row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", fontSize: "13px", gap: "12px" },
   rowText: { flex: 1 },
   rowVal: { whiteSpace: 'nowrap', fontWeight: '600', flexShrink: 0 },
   cardLabel: { fontSize: "11px", fontWeight: "800", textTransform: "uppercase" },
-  auditoriaFooter: { padding: "15px", borderRadius: "8px", marginTop: "20px", fontSize: "13px" }
+  auditoriaFooter: { padding: "15px", borderRadius: '8px', marginTop: "20px", fontSize: "13px" }
 };

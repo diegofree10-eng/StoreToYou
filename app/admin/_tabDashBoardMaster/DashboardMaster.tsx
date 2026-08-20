@@ -178,7 +178,12 @@ export default function PainelMasterFesta() {
       {/* CONTEÚDO DINÂMICO DAS TABS */}
       <main style={styles.mainContent}>
         {activeTab === "PANORAMA" && (
-          <TabPanorama lojistas={lojistas} denuncias={denuncias} planos={planos} />
+          <TabPanorama
+            lojistas={lojistas}
+            denuncias={denuncias}
+            planos={planos}
+            versaoSistemaGlobal={versaoAtualMaster} // 🌟 Adicionado aqui com Custo Zero!
+          />
         )}
 
         {activeTab === "FINANCEIRO" && (

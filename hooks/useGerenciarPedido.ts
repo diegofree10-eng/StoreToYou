@@ -1,6 +1,6 @@
 // hooks/useGerenciarPedido.ts
 import { useState } from 'react';
-import { doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { Pedido } from '@/types/pedido';
 
 interface UseGerenciarPedidoProps {
@@ -14,6 +14,9 @@ export function useGerenciarPedido({ db, lojistaIdApp, setLocalPedidos }: UseGer
 
     const estornarEstoqueDoPedido = async (pedido: Pedido) => {
         if (!pedido || !Array.isArray(pedido.itens) || pedido.itens.length === 0) return;
+
+        const batch = writeBatch(db);
+        let temModificacoes = false;
 
         for (const item of pedido.itens) {
             const produtoId = item.idProduto || item.id;
@@ -32,16 +35,22 @@ export function useGerenciarPedido({ db, lojistaIdApp, setLocalPedidos }: UseGer
                     if (v.nome === nomeVar) {
                         const estoqueAtual = Number(v.estoque || 0);
                         const novoEstoque = estoqueAtual + qtdEstornar;
-                        return { ...v, estoque: String(novoEstoque) };
+                        return { ...v, estoque: novoEstoque }; // Armazenando como number
                     }
                     return v;
                 });
-                await updateDoc(prodRef, { variacoes: novasVariacoes });
+                batch.update(prodRef, { variacoes: novasVariacoes });
+                temModificacoes = true;
             } else {
                 const estoqueAtual = Number(dadosProd.estoque || 0);
                 const novoEstoque = estoqueAtual + qtdEstornar;
-                await updateDoc(prodRef, { estoque: String(novoEstoque) });
+                batch.update(prodRef, { estoque: novoEstoque }); // Armazenando como number
+                temModificacoes = true;
             }
+        }
+
+        if (temModificacoes) {
+            await batch.commit();
         }
     };
 
