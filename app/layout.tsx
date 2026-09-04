@@ -1,9 +1,9 @@
 // app/layout.tsx
-import { CartProvider } from "@/context/CartContext"; // Ou onde seu contexto estiver
+import { CartProvider } from "@/context/CartContext";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-br">
+    <html lang="pt-br" suppressHydrationWarning>
       <body>
         {/* O Provider precisa envolver o {children} aqui no nível raiz */}
         <CartProvider>

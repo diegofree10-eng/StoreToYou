@@ -22,7 +22,7 @@ export default function TabCardEtiqueta({ pedido, isAutomacaoCompletaMelhorEnvio
     if (isAutomacaoCompletaMelhorEnvio) {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
-                {pedido.etiquetaGerada || etiquetaData.statusEtiqueta ? (
+                {(pedido as any).dsEtiquetaGerada || pedido.etiquetaGerada || etiquetaData.statusEtiqueta ? (
                     <div style={{ fontSize: '10px', color: '#047857', lineHeight: '1.3' }}>
                         <div><b>Id:</b> {etiquetaData.IdEtiqueta || '-'}</div>
                         <div><b>Cód Envio:</b> {etiquetaData.codigoEnvio || '-'}</div>

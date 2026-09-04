@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { db, auth, storage } from "@/lib/firebase";
 import {
     collection, doc, query, orderBy, updateDoc,
-    setDoc, onSnapshot
+    setDoc, onSnapshot, deleteField
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, uploadString } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
@@ -33,9 +33,12 @@ const PALAVRAS_PROIBIDAS = [
     "sistema", "login", "auth", "teste", "gerente", "houseconviteria", "chefe"
 ];
 
-// ✨ Função auxiliar para converter o valor formatado da tela ("1,50") para número decimal real (1.5) para o Firebase
+// ✨ Função auxiliar estritamente segura para converter valores de input para números reais sem corromper
 const converterParaNumeroBanco = (valor: any): number => {
-    if (!valor) return 0;
+    if (valor === null || valor === undefined || valor === "") return 0;
+    if (typeof valor === 'number') return valor;
+
+    // Remove pontos de milhar e substitui a vírgula decimal por ponto para o banco
     const limpo = valor.toString().replace(/\./g, "").replace(",", ".");
     const numero = parseFloat(limpo);
     return isNaN(numero) ? 0 : numero;
@@ -61,6 +64,7 @@ export default function CadastroProdutos() {
 
     const [nome, setNome] = useState("");
     const [sku, setSku] = useState("");
+    const [ean, setEan] = useState(""); // ✨ Estado para o código de barras (EAN / GTIN)
     const [isModalSKUOpen, setIsModalSKUOpen] = useState(false);
     const [listaParaImprimir, setListaParaImprimir] = useState<any[]>([]);
     const [descricao, setDescricao] = useState("");
@@ -74,6 +78,10 @@ export default function CadastroProdutos() {
 
     const [dsTipoProduto, setDsTipoProduto] = useState("Fisico_Sem");
     const [nrDiasProducao, setNrDiasProducao] = useState("");
+
+    // ✨ Estados para movimentação de estoque
+    const [movimentarEstoque, setMovimentarEstoque] = useState<boolean>(true);
+    const [movimentarEstoqueComposicao, setMovimentarEstoqueComposicao] = useState<boolean>(true);
 
     // ✨ Novo estado para pesos e medidas por variação
     const [pesosDiferentesPorVariacao, setPesosDiferentesPorVariacao] = useState(false);
@@ -110,6 +118,10 @@ export default function CadastroProdutos() {
     const [opcoesVar2, setOpcoesVar2] = useState<string[]>([]);
     const [tabelaPrecos, setTabelaPrecos] = useState<any>({});
     const [produtoIdAtual, setProdutoIdAtual] = useState<string | null>(null);
+
+    // ✨ Estados para Insumos Globais e Listagem de Insumos da Composição
+    const [listaInsumos, setListaInsumos] = useState<any[]>([]);
+    const [insumosComposicao, setInsumosComposicao] = useState<any[]>([]);
 
     const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
     const [tipoCropAtual, setTipoCropAtual] = useState<"principal" | "variacao">("principal");
@@ -157,11 +169,19 @@ export default function CadastroProdutos() {
             }
         });
 
-        const qProdutos = query(collection(db, "lojistas", uid, "produtos"), orderBy("createdAt", "desc"));
+        const qProdutos = query(collection(db, "lojistas", uid, "produtos"), orderBy("nrCreatedAt", "desc"));
         const unsubProdutos = onSnapshot(qProdutos, (snap) => {
             setProdutos(snap.docs.map(d => {
                 const data = d.data();
-                return { id: d.id, ...data, imagens: data.imagens || [], variacoes: data.variacoes || [] };
+                return {
+                    id: d.id,
+                    ...data,
+                    nome: data.dsNome || data.nome || "",
+                    categoria: data.dsCategoria || data.categoria || "",
+                    ativo: data.isAtivo ?? data.ativo ?? true,
+                    imagens: data.dsImagens || data.imagens || [],
+                    variacoes: data.variacoes || []
+                };
             }));
         });
 
@@ -170,7 +190,13 @@ export default function CadastroProdutos() {
             setListaCategorias(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        return () => { unsubLojista(); unsubProdutos(); unsubCategorias(); };
+        // ✨ Busca em tempo real dos insumos cadastrados pelo lojista para a composição
+        const qInsumos = query(collection(db, "lojistas", uid, "insumos_composicao"), orderBy("dsNomeInsumo", "asc"));
+        const unsubInsumos = onSnapshot(qInsumos, (snap) => {
+            setListaInsumos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
+        return () => { unsubLojista(); unsubProdutos(); unsubCategorias(); unsubInsumos(); };
     }, [uid, planosMaster]);
 
     useEffect(() => {
@@ -217,21 +243,43 @@ export default function CadastroProdutos() {
     };
 
     const temVariaveisComPreco = Object.values(tabelaPrecos).some((v: any) => {
-        return v?.preco && v.preco.toString().trim() !== "" && parseFloat(v.preco) > 0;
+        const precoItem = v?.vlPrecoProduto ?? v?.vlPreco ?? v?.preco;
+        return precoItem && precoItem.toString().trim() !== "" && parseFloat(precoItem.toString().replace(/\./g, "").replace(",", ".")) > 0;
+    });
+
+    // ✨ Verifica se existe insumos na grade de variações
+    const temInsumosNaGrade = Object.values(tabelaPrecos).some((v: any) => {
+        return Array.isArray(v?.insumosComposicao) && v.insumosComposicao.length > 0;
     });
 
     const formatInput = (value: string, setter: (v: string) => void) => {
         const cleanValue = value.replace(/\D/g, "");
         if (!cleanValue) { setter(""); return; }
-        setter((parseInt(cleanValue) / 100).toFixed(2));
+        setter((parseInt(cleanValue, 10) / 100).toFixed(2).replace('.', ','));
     };
 
     const gerarCombinacoes = () => {
-        if (opcoesVar1.length === 0) return [];
-        if (opcoesVar2.length === 0) return opcoesVar1.filter(v => v.trim()).map(v1 => ({ v1, v2: "", key: v1 }));
+        if (!opcoesVar1 || !Array.isArray(opcoesVar1)) return [];
+        const var1Validas = opcoesVar1.filter(v => v !== null && v !== undefined && String(v).trim() !== "");
+        if (var1Validas.length === 0) return [];
+
+        const var2Validas = (opcoesVar2 && Array.isArray(opcoesVar2))
+            ? opcoesVar2.filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+            : [];
+
+        if (var2Validas.length === 0) {
+            return var1Validas.map(v1 => ({ v1: String(v1), v2: "", key: String(v1) }));
+        }
+
         const combos: any[] = [];
-        opcoesVar1.filter(v => v.trim()).forEach(v1 => {
-            opcoesVar2.filter(v => v.trim()).forEach(v2 => { combos.push({ v1, v2, key: `${v1}-${v2}` }); });
+        var1Validas.forEach(v1 => {
+            var2Validas.forEach(v2 => {
+                combos.push({
+                    v1: String(v1),
+                    v2: String(v2),
+                    key: `${String(v1)}___${String(v2)}`
+                });
+            });
         });
         return combos;
     };
@@ -244,10 +292,10 @@ export default function CadastroProdutos() {
         const combos = gerarCombinacoes();
         const novaTabela = { ...tabelaAtual };
         combos.forEach(c => {
-            if (!novaTabela[c.key]?.sku) {
+            if (!novaTabela[c.key]?.dsSkuProduto && !novaTabela[c.key]?.sku) {
                 const sufixo1 = c.v1 ? c.v1.substring(0, 3).toUpperCase() : "";
                 const sufixo2 = c.v2 ? `-${c.v2.substring(0, 3).toUpperCase()}` : "";
-                novaTabela[c.key] = { ...novaTabela[c.key], sku: `${sku}-${sufixo1}${sufixo2}`.toUpperCase() };
+                novaTabela[c.key] = { ...novaTabela[c.key], dsSkuProduto: `${sku}-${sufixo1}${sufixo2}`.toUpperCase() };
             }
         });
         setTabela({ ...novaTabela });
@@ -263,11 +311,11 @@ export default function CadastroProdutos() {
             return false;
         }
         if (!temVariaveisComPreco) {
-            if (!precoBasico || parseFloat(precoBasico.replace(',', '.')) <= 0) {
+            if (!precoBasico || converterParaNumeroBanco(precoBasico) <= 0) {
                 alert("Informe o preço de Venda.");
                 return false;
             }
-            if (!custoUnitario || parseFloat(custoUnitario.replace(',', '.')) < 0) {
+            if (!custoUnitario || converterParaNumeroBanco(custoUnitario) < 0) {
                 alert("Informe o Custo Unitário.");
                 return false;
             }
@@ -277,14 +325,13 @@ export default function CadastroProdutos() {
             return false;
         }
 
-        // ✨ Validação de frete restrita apenas a produtos que exigem frete
         const precisaFreteValidacao = dsTipoProduto !== 'digital_download' && dsTipoProduto !== 'Digital_Personalizado';
         if (precisaFreteValidacao) {
             if (pesosDiferentesPorVariacao) {
                 const combos = gerarCombinacoes();
                 for (const c of combos) {
                     const item = tabelaPrecos[c.key];
-                    if (!item?.peso || !item?.comprimento || !item?.largura || !item?.altura) {
+                    if (!item?.nrPesoProduto && !item?.peso || !item?.nrComprimentoProduto && !item?.comprimento || !item?.nrLarguraProduto && !item?.largura || !item?.nrAlturaProduto && !item?.altura) {
                         alert(`Por favor, preencha o peso e todas as dimensões da variação: ${c.v1} ${c.v2 ? `/ ${c.v2}` : ""}`);
                         return false;
                     }
@@ -327,62 +374,180 @@ export default function CadastroProdutos() {
             const novaTabelaPrecos = { ...tabelaPrecos };
             for (const key of Object.keys(tabelaPrecos)) {
                 const item = tabelaPrecos[key];
-                if (item.foto && item.foto.startsWith("data:image")) {
+                const fotoItem = item.dsFotoProduto || item.dsFoto || item.foto;
+                if (fotoItem && fotoItem.startsWith("data:image")) {
                     const storageRef = ref(storage, `lojistas/${uid}/produtos/${produtoId}/variacoes/${key}.jpg`);
-                    const snapshot = await uploadString(storageRef, item.foto, 'data_url');
-                    novaTabelaPrecos[key].foto = await getDownloadURL(snapshot.ref);
+                    const snapshot = await uploadString(storageRef, fotoItem, 'data_url');
+                    novaTabelaPrecos[key].dsFotoProduto = await getDownloadURL(snapshot.ref);
                 }
             }
 
             const combos = gerarCombinacoes();
-            const precosValidos = Object.values(novaTabelaPrecos).map((v: any) => parseFloat(v.preco)).filter(p => p > 0);
-            const precoFinal = precosValidos.length > 0 ? Math.min(...precosValidos).toFixed(2) : precoBasico;
+            const precosValidos = Object.values(novaTabelaPrecos).map((v: any) => converterParaNumeroBanco(v.vlPrecoProduto ?? v.vlPreco ?? v.preco)).filter(p => p > 0);
+            const precoFinalCalculado = precosValidos.length > 0 ? Math.min(...precosValidos) : converterParaNumeroBanco(precoBasico);
 
-            // ✨ Regra exata de necessidade de frete (false para digital_download e Digital_Personalizado)
             const isPrecisaFrete = dsTipoProduto !== 'digital_download' && dsTipoProduto !== 'Digital_Personalizado';
 
+            // 🌟 Array final padronizado com o nome do produto pai concatenado na variação
+            const variacoesArrayFinal = temVariaveisComPreco ? combos.map(c => {
+                const itemVar = novaTabelaPrecos[c.key] || {};
+
+                const v1Limpo = String(c.v1 || "").trim();
+                const v2Limpo = String(c.v2 || "").trim();
+
+                // ✨ Monta o nome completo da variação: Nome do Produto Pai + Modelo (v1) + Tamanho (v2 se houver)
+                let nomeVariacaoCalculado = nome.trim();
+                if (v1Limpo) nomeVariacaoCalculado += ` - ${v1Limpo}`;
+                if (v2Limpo) nomeVariacaoCalculado += ` / ${v2Limpo}`;
+
+                // ✨ Calcula o custo somando todos os insumos vinculados a esta variação específica
+                const insumosDestaVariacao = Array.isArray(itemVar.insumosComposicao) ? itemVar.insumosComposicao : [];
+                const custoInsumosCalculado = insumosDestaVariacao.reduce((acc: number, ins: any) => {
+                    const custoU = Number(ins.vlCustoUnitarioInsumo || 0);
+                    const qtdC = Number(ins.nrQuantidadeConsumida || 0);
+                    return acc + (custoU * qtdC);
+                }, 0);
+
+                const custoFinalItem = custoInsumosCalculado > 0
+                    ? Number(custoInsumosCalculado.toFixed(4))
+                    : converterParaNumeroBanco(itemVar.vlCustoUnitarioProduto ?? itemVar.vlCustoUnitario ?? itemVar.custo ?? custoUnitario);
+
+                // ✨ Captura rigorosamente o estoque digitado na variação da grade
+                const estoqueVarBruto = itemVar.nrEstoqueProduto ?? itemVar.nrEstoque ?? itemVar.estoque ?? 0;
+                const estoqueFinalItem = parseInt(estoqueVarBruto.toString().replace(/\D/g, ""), 10) || 0;
+
+                return {
+                    dsNomeProduto: nomeVariacaoCalculado,
+                    dsModeloProduto: v1Limpo,
+                    nrTamanhoProduto: v2Limpo ? v2Limpo : null,
+                    dsSkuProduto: itemVar.dsSkuProduto || itemVar.sku || itemVar.dsSku || "",
+                    dsEANGTINProduto: itemVar.dsEANGTINProduto || itemVar.ean || itemVar.codigoBarras || "", // ✨ EAN por variação
+                    vlPrecoProduto: converterParaNumeroBanco(itemVar.vlPrecoProduto ?? itemVar.vlPreco ?? itemVar.preco ?? precoBasico),
+                    vlCustoUnitarioProduto: custoFinalItem,
+                    nrEstoqueProduto: estoqueFinalItem,
+                    dsFotoProduto: itemVar.dsFotoProduto ?? itemVar.dsFoto ?? itemVar.foto ?? "",
+                    nrPesoProduto: pesosDiferentesPorVariacao ? converterParaNumeroBanco(itemVar.nrPesoProduto ?? itemVar.nrPeso ?? itemVar.peso) : null,
+                    nrComprimentoProduto: pesosDiferentesPorVariacao ? converterParaNumeroBanco(itemVar.nrComprimentoProduto ?? itemVar.nrComprimento ?? itemVar.comprimento) : null,
+                    nrLarguraProduto: pesosDiferentesPorVariacao ? converterParaNumeroBanco(itemVar.nrLarguraProduto ?? itemVar.nrLargura ?? itemVar.largura) : null,
+                    nrAlturaProduto: pesosDiferentesPorVariacao ? converterParaNumeroBanco(itemVar.nrAlturaProduto ?? itemVar.nrAltura ?? itemVar.altura) : null,
+                    insumosComposicao: insumosDestaVariacao
+                };
+            }) : [];
+
+            // ✨ Calcula o custo do produto base somando os insumos globais caso não tenha variação
+            const custoInsumosGlobais = insumosComposicao.reduce((acc: number, ins: any) => {
+                const custoU = Number(ins.vlCustoUnitarioInsumo || 0);
+                const qtdC = Number(ins.nrQuantidadeConsumida || 0);
+                return acc + (custoU * qtdC);
+            }, 0);
+
+            const custoUnitarioFinal = custoInsumosGlobais > 0
+                ? Number(custoInsumosGlobais.toFixed(4))
+                : converterParaNumeroBanco(custoUnitario);
+
             const dados: any = {
-                lojistaId: uid, nome, sku, descricao, categoria, subcategoria,
-                precoBasico: precoFinal, custoUnitario, estoque,
-                estoqueMinimo: estoqueMinimo ? Number(estoqueMinimo) : 3,
-                ativo,
+                dsLojistaIdProduto: uid,
+                dsNomeProduto: nome,
+                dsSkuProduto: sku,
+                dsEANGTINProduto: ean, // ✨ Salva o código de barras do fabricante global
+                dsDescricaoProduto: descricao,
+                dsCategoriaProduto: categoria,
+                dsSubcategoriaProduto: subcategoria,
+
+                vlPrecoBasicoProduto: converterParaNumeroBanco(precoFinalCalculado),
+                vlCustoUnitarioProduto: custoUnitarioFinal,
+
+                nrEstoqueProduto: converterParaNumeroBanco(estoque),
+                nrEstoqueMinimoProduto: estoqueMinimo ? Number(estoqueMinimo) : 3,
+                isAtivoProduto: ativo,
                 dsTipoProduto: dsTipoProduto || "Fisico_Sem",
-                nrDiasProducao: nrDiasProducao ? Number(nrDiasProducao) : 0,
+                nrDiasProducaoProduto: nrDiasProducao ? Number(nrDiasProducao) : 0,
                 pesosDiferentesPorVariacao,
-                precisaFrete: isPrecisaFrete,
+                isPrecisaFreteProduto: isPrecisaFrete,
 
-                // ✨ Conversão de pesos e medidas do produto principal para o Firebase
-                peso: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(peso) : null),
-                comprimento: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(comprimento) : null),
-                largura: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(largura) : null),
-                altura: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(altura) : null),
+                // ✨ Campos exatos para salvamento do status dos checkboxes
+                isMovimentarEstoque: movimentarEstoque,
+                isMovimentarEstoqueComposicao: movimentarEstoqueComposicao,
 
-                imagens: novasImagens,
-                capa: novasImagens[0] || "",
-                temVariacoes: temVariaveisComPreco,
-                nomeVar1, nomeVar2, requisitos,
+                nrPesoProduto: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(peso) : null),
+                nrComprimentoProduto: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(comprimento) : null),
+                nrLarguraProduto: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(largura) : null),
+                nrAlturaProduto: pesosDiferentesPorVariacao ? null : (isPrecisaFrete ? converterParaNumeroBanco(altura) : null),
 
-                // ✨ Conversão de pesos e medidas nas variações para o Firebase
-                variacoes: temVariaveisComPreco ? combos.map(c => ({
-                    nome: c.v2 ? `${c.v1} / ${c.v2}` : c.v1,
-                    v1: c.v1, v2: c.v2,
-                    sku: novaTabelaPrecos[c.key]?.sku || "",
-                    preco: novaTabelaPrecos[c.key]?.preco || precoBasico,
-                    custo: novaTabelaPrecos[c.key]?.custo || custoUnitario,
-                    estoque: novaTabelaPrecos[c.key]?.estoque || "",
-                    foto: novaTabelaPrecos[c.key]?.foto || "",
-                    peso: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.peso) : null,
-                    comprimento: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.comprimento) : null,
-                    largura: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.largura) : null,
-                    altura: pesosDiferentesPorVariacao ? converterParaNumeroBanco(novaTabelaPrecos[c.key]?.altura) : null
-                })) : [],
+                dsImagensProduto: novasImagens,
+                dsCapaProduto: novasImagens[0] || "",
+                isTemVariacoesProduto: temVariaveisComPreco,
+                dsNomeVar1Produto: nomeVar1,
+                dsNomeVar2Produto: nomeVar2,
+                dsRequisitosProduto: requisitos,
+                variacoes: variacoesArrayFinal,
+                insumosComposicao: temInsumosNaGrade ? [] : insumosComposicao,
 
-                updatedAt: Date.now()
+                nrUpdatedAt: Date.now()
             };
 
             const docRef = doc(db, "lojistas", uid, "produtos", produtoId);
-            if (editId) await updateDoc(docRef, dados);
-            else await setDoc(docRef, { ...dados, destaque: false, createdAt: Date.now() });
+            if (editId) {
+                await updateDoc(docRef, {
+                    ...dados,
+                    nome: deleteField(),
+                    categoria: deleteField(),
+                    subcategoria: deleteField(),
+                    descricao: deleteField(),
+                    precoBasico: deleteField(),
+                    custoUnitario: deleteField(),
+                    estoque: deleteField(),
+                    estoqueMinimo: deleteField(),
+                    ativo: deleteField(),
+                    capa: deleteField(),
+                    imagens: deleteField(),
+                    peso: deleteField(),
+                    comprimento: deleteField(),
+                    largura: deleteField(),
+                    altura: deleteField(),
+                    sku: deleteField(),
+                    ean: deleteField(),
+                    codigoBarras: deleteField(),
+                    temVariacoes: deleteField(),
+                    nomeVar1: deleteField(),
+                    nomeVar2: deleteField(),
+                    precisaFrete: deleteField(),
+                    destaque: deleteField(),
+                    diasProducao: deleteField(),
+                    lojistaId: deleteField(),
+                    updatedAt: deleteField(),
+                    createdAt: deleteField(),
+                    permiteRetirada: deleteField(),
+                    envioTransportadora: deleteField(),
+                    vlPrecoBasico: deleteField(),
+                    vlCustoUnitario: deleteField(),
+                    nrEstoque: deleteField(),
+                    nrEstoqueMinimo: deleteField(),
+                    nrPeso: deleteField(),
+                    nrComprimento: deleteField(),
+                    nrLargura: deleteField(),
+                    nrAltura: deleteField(),
+                    dsSku: deleteField(),
+                    dsEANGTIN: deleteField(),
+                    nrDiasProducao: deleteField(),
+                    dsNome: deleteField(),
+                    dsCategoria: deleteField(),
+                    dsDescricao: deleteField(),
+                    dsLojistaId: deleteField(),
+                    dsSubcategoria: deleteField(),
+                    dsCapa: deleteField(),
+                    dsImagens: deleteField(),
+                    dsNomeVar1: deleteField(),
+                    dsNomeVar2: deleteField(),
+                    dsRequisitos: deleteField(),
+                    isAtivo: deleteField(),
+                    isPrecisaFrete: deleteField(),
+                    isTemVariacoes: deleteField()
+                });
+
+            } else {
+                await setDoc(docRef, { ...dados, isDestaque: false, nrCreatedAt: Date.now() });
+            }
 
             alert("Produto salvo com sucesso! ✅");
             limparForm();
@@ -395,53 +560,127 @@ export default function CadastroProdutos() {
     }
 
     const limparForm = () => {
-        setNome(""); setSku(""); setDescricao(""); setCategoria(""); setSubcategoria(""); setPrecoBasico(""); setCustoUnitario("");
+        setNome(""); setSku(""); setEan(""); setDescricao(""); setCategoria(""); setSubcategoria(""); setPrecoBasico(""); setCustoUnitario("");
         setEstoque(""); setEstoqueMinimo("");
         setDsTipoProduto("Fisico_Sem"); setNrDiasProducao("");
+        setMovimentarEstoque(true);
+        setMovimentarEstoqueComposicao(true);
         setPesosDiferentesPorVariacao(false);
         setPeso(""); setComprimento(""); setLargura(""); setAltura(""); setImagens([]); setEditId(null); setFiles([]);
         setOpcoesVar1([]); setOpcoesVar2([]); setNomeVar1(""); setNomeVar2(""); setTabelaPrecos({});
+        setInsumosComposicao([]);
         setRequisitos({ pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
         setProdutoIdAtual(null);
     };
 
     const carregarDadosProdutoParaEdicao = (p: any) => {
+        if (!p) return;
+
         setEditId(p.id);
-        setNome(p.nome); setSku(p.sku || ""); setCategoria(p.categoria || ""); setSubcategoria(p.subcategoria || "");
-        setPrecoBasico(p.precoBasico || "");
-        setCustoUnitario(p.custoUnitario || "");
-        setEstoque(p.estoque || "");
-        setEstoqueMinimo(p.estoqueMinimo !== undefined && p.estoqueMinimo !== null ? String(p.estoqueMinimo) : "");
+        setNome(p.dsNomeProduto || p.dsNome || p.nome || "");
+        setSku(p.dsSkuProduto || p.dsSku || p.sku || "");
+        setEan(p.dsEANGTINProduto || p.ean || p.codigoBarras || ""); // ✨ Carrega o EAN salvo
+        setCategoria(p.dsCategoriaProduto || p.dsCategoria || p.categoria || "");
+        setSubcategoria(p.dsSubcategoriaProduto || p.dsSubcategoria || p.subcategoria || "");
+        setDescricao(p.dsDescricaoProduto || p.dsDescricao || p.descricao || "");
+
+        const precoVal = p.vlPrecoBasicoProduto ?? p.vlPrecoBasico ?? p.precoBasico;
+        setPrecoBasico(precoVal !== undefined && precoVal !== null && !isNaN(Number(precoVal)) ? Number(precoVal).toFixed(2).replace('.', ',') : "");
+
+        const custoVal = p.vlCustoUnitarioProduto ?? p.vlCustoUnitario ?? p.custoUnitario;
+        setCustoUnitario(custoVal !== undefined && custoVal !== null && !isNaN(Number(custoVal)) ? Number(custoVal).toFixed(2).replace('.', ',') : "");
+
+        const estoqueVal = p.nrEstoqueProduto ?? p.nrEstoque ?? p.estoque;
+        setEstoque(estoqueVal !== undefined && estoqueVal !== null ? String(estoqueVal) : "");
+
+        const estoqueMinVal = p.nrEstoqueMinimoProduto ?? p.nrEstoqueMinimo ?? p.estoqueMinimo;
+        setEstoqueMinimo(estoqueMinVal !== undefined && estoqueMinVal !== null ? String(estoqueMinVal) : "");
+
         setDsTipoProduto(p.dsTipoProduto || (p.precisaFrete === false ? "digital_download" : "Fisico_Sem"));
-        setNrDiasProducao(p.nrDiasProducao !== undefined && p.nrDiasProducao !== null ? String(p.nrDiasProducao) : "");
+
+        const diasProdVal = p.nrDiasProducaoProduto ?? p.nrDiasProducao ?? p.diasProducao;
+        setNrDiasProducao(diasProdVal !== undefined && diasProdVal !== null ? String(diasProdVal) : "");
+
+        // ✨ Carrega os status de movimentação de estoque corretamente
+        setMovimentarEstoque(p.isMovimentarEstoque ?? p.movimentarEstoque ?? true);
+        setMovimentarEstoqueComposicao(p.isMovimentarEstoqueComposicao ?? p.movimentarEstoqueComposicao ?? true);
+
         setPesosDiferentesPorVariacao(p.pesosDiferentesPorVariacao ?? false);
-        setImagens(p.imagens || []); setDescricao(p.descricao || "");
-        setPeso(p.peso !== undefined && p.peso !== null ? String(p.peso) : "");
-        setComprimento(p.comprimento !== undefined && p.comprimento !== null ? String(p.comprimento) : "");
-        setLargura(p.largura !== undefined && p.largura !== null ? String(p.largura) : "");
-        setAltura(p.altura !== undefined && p.altura !== null ? String(p.altura) : "");
-        setRequisitos(p.requisitos || { pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
-        if (p.variacoes) {
-            setNomeVar1(p.nomeVar1 || ""); setNomeVar2(p.nomeVar2 || "");
+
+        const listaImgs = p.dsImagensProduto || p.dsImagens || p.imagens || [];
+        const capa = p.dsCapaProduto || p.dsCapa || p.capa || "";
+        let todasImgs = [...listaImgs];
+        if (capa && !todasImgs.includes(capa)) {
+            todasImgs.unshift(capa);
+        }
+        setImagens(todasImgs);
+        setFiles([]);
+
+        const pesoVal = p.nrPesoProduto ?? p.nrPeso ?? p.peso;
+        setPeso(pesoVal !== undefined && pesoVal !== null && !isNaN(Number(pesoVal)) ? Number(pesoVal).toFixed(2).replace('.', ',') : "");
+
+        const compVal = p.nrComprimentoProduto ?? p.nrComprimento ?? p.comprimento;
+        setComprimento(compVal !== undefined && compVal !== null && !isNaN(Number(compVal)) ? Number(compVal).toFixed(2).replace('.', ',') : "");
+
+        const largVal = p.nrLarguraProduto ?? p.nrLargura ?? p.largura;
+        setLargura(largVal !== undefined && largVal !== null && !isNaN(Number(largVal)) ? Number(largVal).toFixed(2).replace('.', ',') : "");
+
+        const altVal = p.nrAlturaProduto ?? p.nrAltura ?? p.altura;
+        setAltura(altVal !== undefined && altVal !== null && !isNaN(Number(altVal)) ? Number(altVal).toFixed(2).replace('.', ',') : "");
+
+        setRequisitos(p.dsRequisitosProduto || p.dsRequisitos || p.requisitos || { pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
+
+        setInsumosComposicao(p.insumosComposicao || []);
+
+        setNomeVar1(p.dsNomeVar1Produto || "");
+        setNomeVar2(p.dsNomeVar2Produto || "");
+
+        if (p.variacoes && Array.isArray(p.variacoes)) {
             const tab: any = {};
+
             p.variacoes.forEach((v: any) => {
-                const key = v.v2 ? `${v.v1}-${v.v2}` : v.v1;
+                const v1Val = v.dsModeloProduto || v.dsModelo || v.v1 || "";
+                const v2Val = v.nrTamanhoProduto !== undefined && v.nrTamanhoProduto !== null ? String(v.nrTamanhoProduto) : (v.nrTamanho !== undefined && v.nrTamanho !== null ? String(v.nrTamanho) : (v.v2 || ""));
+                const key = v2Val ? `${v1Val}___${v2Val}` : v1Val;
+
+                const vPreco = v.vlPrecoProduto ?? v.vlPreco ?? v.preco;
+                const vCusto = v.vlCustoUnitarioProduto ?? v.vlCustoUnitario ?? v.custo;
+                const vEstoque = v.nrEstoqueProduto ?? v.nrEstoque ?? v.estoque;
+                const vPeso = v.nrPesoProduto ?? v.nrPeso ?? v.peso;
+                const vComp = v.nrComprimentoProduto ?? v.nrComprimento ?? v.comprimento;
+                const vLarg = v.nrLarguraProduto ?? v.nrLargura ?? v.largura;
+                const vAlt = v.nrAlturaProduto ?? v.nrAltura ?? v.altura;
+
                 tab[key] = {
-                    preco: v.preco,
-                    custo: v.custo,
-                    estoque: v.estoque || "",
-                    foto: v.foto || "",
-                    sku: v.sku || "",
-                    peso: v.peso !== undefined && v.peso !== null ? String(v.peso) : "",
-                    comprimento: v.comprimento !== undefined && v.comprimento !== null ? String(v.comprimento) : "",
-                    largura: v.largura !== undefined && v.largura !== null ? String(v.largura) : "",
-                    altura: v.altura !== undefined && v.altura !== null ? String(v.altura) : ""
+                    vlPrecoProduto: vPreco !== undefined && vPreco !== null && !isNaN(Number(vPreco)) ? Number(vPreco).toFixed(2).replace('.', ',') : "",
+                    vlCustoUnitarioProduto: vCusto !== undefined && vCusto !== null && !isNaN(Number(vCusto)) ? Number(vCusto).toFixed(2).replace('.', ',') : "",
+                    nrEstoqueProduto: vEstoque !== undefined && vEstoque !== null ? String(vEstoque) : "",
+                    dsFotoProduto: v.dsFotoProduto || v.dsFoto || v.foto || "",
+                    dsSkuProduto: v.dsSkuProduto || v.dsSku || v.sku || "",
+                    dsEANGTINProduto: v.dsEANGTINProduto || v.ean || v.codigoBarras || "", // ✨ Carrega EAN da variação
+                    nrPesoProduto: vPeso !== undefined && vPeso !== null && !isNaN(Number(vPeso)) ? Number(vPeso).toFixed(2).replace('.', ',') : "",
+                    nrComprimentoProduto: vComp !== undefined && vComp !== null && !isNaN(Number(vComp)) ? Number(vComp).toFixed(2).replace('.', ',') : "",
+                    nrLarguraProduto: vLarg !== undefined && vLarg !== null && !isNaN(Number(vLarg)) ? Number(vLarg).toFixed(2).replace('.', ',') : "",
+                    nrAlturaProduto: vAlt !== undefined && vAlt !== null && !isNaN(Number(vAlt)) ? Number(vAlt).toFixed(2).replace('.', ',') : "",
+                    insumosComposicao: v.insumosComposicao || []
                 };
             });
             setTabelaPrecos(tab);
-            setOpcoesVar1([...new Set(p.variacoes.map((v: any) => v.v1))] as string[]);
-            setOpcoesVar2([...new Set(p.variacoes.map((v: any) => v.v2).filter((v: any) => v))] as string[]);
+
+            const op1Unicas = Array.from(new Set(p.variacoes.map((v: any) => v.dsModeloProduto || v.dsModelo || v.v1).filter(Boolean))) as string[];
+            const op2Unicas = Array.from(new Set(p.variacoes.map((v: any) => {
+                const val = v.nrTamanhoProduto !== undefined && v.nrTamanhoProduto !== null ? String(v.nrTamanhoProduto) : (v.nrTamanho !== undefined && v.nrTamanho !== null ? String(v.nrTamanho) : v.v2);
+                return val;
+            }).filter((val: any) => val !== undefined && val !== null && String(val).trim() !== ""))) as string[];
+
+            setOpcoesVar1(op1Unicas);
+            setOpcoesVar2(op2Unicas);
+        } else {
+            setTabelaPrecos({});
+            setOpcoesVar1([]);
+            setOpcoesVar2([]);
         }
+
         setIsPainelAberto(true);
     };
 
@@ -454,16 +693,24 @@ export default function CadastroProdutos() {
             setNomeVar2, setTabelaPrecos, setOpcoesVar1, setOpcoesVar2,
             isMobile: false, setIsOpenRight: () => { }
         });
+        setEan(p.dsEANGTINProduto || p.ean || p.codigoBarras || "");
         setDsTipoProduto(p.dsTipoProduto || "Fisico_Sem");
-        setNrDiasProducao(p.nrDiasProducao ? String(p.nrDiasProducao) : "");
+        setNrDiasProducao(p.nrDiasProducaoProduto ? String(p.nrDiasProducaoProduto) : (p.nrDiasProducao ? String(p.nrDiasProducao) : ""));
+        setMovimentarEstoque(p.isMovimentarEstoque ?? p.movimentarEstoque ?? true);
+        setMovimentarEstoqueComposicao(p.isMovimentarEstoqueComposicao ?? p.movimentarEstoqueComposicao ?? true);
         setPesosDiferentesPorVariacao(p.pesosDiferentesPorVariacao ?? false);
+        setInsumosComposicao(p.insumosComposicao || []);
         setIsPainelAberto(true);
     };
 
     const produtosFiltrados = produtos.filter(p => {
-        return p.nome?.toLowerCase().includes(busca.toLowerCase()) &&
-            (filtroCategoria === "Todos" || p.categoria === filtroCategoria) &&
-            (filtroStatus === "Todos" || (filtroStatus === "Visíveis" ? p.ativo : !p.ativo));
+        const nomeProd = p.dsNome || p.nome || "";
+        const catProd = p.dsCategoria || p.categoria || "";
+        const ativoProd = p.isAtivo ?? p.ativo ?? true;
+
+        return nomeProd.toLowerCase().includes(busca.toLowerCase()) &&
+            (filtroCategoria === "Todos" || catProd === filtroCategoria) &&
+            (filtroStatus === "Todos" || (filtroStatus === "Visíveis" ? ativoProd : !ativoProd));
     });
 
     const totalPaginas = Math.ceil(produtosFiltrados.length / itensPorPagina) || 1;
@@ -474,7 +721,6 @@ export default function CadastroProdutos() {
     return (
         <div style={{ width: '100%', maxWidth: '100vw', minHeight: '100vh', background: theme.bgApp, color: theme.textMain, position: 'relative', boxSizing: 'border-box', transition: 'background 0.3s, color 0.3s' }}>
 
-            {/* Importação global da fonte Amaranth para uso isolado no modal de descrição */}
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Amaranth:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
@@ -492,7 +738,6 @@ export default function CadastroProdutos() {
                 }
             `}</style>
 
-            {/* MODAIS GLOBAIS */}
             <div style={{ position: 'relative', zIndex: 5000 }}>
                 {showDescModal && (
                     <div style={{ ...styles.modalOverlay, zIndex: 5000 }}>
@@ -535,6 +780,7 @@ export default function CadastroProdutos() {
                     pesosDiferentesPorVariacao={pesosDiferentesPorVariacao}
                     setPesosDiferentesPorVariacao={setPesosDiferentesPorVariacao}
                     lojistaId={uid || ""}
+                    listaInsumos={listaInsumos}
                 />
 
                 <EtiquetaModal isOpen={listaParaImprimir.length > 0} listaProdutos={listaParaImprimir} onClose={() => setListaParaImprimir([])} />
@@ -542,7 +788,6 @@ export default function CadastroProdutos() {
                 {isModalSKUOpen && <ModalGeradorSKU lojistaId={uid || ""} onClose={() => setIsModalSKUOpen(false)} onSave={(codigo: string) => { setSku(codigo); setIsModalSKUOpen(false); }} />}
             </div>
 
-            {/* TELA PRINCIPAL */}
             <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: '100vh', padding: '15px', boxSizing: 'border-box' }}>
 
                 <div className="mobile-header-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: theme.bgCard, padding: '15px 20px', borderRadius: '12px', border: `1px solid ${theme.border}` }}>
@@ -600,7 +845,6 @@ export default function CadastroProdutos() {
                 </div>
             </div>
 
-            {/* PAINEL / TELA DESLIZANTE LATERAL */}
             {isPainelAberto && (
                 <div
                     onClick={() => setIsPainelAberto(false)}
@@ -638,6 +882,7 @@ export default function CadastroProdutos() {
                     <FormularioProduto
                         nome={nome} setNome={setNome}
                         sku={sku} setSku={setSku}
+                        ean={ean} setEan={setEan} // ✨ CORRIGIDO: Passando a função setter corretamente
                         setIsModalSKUOpen={setIsModalSKUOpen}
                         categoria={categoria} setCategoria={setCategoria}
                         subcategoria={subcategoria} setSubcategoria={setSubcategoria}
@@ -666,6 +911,14 @@ export default function CadastroProdutos() {
                         altura={altura} setAltura={setAltura}
                         pesosDiferentesPorVariacao={pesosDiferentesPorVariacao}
                         setPesosDiferentesPorVariacao={setPesosDiferentesPorVariacao}
+                        listaInsumos={listaInsumos}
+                        insumosComposicao={insumosComposicao}
+                        setInsumosComposicao={setInsumosComposicao}
+                        temInsumosNaGrade={temInsumosNaGrade}
+                        movimentarEstoque={movimentarEstoque}
+                        setMovimentarEstoque={setMovimentarEstoque}
+                        movimentarEstoqueComposicao={movimentarEstoqueComposicao}
+                        setMovimentarEstoqueComposicao={setMovimentarEstoqueComposicao}
                     />
                 </div>
 

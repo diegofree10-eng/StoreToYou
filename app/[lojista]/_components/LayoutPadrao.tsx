@@ -1,3 +1,4 @@
+// app/[lojista]/_components/LayoutPadrao.tsx
 "use client";
 
 import React, { useState } from 'react';
@@ -45,6 +46,7 @@ function ItemSubcategoria({ sub, catNome, config, irParaCategoria }: any) {
 // ✨ Subcomponente para gerenciar o item individual de categoria no menu mobile (mesmo padrão da sidebar)
 function ItemCategoriaMobile({ cat, config, irParaCategoria, toggleCategoria, estaExpandida, temSubs }: any) {
     const [mobileHover, setMobileHover] = useState(false);
+    const nomeCategoria = cat.dsNome || cat.nome || "";
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', borderRadius: '8px', backgroundColor: mobileHover ? '#f1f5f9' : '#f8fafc', overflow: 'hidden', flexShrink: 0, transition: 'background-color 0.2s' }}>
@@ -55,7 +57,7 @@ function ItemCategoriaMobile({ cat, config, irParaCategoria, toggleCategoria, es
                     if (temSubs) {
                         toggleCategoria(cat.id);
                     } else {
-                        irParaCategoria(cat.nome);
+                        irParaCategoria(nomeCategoria);
                     }
                 }}
                 style={{
@@ -70,8 +72,8 @@ function ItemCategoriaMobile({ cat, config, irParaCategoria, toggleCategoria, es
                     transition: 'color 0.2s'
                 }}
             >
-                <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1 }}>
-                    {cat.nome}
+                <span onClick={(e) => { e.stopPropagation(); irParaCategoria(nomeCategoria); }} style={{ flex: 1 }}>
+                    {nomeCategoria}
                 </span>
                 {temSubs && (
                     <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '4px', display: 'flex', alignItems: 'center', color: mobileHover ? config.corPrimaria : config.corTextoCard }}>
@@ -87,7 +89,7 @@ function ItemCategoriaMobile({ cat, config, irParaCategoria, toggleCategoria, es
                         <ItemSubcategoria
                             key={index}
                             sub={sub}
-                            catNome={cat.nome}
+                            catNome={nomeCategoria}
                             config={config}
                             irParaCategoria={irParaCategoria}
                         />
@@ -101,6 +103,7 @@ function ItemCategoriaMobile({ cat, config, irParaCategoria, toggleCategoria, es
 // ✨ Subcomponente para gerenciar o item principal da sidebar com o efeito hover idêntico
 function ItemCategoriaSidebar({ cat, config, irParaCategoria, toggleCategoria, estaExpandida, temSubs }: any) {
     const [isHovered, setIsHovered] = useState(false);
+    const nomeCategoria = cat.dsNome || cat.nome || "";
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', borderRadius: '6px', backgroundColor: isHovered ? '#f1f5f9' : '#f8fafc', overflow: 'hidden', flexShrink: 0, transition: 'background-color 0.2s' }}>
@@ -111,7 +114,7 @@ function ItemCategoriaSidebar({ cat, config, irParaCategoria, toggleCategoria, e
                     if (temSubs) {
                         toggleCategoria(cat.id);
                     } else {
-                        irParaCategoria(cat.nome);
+                        irParaCategoria(nomeCategoria);
                     }
                 }}
                 style={{
@@ -127,8 +130,8 @@ function ItemCategoriaSidebar({ cat, config, irParaCategoria, toggleCategoria, e
                     transition: 'color 0.2s'
                 }}
             >
-                <span onClick={(e) => { e.stopPropagation(); irParaCategoria(cat.nome); }} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {cat.nome}
+                <span onClick={(e) => { e.stopPropagation(); irParaCategoria(nomeCategoria); }} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {nomeCategoria}
                 </span>
                 {temSubs && (
                     <span onClick={(e) => { e.stopPropagation(); toggleCategoria(cat.id); }} style={{ padding: '2px', display: 'flex', alignItems: 'center', color: isHovered ? config.corPrimaria : config.corTextoCard }}>
@@ -144,7 +147,7 @@ function ItemCategoriaSidebar({ cat, config, irParaCategoria, toggleCategoria, e
                         <ItemSubcategoria
                             key={index}
                             sub={sub}
-                            catNome={cat.nome}
+                            catNome={nomeCategoria}
                             config={config}
                             irParaCategoria={irParaCategoria}
                         />

@@ -1,3 +1,4 @@
+// app/[lojista]/page.tsx
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -37,10 +38,24 @@ export default function HomeLoja() {
           const catsSnap = await getDocs(collection(db, "lojistas", docId, "categorias"));
           setCategoriasState(catsSnap.docs.map(c => ({ id: c.id, ...c.data() })));
 
-          // Filtra diretamente no Firestore para buscar apenas os produtos com destaque == true
-          const prodRef = query(collection(db, "lojistas", docId, "produtos"), where("destaque", "==", true));
+          // Consulta os produtos no Firestore mantendo a compatibilidade de busca por destaque/isDestaque
+          const prodRef = collection(db, "lojistas", docId, "produtos");
           onSnapshot(prodRef, (pSnap) => {
-            setProdutosDestaque(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+            const lista = pSnap.docs.map(d => {
+              const data = d.data();
+              return {
+                id: d.id,
+                ...data,
+                // Mapeamento exato baseado nos novos campos do produto
+                nome: data.dsNomeProduto || "",
+                precoBasico: data.vlPrecoBasicoProduto ?? 0,
+                capa: data.dsCapaProduto || (data.dsImagensProduto?.[0]) || "",
+                destaque: data.isDestaque ?? data.isDestaqueProduto ?? false
+              };
+            });
+
+            // Filtra os produtos em destaque
+            setProdutosDestaque(lista.filter(p => p.destaque === true));
           });
         }
       } catch (e) {
@@ -105,11 +120,10 @@ export default function HomeLoja() {
                     height: '100%'
                   }}
                 >
-                  {/* 🔥 A MUDANÇA ESTÁ AQUI: contain + background-color */}
                   <div style={{
                     width: '100%',
-                    aspectRatio: '1/1', // Mantém o formato quadrado da imagem
-                    backgroundColor: '#ffffff', // Fundo branco para não aparecer cinza
+                    aspectRatio: '1/1',
+                    backgroundColor: '#ffffff',
                     borderRadius: '8px',
                     overflow: 'hidden',
                     marginBottom: '8px',
@@ -122,7 +136,7 @@ export default function HomeLoja() {
                       style={{
                         width: '100%',
                         height: '100%',
-                        objectFit: 'contain' // 👈 ISSO GARANTE QUE A FOTO INTEIRA APAREÇA SEM CORTES
+                        objectFit: 'contain'
                       }}
                       alt={prod.nome}
                     />
@@ -142,7 +156,7 @@ export default function HomeLoja() {
                       {prod.nome}
                     </h4>
                     <p style={{ fontSize: '15px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 10px' }}>
-                      R$ {prod.precoBasico || "0,00"}
+                      R$ {typeof prod.precoBasico === 'number' ? prod.precoBasico.toFixed(2).replace('.', ',') : (prod.precoBasico || "0,00")}
                     </p>
                   </div>
 
@@ -202,7 +216,6 @@ export default function HomeLoja() {
           }
         }
 
-        /* 📱 CORREÇÃO EXCLUSIVA PARA MOBILE: Trava a altura do container do banner e das imagens */
         @media (max-width: 768px) {
           .beneficios-grid {
             grid-template-columns: 1fr !important;
@@ -212,7 +225,6 @@ export default function HomeLoja() {
             gap: 10px;
           }
 
-          /* Força o wrapper do banner a ter altura fixa no celular, impedindo saltos de layout */
           :global(.main-conteudo-topo) {
             height: 200px !important;
             min-height: 200px !important;

@@ -5,13 +5,16 @@ import React, { useState, useEffect, useMemo } from "react";
 import { doc, getDoc, getDocs, collection } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { Edit3, X, Store, Truck } from "lucide-react";
+import { X, Printer, Lock, Key, Eye, EyeOff } from "lucide-react"; 
 import { executarFluxoPedido } from "@/app/[lojista]/_components/helperPedido";
 import { aplicarMascara, validarCPFReal } from "@/utils/formatters";
-import { useTheme, PALETA_LIGHT, PALETA_DARK } from "@/context/ThemeContext";
+import { useTheme, PALETA_LIGHT } from "@/context/ThemeContext";
+import { imprimirRecibo } from "@/utils/impressaoPedido";
+
+import ProdutosModalPdv from "./ProdutosModalPdv";
+import PagamentoPdv from "./PagamentoPdv";
 
 export default function PaginaPDV() {
-  // Pegando o tema de forma segura (com fallback direto para o localStorage se necessário)
   const themeContext = useTheme();
   const theme = themeContext ? themeContext.theme : PALETA_LIGHT;
   const isModoNoturno = themeContext ? themeContext.isModoNoturno : false;
@@ -24,6 +27,23 @@ export default function PaginaPDV() {
   const [carrinho, setCarrinho] = useState<any[]>([]);
   const [dadosLoja, setDadosLoja] = useState<any>({});
   const [tipoEntrega, setTipoEntrega] = useState<"retirada" | "entrega_local">("retirada");
+
+  // Estados para o controle de Operador por PIN
+  const [operadorLogado, setOperadorLogado] = useState<any>(null);
+  const [pinDigitado, setPinDigitado] = useState("");
+  const [mostrarPin, setMostrarPin] = useState(false);
+  const [listaColaboradores, setListaColaboradores] = useState<any[]>([]);
+  const [isDonoLoja, setIsDonoLoja] = useState(false);
+  const [modalPinAberto, setModalPinAberto] = useState(false);
+
+  // Estado para controlar a abertura do modal de produtos
+  const [modalProdutosAberto, setModalProdutosAberto] = useState(false);
+
+  // Estados de Entrada e Restante
+  const [vlEntrada, setVlEntrada] = useState<number>(0);
+  const [dsPrazoRestante, setDsPrazoRestante] = useState<string>("");
+
+  const [ultimoPedidoGerado, setUltimoPedidoGerado] = useState<any | null>(null);
 
   const [cliente, setCliente] = useState({
     nmNomeCliente: "Cliente Balcão",
@@ -52,6 +72,20 @@ export default function PaginaPDV() {
   const [dadosPersonalizadosModal, setDadosPersonalizadosModal] = useState<any>({});
   const [itemEditandoCartId, setItemEditandoCartId] = useState<string | null>(null);
 
+  // Função para buscar colaboradores atualizados do banco
+  const carregarColaboradoresAtualizados = async (idLoja: string) => {
+    try {
+      const colabRef = collection(db, "lojistas", idLoja, "colaboradores");
+      const snapColab = await getDocs(colabRef);
+      const colabs = snapColab.docs.map(d => ({ id: d.id, ...d.data() }));
+      setListaColaboradores(colabs);
+      return colabs;
+    } catch (e) {
+      console.error("Erro ao carregar colaboradores:", e);
+      return [];
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -61,8 +95,27 @@ export default function PaginaPDV() {
       try {
         const userSnap = await getDoc(doc(db, "usuarios", user.uid));
         if (userSnap.exists()) {
-          const idLoja = userSnap.data().lojaId;
+          const userData = userSnap.data();
+          const idLoja = userData.lojaId || user.uid;
           setLojistaId(idLoja);
+
+          if (userData.role === 'master' || userData.role === 'admin' || !userData.role) {
+            setIsDonoLoja(true);
+            setOperadorLogado({ nome: "Master", cargo: "Administrador" });
+            setModalPinAberto(false);
+          } else {
+            const operadorSalvo = localStorage.getItem("operadorAtivoPdv");
+            if (operadorSalvo) {
+              try {
+                setOperadorLogado(JSON.parse(operadorSalvo));
+                setModalPinAberto(false);
+              } catch (e) {
+                setModalPinAberto(true);
+              }
+            } else {
+              setModalPinAberto(true);
+            }
+          }
 
           if (idLoja) {
             const lojaRef = doc(db, "lojistas", idLoja);
@@ -76,25 +129,42 @@ export default function PaginaPDV() {
 
             const listaProdutos = snapshot.docs.map(d => {
               const data = d.data();
-              const precoFormatado = typeof data.precoBasico === 'string'
-                ? Number(data.precoBasico.replace(',', '.'))
-                : Number(data.precoBasico || 0);
+              // Lendo estritamente o novo padrão com sufixo Produto
+              const precoBruto = data.vlPrecoBasicoProduto ?? 0;
+              const precoFormatado = typeof precoBruto === 'string'
+                ? Number(precoBruto.replace(',', '.'))
+                : Number(precoBruto || 0);
+
+              const nomeProd = data.dsNomeProduto || "Produto sem nome";
+              const capaProd = data.dsCapaProduto || (data.dsImagensProduto?.[0]) || "";
+              const categoriaProd = data.dsCategoriaProduto || "Sem Categoria";
+              const temVar = data.isTemVariacoesProduto ?? false;
+              const varArr = data.variacoes || [];
+              const reqArr = data.dsRequisitosProduto || [];
+              const tipoProd = data.dsTipoProduto || "";
 
               return {
                 id: d.id,
-                nome: data.nome || "Produto sem nome",
+                ...data,
+                nome: nomeProd,
                 preco: isNaN(precoFormatado) ? 0 : precoFormatado,
-                capa: data.capa || "",
-                categoria: data.categoria || "Sem Categoria",
-                temVariacoes: data.temVariacoes || false,
-                variacoes: data.variacoes || [],
-                requisitos: data.requisitos || [],
-                dsTipoProduto: data.dsTipoProduto || data.tipoProduto || "", // 🌟 Captura corretamente o tipo do produto
-                ...data
+                capa: capaProd,
+                categoria: categoriaProd,
+                temVariacoes: temVar,
+                variacoes: varArr,
+                requisitos: reqArr,
+                dsTipoProduto: tipoProd,
               };
             });
 
             setProdutos(listaProdutos);
+
+            const colabs = await carregarColaboradoresAtualizados(idLoja);
+
+            if (colabs.length === 0 && userData.role !== 'master' && userData.role !== 'admin') {
+              setOperadorLogado({ nome: "Master", cargo: "Administrador" });
+              setModalPinAberto(false);
+            }
           }
         }
       } catch (error) {
@@ -179,12 +249,12 @@ export default function PaginaPDV() {
 
     if ((produto.temVariacoes && produto.variacoes && produto.variacoes.length > 0) || temReqs) {
       if (produto.temVariacoes && produto.variacoes && produto.variacoes.length > 0) {
-        const coresUnicas = Array.from(new Set(produto.variacoes.map((v: any) => v.v1))).filter(Boolean) as string[];
+        const coresUnicas = Array.from(new Set(produto.variacoes.map((v: any) => v.dsModeloProduto || v.dsNomeProduto || ""))).filter(Boolean) as string[];
         setCoresDisponiveis(coresUnicas);
         const primeiraCor = coresUnicas[0] || "";
         setCorSelecionada(primeiraCor);
 
-        const tamanhosDaCor = produto.variacoes.filter((v: any) => v.v1 === primeiraCor);
+        const tamanhosDaCor = produto.variacoes.filter((v: any) => (v.dsModeloProduto || v.dsNomeProduto || "") === primeiraCor);
         setTamanhosDisponiveis(tamanhosDaCor);
         setVariacaoEscolhida(tamanhosDaCor[0] || null);
       } else {
@@ -200,39 +270,50 @@ export default function PaginaPDV() {
 
   const handleTrocarCor = (cor: string, produto: any) => {
     setCorSelecionada(cor);
-    const tamanhosDaCor = produto.variacoes.filter((v: any) => v.v1 === cor);
+    const tamanhosDaCor = produto.variacoes.filter((v: any) => (v.dsModeloProduto || v.dsNomeProduto || "") === cor);
     setTamanhosDisponiveis(tamanhosDaCor);
     setVariacaoEscolhida(tamanhosDaCor[0] || null);
   };
 
   const adicionarAoCarrinhoDireto = (produto: any, variacao: any | null) => {
-    const precoVenda = variacao && variacao.preco ? Number(variacao.preco.toString().replace(',', '.')) : produto.preco;
-    const custoVenda = variacao && variacao.custo ? Number(variacao.custo.toString().replace(',', '.')) : 0;
+    const valorPrecoVar = variacao ? (variacao.vlPrecoProduto ?? produto.preco) : produto.preco;
+    const precoVenda = typeof valorPrecoVar === 'string' ? Number(valorPrecoVar.replace(',', '.')) : Number(valorPrecoVar || 0);
+
+    const valorCustoVar = variacao ? (variacao.vlCustoUnitarioProduto ?? 0) : (produto.vlCustoUnitarioProduto ?? 0);
+    const custoVenda = typeof valorCustoVar === 'string' ? Number(valorCustoVar.replace(',', '.')) : Number(valorCustoVar || 0);
+
+    const nomeVar = variacao ? (variacao.dsNomeProduto || variacao.dsModeloProduto || "") : "";
 
     const cartItemId = `${produto.id}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const variacaoStr = variacao ? `${variacao.v1} / ${variacao.v2}` : "Padrão";
-    const nomeItemFormatado = variacao ? `${produto.nome} (${variacaoStr})` : produto.nome;
+    
+    let variacaoLimpa = nomeVar;
 
-    // 🌟 Identifica se o produto individualmente é digital
-    const tipoProd = String(produto.dsTipoProduto || produto.tipoProduto || "").toLowerCase();
+    const nomeBase = produto.dsNomeProduto || "Produto sem nome";
+    const tipoProd = String(produto.dsTipoProduto || "").toLowerCase();
     const isDigitalItem = tipoProd.includes('digital');
+
+    const { descricao, dsDescricao, ...produtoSemDescricao } = produto;
 
     setCarrinho(prev => [
       ...prev,
       {
+        ...produtoSemDescricao,
+        ...variacao,
         cartItemId,
         id: produto.id,
-        nome: nomeItemFormatado,
+        nome: nomeBase,
+        dsNomeProduto: nomeBase,
         preco: precoVenda,
         custo: custoVenda,
         quantidade: 1,
-        foto: variacao?.foto || produto.capa,
+        qty: 1,
+        foto: variacao?.dsFotoProduto || produto.capa,
         personalizacao: { ...dadosPersonalizadosModal },
         requisitos: produto.requisitos || [],
-        variacaoStr: variacaoStr,
-        variacao: variacaoStr !== "Padrão" ? variacaoStr : "",
-        dsTipoProduto: produto.dsTipoProduto || produto.tipoProduto || "",
-        precisaFrete: !isDigitalItem // 🌟 Se for digital, o item individualmente não precisa de frete
+        variacaoStr: variacaoLimpa || "Padrão", 
+        variacao: variacaoLimpa,
+        dsTipoProduto: produto.dsTipoProduto || "",
+        precisaFrete: isDigitalItem ? false : true
       }
     ]);
 
@@ -289,17 +370,23 @@ export default function PaginaPDV() {
         personalizacoesMap[chaveUnica] = item.personalizacao || {};
       });
 
-      // 🌟 Respeita a individualidade de cada item (Digital vs Físico)
       const safeCartFormatado = carrinho.map(item => {
         const tipoProdItem = String(item.dsTipoProduto || "").toLowerCase();
         const isDigital = tipoProdItem.includes('digital');
+        const nomeLimpo = String(item.dsNomeProduto || "Produto").split(" (")[0].trim();
 
         return {
           ...item,
-          idProduto: item.id,
-          qty: item.quantidade,
-          price: item.preco,
-          dsNomeProduto: item.nome,
+          idProduto: item.id || item.idProduto,
+          nome: nomeLimpo,
+          dsNomeProduto: nomeLimpo,
+          qty: Number(item.quantidade || item.qty || 1),
+          quantidade: Number(item.quantidade || item.qty || 1),
+          price: Number(Number(item.preco || 0).toFixed(2)),
+          preco: Number(Number(item.preco || 0).toFixed(2)),
+          custoUnitario: Number(Number(item.custo || item.custoUnitario || 0).toFixed(2)),
+          vlCustoUnitario: Number(Number(item.custo || item.custoUnitario || 0).toFixed(2)),
+          variacao: item.variacao || "",
           dsTipoProduto: item.dsTipoProduto || "",
           precisaFrete: isDigital ? false : (tipoEntrega === "entrega_local")
         };
@@ -324,8 +411,17 @@ export default function PaginaPDV() {
         dsTransportadoraId: tipoEntrega,
         vlFrete: valorFreteAtual,
         vlPrazo: objetoFreteSel.delivery_time,
-        isFreteGratis: false
+        isFreteGratis: false,
+        origem: "Pdv"
       };
+
+      const contadorRef = doc(db, "lojistas", lojistaId, "config", "contador_pedidos");
+      const contadorSnap = await getDoc(contadorRef);
+      const proximoNumero = contadorSnap.exists() ? (contadorSnap.data().ultimoNumero || 0) + 1 : 1;
+
+      const nomeOperadorFormatado = isDonoLoja || operadorLogado?.nome === "Master"
+        ? "Master"
+        : `${operadorLogado?.nome || operadorLogado?.dsNomeColaborador || "Balcão"} (${operadorLogado?.cargo || operadorLogado?.dsCargoColaborador || "Caixa"})`;
 
       const sucesso = await executarFluxoPedido({
         lojistaId,
@@ -345,15 +441,37 @@ export default function PaginaPDV() {
         freteGratisConfig: null,
         payloadPixBruto: null,
         freteSel: objetoFreteSel,
-        dsFormaPagamentoCarrinho: formaPagamento // 🌟 Repassa o valor selecionado no select do PDV para o helper
+        dsFormaPagamentoCarrinho: formaPagamento,
+        vlEntrada: vlEntrada,
+        vlRestante: Math.max(0, totalGeral - vlEntrada),
+        dsPrazoRestante: dsPrazoRestante,
+        dsOperadorCaixa: nomeOperadorFormatado
       });
 
       if (sucesso) {
+        const dadosUltimaVenda = {
+          numeroPedido: proximoNumero,
+          cliente: { ...cliente },
+          carrinho: [...carrinho],
+          subtotal,
+          total: totalGeral,
+          entrega: valorFreteAtual,
+          operador: nomeOperadorFormatado,
+          pagto: {
+            tipo: formaPagamento,
+            entrada: vlEntrada
+          }
+        };
+
+        setUltimoPedidoGerado(dadosUltimaVenda);
+
         alert("Venda realizada com sucesso! Pedido gerado e estoque atualizado.");
         setCarrinho([]);
         setCliente({ nmNomeCliente: "Cliente Balcão", dsCpfCliente: "", dsCepCliente: "", dsTelefoneCliente: "", dsEmailCliente: "" });
         setEndereco({ dsRuaCliente: "", dsNumeroCliente: "", dsBairroCliente: "", dsCidadeCliente: "", dsUfCliente: "", dsComplementoCliente: "" });
         setTipoEntrega("retirada");
+        setVlEntrada(0);
+        setDsPrazoRestante("");
       } else {
         throw new Error("Erro ao executar fluxo do pedido.");
       }
@@ -365,12 +483,6 @@ export default function PaginaPDV() {
     }
   };
 
-  const produtosFiltrados = produtos.filter(p => {
-    const atendeCategoria = categoriaSelecionada === "Todos" || (p.categoria || "Sem Categoria") === categoriaSelecionada;
-    const atendeBusca = p.nome?.toLowerCase().includes(buscaProduto.toLowerCase());
-    return atendeCategoria && atendeBusca;
-  });
-
   const itemAtualEditando = carrinho.find(i => i.cartItemId === itemEditandoCartId);
 
   if (loading) {
@@ -379,10 +491,9 @@ export default function PaginaPDV() {
 
   return (
     <div style={{
-      height: "calc(98vh - 40px)",
+      minHeight: "calc(98vh - 40px)",
       display: "flex",
       flexDirection: "column",
-      overflow: "hidden",
       fontFamily: "sans-serif",
       boxSizing: "border-box",
       padding: "0px 10px",
@@ -390,340 +501,183 @@ export default function PaginaPDV() {
       color: theme.textMain,
       transition: "background 0.3s, color 0.3s"
     }}>
-      <h2 style={{ color: theme.textMain, fontSize: '16px', marginBottom: '6px', fontWeight: '800', textTransform: 'uppercase', flexShrink: 0 }}>
-        💳 Ponto de Venda (PDV / Caixa)
-      </h2>
+      
+      {modalPinAberto && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}`, textAlign: "center", width: "380px" }}>
+            <div style={{ width: "50px", height: "50px", borderRadius: "50%", background: `${theme.primary}15`, color: theme.primary, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px auto" }}>
+              <Lock size={24} />
+            </div>
+            <h3 style={{ margin: "0 0 6px 0", fontSize: "16px", fontWeight: "bold" }}>Identificação do Caixa</h3>
+            <p style={{ fontSize: "12px", color: theme.textSec, marginBottom: "20px" }}>Digite seu PIN de 4 dígitos para iniciar o atendimento e assinar as vendas:</p>
 
-      <div className="pdv-main-container" style={{ display: "flex", gap: "15px", flex: 1, minHeight: 0, overflow: "hidden" }}>
-
-        {/* LADO ESQUERDO: Produtos & Busca */}
-        <div style={{ background: theme.bgCard, padding: "14px", borderRadius: "12px", border: `1px solid ${theme.border}`, display: "flex", flexDirection: "column", flex: 1.7, minHeight: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", overflow: "hidden" }}>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "12px", flexShrink: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-              <h3 style={{ margin: 0, color: theme.textMain, fontSize: "14px", fontWeight: "800", textTransform: 'uppercase' }}>🛍️ Produtos</h3>
+            <div style={{ position: "relative", width: "160px", margin: "0 auto 20px auto", display: "flex", alignItems: "center" }}>
               <input
-                type="text"
-                placeholder="Pesquisar produto..."
-                value={buscaProduto}
-                onChange={(e) => setBuscaProduto(e.target.value)}
-                style={{ padding: "8px 12px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "13px", outline: "none", background: theme.inputBg, color: theme.textMain, flex: "1 1 180px", maxWidth: "220px" }}
+                type={mostrarPin ? "text" : "password"}
+                maxLength={4}
+                placeholder="****"
+                autoFocus
+                autoComplete="new-password"
+                name="pin-operador-pdv"
+                value={pinDigitado}
+                onChange={(e) => setPinDigitado(e.target.value.replace(/\D/g, ""))}
+                style={{ width: "100%", padding: "12px", paddingRight: "36px", fontSize: "22px", textAlign: "center", letterSpacing: "8px", borderRadius: "8px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, outline: "none", fontWeight: "bold", boxSizing: "border-box" }}
               />
-            </div>
-
-            {/* Abas de Categoria */}
-            <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
-              {categorias.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setCategoriaSelecionada(cat)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: "20px",
-                    border: "none",
-                    fontSize: "11px",
-                    fontWeight: "bold",
-                    whiteSpace: "nowrap",
-                    cursor: "pointer",
-                    background: categoriaSelecionada === cat ? theme.primary : theme.border,
-                    color: categoriaSelecionada === cat ? "#fff" : theme.textSec,
-                    transition: "all 0.2s"
-                  }}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px", overflowY: "auto", flex: 1, paddingRight: "4px", alignContent: "start" }} className="produtos-grid-pdv">
-            {produtosFiltrados.length === 0 ? (
-              <p style={{ fontSize: "13px", color: theme.textSec, gridColumn: "1 / -1", textAlign: "center", padding: "20px" }}>Nenhum produto encontrado.</p>
-            ) : (
-              produtosFiltrados.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => lidarComCliqueProduto(p)}
-                  style={{ border: `1px solid ${theme.border}`, padding: "8px", borderRadius: "8px", cursor: "pointer", textAlign: "center", background: theme.bgApp, transition: "all 0.2s", display: "flex", flexDirection: "column", justifyContent: "space-between" }}
-                >
-                  {p.capa ? (
-                    <img src={p.capa} alt={p.nome} style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "contain", background: theme.bgCard, borderRadius: "6px", marginBottom: "6px" }} />
-                  ) : (
-                    <div style={{ width: "100%", aspectRatio: "1 / 1", background: theme.border, borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: theme.textSec, marginBottom: "6px" }}>Sem foto</div>
-                  )}
-                  <div>
-                    <div style={{ fontWeight: "600", fontSize: "11px", color: theme.textMain, marginBottom: "2px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.nome}</div>
-                    <div style={{ color: theme.primary, fontWeight: "700", fontSize: "12px" }}>{formatarMoeda(p.preco)}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* LADO DIREITO: Carrinho, Dados do Cliente & Pagamento */}
-        <div style={{ background: theme.bgCard, padding: "14px", borderRadius: "12px", border: `1px solid ${theme.border}`, display: "flex", flexDirection: "column", justifyContent: "space-between", flex: 1.3, minHeight: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", overflow: "hidden" }}>
-
-          <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflowY: "auto", paddingRight: "4px" }}>
-            <h3 style={{ marginTop: 0, color: theme.textMain, fontSize: "14px", fontWeight: "800", textTransform: 'uppercase', flexShrink: 0 }}>🛒 Carrinho & Cliente</h3>
-
-            {/* BLOCO DE DADOS DO CLIENTE */}
-            <div style={{ background: theme.bgApp, padding: '10px', borderRadius: '10px', border: `1px solid ${theme.border}`, marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '6px' }}>👤 Dados do Cliente</span>
-
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                <input
-                  type="text"
-                  placeholder="Nome Completo *"
-                  value={cliente.nmNomeCliente}
-                  onChange={(e) => setCliente(prev => ({ ...prev, nmNomeCliente: e.target.value }))}
-                  style={{ flex: 2, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-                <input
-                  type="text"
-                  placeholder="WhatsApp *"
-                  value={cliente.dsTelefoneCliente}
-                  onChange={(e) => setCliente(prev => ({ ...prev, dsTelefoneCliente: aplicarMascara(e.target.value, 'tel') }))}
-                  style={{ flex: 1.5, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                <input
-                  type="text"
-                  placeholder="CPF"
-                  value={cliente.dsCpfCliente}
-                  onChange={(e) => setCliente(prev => ({ ...prev, dsCpfCliente: aplicarMascara(e.target.value, 'cpf') }))}
-                  style={{ flex: 1, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-                <input
-                  type="text"
-                  placeholder="CEP"
-                  value={cliente.dsCepCliente}
-                  onChange={handleCepChange}
-                  style={{ flex: 1, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                <input
-                  type="text"
-                  placeholder="Rua / Endereço"
-                  value={endereco.dsRuaCliente}
-                  onChange={(e) => setEndereco(prev => ({ ...prev, dsRuaCliente: e.target.value }))}
-                  style={{ flex: 2.5, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-                <input
-                  type="text"
-                  placeholder="Nº"
-                  value={endereco.dsNumeroCliente}
-                  onChange={(e) => setEndereco(prev => ({ ...prev, dsNumeroCliente: e.target.value }))}
-                  style={{ flex: 1, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <input
-                  type="text"
-                  placeholder="Cidade"
-                  value={endereco.dsCidadeCliente}
-                  onChange={(e) => setEndereco(prev => ({ ...prev, dsCidadeCliente: e.target.value }))}
-                  style={{ flex: 2, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-                <input
-                  type="text"
-                  placeholder="UF"
-                  value={endereco.dsUfCliente}
-                  onChange={(e) => setEndereco(prev => ({ ...prev, dsUfCliente: e.target.value }))}
-                  style={{ flex: 1, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, ...styles.inputPDVBase }}
-                />
-              </div>
-            </div>
-
-            {/* TIPO DE ENTREGA */}
-            <div style={{ marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '6px' }}>🚚 TIPO DE ENTREGA</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-
-                <button
-                  type="button"
-                  onClick={() => setTipoEntrega("retirada")}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: tipoEntrega === "retirada" ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
-                    background: tipoEntrega === "retirada" ? theme.bgApp : theme.bgCard,
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Store size={14} color={theme.primary} /> Retirar na Loja
-                  </div>
-                  <div style={{ fontSize: '10px', color: theme.textSec, marginTop: '2px' }}>⏱️ Disponível na loja • <b>Grátis</b></div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setTipoEntrega("entrega_local")}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: tipoEntrega === "entrega_local" ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
-                    background: tipoEntrega === "entrega_local" ? theme.bgApp : theme.bgCard,
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Truck size={14} color={theme.primary} /> Entrega Local
-                  </div>
-                  <div style={{ fontSize: '10px', color: theme.textSec, marginTop: '2px' }}>⏱️ Até 1 dia útil • <b>{formatarMoeda(valorEntregaLocal)}</b></div>
-                </button>
-
-              </div>
-            </div>
-
-            {/* LISTA DE ITENS DO CARRINHO */}
-            <div style={{ margin: "4px 0", borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, padding: "6px 0" }}>
-              {carrinho.length === 0 ? (
-                <p style={{ fontSize: "12px", color: theme.textSec, textAlign: "center", margin: "10px 0" }}>O carrinho está vazio</p>
-              ) : (
-                carrinho.map((item) => {
-                  const requisitosLista = Array.isArray(item.requisitos) ? item.requisitos : [];
-                  const possuiReq = requisitosLista.length > 0;
-
-                  return (
-                    <div key={item.cartItemId} style={{ display: "flex", flexDirection: "column", paddingBottom: "8px", marginBottom: "6px", borderBottom: `1px solid ${theme.border}`, gap: "4px" }}>
-
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
-                        {item.foto && <img src={item.foto} alt="" style={{ width: "30px", height: "30px", objectFit: "cover", borderRadius: "6px", marginRight: "6px" }} />}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: "600", color: theme.textMain }}>{item.nome}</div>
-                          {item.personalizacao && Object.values(item.personalizacao).some(Boolean) && (
-                            <div style={{ fontSize: "10px", color: theme.textSec, marginTop: "2px" }}>
-                              {Object.entries(item.personalizacao).map(([k, v]) => v ? <span key={k}>{k}: {String(v)} | </span> : null)}
-                            </div>
-                          )}
-                          <div style={{ color: theme.textSec, fontSize: "11px", fontWeight: "bold" }}>{formatarMoeda(item.preco)} un</div>
-                        </div>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                          <button onClick={() => alterarQuantidade(-1)(item.cartItemId)} style={{ ...styles.btnQtd, background: theme.border, color: theme.textMain }}>-</button>
-                          <span style={{ fontWeight: "bold", fontSize: "12px", color: theme.textMain }}>{item.quantidade}</span>
-                          <button onClick={() => alterarQuantidade(1)(item.cartItemId)} style={{ ...styles.btnQtd, background: theme.border, color: theme.textMain }}>+</button>
-                          <strong style={{ marginLeft: "4px", color: theme.textMain }}>{formatarMoeda(item.preco * item.quantidade)}</strong>
-                          <button onClick={() => removerDoCarrinho(item.cartItemId)} style={styles.btnRemove} title="Remover item">🗑️</button>
-                        </div>
-                      </div>
-
-                      {possuiReq && (
-                        <button
-                          type="button"
-                          onClick={() => setItemEditandoCartId(item.cartItemId)}
-                          style={{
-                            width: '100%',
-                            padding: '5px 8px',
-                            borderRadius: '6px',
-                            border: `1px solid ${theme.primary}`,
-                            background: theme.bgApp,
-                            color: theme.primary,
-                            fontSize: '11px',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Edit3 size={11} />
-                          Preencher dados de personalização
-                        </button>
-                      )}
-
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <div style={{ flexShrink: 0, paddingTop: '8px' }}>
-            <div style={{ margin: "4px 0" }}>
-              <label style={{ fontSize: "11px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Forma de Pagamento:</label>
-              <select
-                value={formaPagamento}
-                onChange={(e) => setFormaPagamento(e.target.value)}
-                style={{ width: "100%", padding: "6px 10px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "12px", outline: "none", background: theme.inputBg, color: theme.textMain }}
+              <button
+                type="button"
+                onClick={() => setMostrarPin(!mostrarPin)}
+                style={{ position: "absolute", right: "8px", background: "none", border: "none", cursor: "pointer", color: theme.textSec, display: "flex", alignItems: "center" }}
+                title={mostrarPin ? "Ocultar PIN" : "Ver PIN"}
               >
-                <option value="pix">PIX</option>
-                <option value="dinheiro">Dinheiro</option>
-                <option value="cartao_credito">Cartão de Crédito</option>
-                <option value="cartao_debito">Cartão de Débito</option>
-              </select>
-            </div>
-
-            {/* Resumo de valores */}
-            <div style={{ background: theme.bgApp, padding: "6px 8px", borderRadius: "8px", margin: "6px 0", display: "flex", flexDirection: "column", gap: "2px", border: `1px solid ${theme.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: theme.textSec }}>
-                <span>Subtotal Produtos:</span>
-                <span>{formatarMoeda(calcularSubtotal())}</span>
-              </div>
-              {tipoEntrega === "entrega_local" && (
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: theme.textSec }}>
-                  <span>Taxa de Entrega Local:</span>
-                  <span>{formatarMoeda(valorEntregaLocal)}</span>
-                </div>
-              )}
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "bold", color: theme.textMain, borderTop: `1px solid ${theme.border}`, paddingTop: "4px", marginTop: "2px" }}>
-                <span>Total Geral:</span>
-                <span style={{ color: theme.primary }}>{formatarMoeda(calcularTotalGeral())}</span>
-              </div>
+                {mostrarPin ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
 
             <button
-              onClick={finalizarVenda}
-              disabled={carregandoVenda || carrinho.length === 0}
-              style={{
-                width: "100%",
-                padding: "9px",
-                background: theme.primary,
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                fontSize: "13px",
-                cursor: "pointer",
-                opacity: carregandoVenda || carrinho.length === 0 ? 0.6 : 1,
-                transition: "opacity 0.2s"
+              type="button"
+              onClick={() => {
+                const colabEncontrado = listaColaboradores.find(c => (c.pin === pinDigitado || c.nrPinColaborador === pinDigitado));
+                if (colabEncontrado) {
+                  localStorage.setItem("operadorAtivoPdv", JSON.stringify(colabEncontrado));
+                  localStorage.setItem("permissoesAtivasPdv", JSON.stringify(colabEncontrado.permissoes || {}));
+
+                  setOperadorLogado(colabEncontrado);
+                  setModalPinAberto(false);
+                  setPinDigitado("");
+
+                  window.location.reload();
+                } else {
+                  alert("❌ PIN inválido! Tente novamente.");
+                  setPinDigitado("");
+                }
               }}
+              style={{ width: "100%", padding: "11px", background: theme.primary, color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", boxShadow: "0 2px 6px rgba(0,0,0,0.1)" }}
             >
-              {carregandoVenda ? "Processando Venda..." : "Finalizar Venda"}
+              Entrar no Caixa
             </button>
           </div>
         </div>
+      )}
 
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        background: theme.bgCard,
+        padding: "8px 16px",
+        borderRadius: "8px",
+        border: `1px solid ${theme.border}`,
+        marginBottom: "10px",
+        boxSizing: "border-box",
+        flexWrap: "wrap",
+        gap: "10px"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "12px", color: theme.textSec, display: "flex", alignItems: "center", gap: "4px" }}>
+            <Key size={14} color={theme.primary} /> Operador: <strong style={{ color: theme.textMain }}>{isDonoLoja ? "Master" : (operadorLogado?.nome || operadorLogado?.dsNomeColaborador || "Não identificado")}</strong> {isDonoLoja ? "" : `(${operadorLogado?.cargo || operadorLogado?.dsCargoColaborador || "Caixa"})`}
+          </span>
+
+          {!modalPinAberto && !isDonoLoja && (
+            <button
+              type="button"
+              onClick={async () => {
+                localStorage.removeItem("operadorAtivoPdv");
+                localStorage.removeItem("permissoesAtivasPdv");
+                if (lojistaId) {
+                  await carregarColaboradoresAtualizados(lojistaId);
+                }
+                setPinDigitado("");
+                setModalPinAberto(true);
+              }}
+              style={{ background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSec, fontSize: "11px", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
+            >
+              Trocar Operador
+            </button>
+          )}
+        </div>
+
+        {ultimoPedidoGerado && (
+          <button
+            type="button"
+            onClick={() => imprimirRecibo(ultimoPedidoGerado)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "5px 10px",
+              background: theme.primary,
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: "bold",
+              fontSize: "11px",
+              cursor: "pointer",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+            }}
+          >
+            <Printer size={14} /> Imprimir Último Recibo
+          </button>
+        )}
       </div>
 
-      {/* MODAL DE PERSONALIZAÇÃO */}
+      <PagamentoPdv
+        cliente={cliente}
+        setCliente={setCliente}
+        endereco={endereco}
+        setEndereco={setEndereco}
+        handleCepChange={handleCepChange}
+        tipoEntrega={tipoEntrega}
+        setTipoEntrega={setTipoEntrega}
+        valorEntregaLocal={valorEntregaLocal}
+        carrinho={carrinho}
+        alterarQuantidade={alterarQuantidade}
+        removerDoCarrinho={removerDoCarrinho}
+        setItemEditandoCartId={setItemEditandoCartId}
+        formaPagamento={formaPagamento}
+        setFormaPagamento={setFormaPagamento}
+        vlEntrada={vlEntrada}
+        setVlEntrada={setVlEntrada}
+        dsPrazoRestante={dsPrazoRestante}
+        setDsPrazoRestante={setDsPrazoRestante}
+        calcularSubtotal={calcularSubtotal}
+        calcularTotalGeral={calcularTotalGeral}
+        finalizarVenda={finalizarVenda}
+        carregandoVenda={carregandoVenda}
+        formatarMoeda={formatarMoeda}
+        theme={theme}
+        styles={styles}
+        onAbrirModalProdutos={() => setModalProdutosAberto(true)}
+      />
+
+      <ProdutosModalPdv
+        isOpen={modalProdutosAberto}
+        onClose={() => setModalProdutosAberto(false)}
+        produtos={produtos}
+        buscaProduto={buscaProduto}
+        setBuscaProduto={setBuscaProduto}
+        categoriaSelecionada={categoriaSelecionada}
+        setCategoriaSelecionada={setCategoriaSelecionada}
+        categorias={categorias}
+        lidarComCliqueProduto={(p: any) => {
+          lidarComCliqueProduto(p);
+        }}
+        formatarMoeda={formatarMoeda}
+        theme={theme}
+      />
+
       {itemEditandoCartId && itemAtualEditando && (
         <div style={styles.modalOverlay}>
           <div style={{ ...styles.modalContent, background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.border}`, paddingBottom: '8px', marginBottom: '10px' }}>
               <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: theme.textMain }}>Personalização do Produto</h4>
-              <button
-                type="button"
-                onClick={() => setItemEditandoCartId(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.textSec }}
-              >
+              <button type="button" onClick={() => setItemEditandoCartId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.textSec }}>
                 <X size={18} />
               </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {Array.isArray(itemAtualEditando.requisitos) && itemAtualEditando.requisitos.map((req: any, index: number) => {
-                const labelCampo = req.nome || req.label || `Campo ${index + 1}`;
+                const labelCampo = req.label || req.nome || `Campo ${index + 1}`;
                 const tipoCampo = req.tipo || "text";
                 const valorAtual = itemAtualEditando.personalizacao?.[labelCampo] || "";
 
@@ -734,6 +688,7 @@ export default function PaginaPDV() {
                     </label>
                     <input
                       type={tipoCampo === "date" ? "date" : "text"}
+                      autoComplete="off"
                       placeholder={`Digite ${labelCampo.toLowerCase()}...`}
                       value={valorAtual}
                       onChange={(e) => {
@@ -753,18 +708,7 @@ export default function PaginaPDV() {
             <button
               type="button"
               onClick={() => setItemEditandoCartId(null)}
-              style={{
-                width: '100%',
-                padding: '9px',
-                borderRadius: '8px',
-                backgroundColor: theme.primary,
-                color: '#fff',
-                border: 'none',
-                fontWeight: 'bold',
-                fontSize: '13px',
-                cursor: 'pointer',
-                marginTop: '10px'
-              }}
+              style={{ width: '100%', padding: '9px', borderRadius: '8px', backgroundColor: theme.primary, color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', marginTop: '10px' }}
             >
               Salvar e Fechar
             </button>
@@ -772,7 +716,6 @@ export default function PaginaPDV() {
         </div>
       )}
 
-      {/* MODAL DE VARIAÇÃO */}
       {produtoSelecionado && (
         <div style={styles.modalOverlay}>
           <div style={{ ...styles.modalContent, background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.border}` }}>
@@ -781,7 +724,7 @@ export default function PaginaPDV() {
 
             {produtoSelecionado.temVariacoes && produtoSelecionado.variacoes.length > 0 && (
               <div style={{ marginBottom: "15px" }}>
-                <label style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain, display: "block", marginBottom: "6px" }}>Selecione a Cor:</label>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain, display: "block", marginBottom: "6px" }}>Selecione o Modelo/Cor:</label>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
                   {coresDisponiveis.map((cor, idx) => (
                     <button
@@ -804,39 +747,47 @@ export default function PaginaPDV() {
                   ))}
                 </div>
 
-                <label style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain, display: "block", marginBottom: "6px" }}>Selecione o Tamanho:</label>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain, display: "block", marginBottom: "6px" }}>Selecione a Variação:</label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-                  {tamanhosDisponiveis.map((v, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => setVariacaoEscolhida(v)}
-                      style={{
-                        padding: "8px",
-                        borderRadius: "8px",
-                        border: variacaoEscolhida === v ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
-                        background: variacaoEscolhida === v ? theme.bgApp : theme.inputBg,
-                        cursor: "pointer",
-                        textAlign: "center"
-                      }}
-                    >
-                      <div style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain }}>{v.v2}</div>
-                      <div style={{ fontSize: "10px", color: theme.primary, fontWeight: "bold" }}>{formatarMoeda(v.preco ? Number(v.preco.toString().replace(',', '.')) : produtoSelecionado.preco)}</div>
-                      <div style={{ fontSize: "9px", color: theme.textSec }}>Est: {v.estoque || 0}</div>
-                    </div>
-                  ))}
+                  {tamanhosDisponiveis.map((v, idx) => {
+                    const nomeVarItem = v.dsNomeProduto || v.dsModeloProduto || "";
+                    const precoVar = v.vlPrecoProduto ?? produtoSelecionado.preco;
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => setVariacaoEscolhida(v)}
+                        style={{
+                          padding: "8px",
+                          borderRadius: "8px",
+                          border: variacaoEscolhida === v ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
+                          background: variacaoEscolhida === v ? theme.bgApp : theme.inputBg,
+                          cursor: "pointer",
+                          textAlign: "center"
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain }}>{nomeVarItem}</div>
+                        <div style={{ fontSize: "10px", color: theme.primary, fontWeight: "bold" }}>{formatarMoeda(precoVar ? Number(precoVar.toString().replace(',', '.')) : produtoSelecionado.preco)}</div>
+                        <div style={{ fontSize: "9px", color: theme.textSec }}>Est: {v.nrEstoqueProduto ?? 0}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             <div style={{ display: "flex", gap: "10px" }}>
               <button
+                type="button"
                 onClick={() => setProdutoSelecionado(null)}
                 style={{ flex: 1, padding: "10px", background: theme.border, border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", color: theme.textMain }}
               >
                 Cancelar
               </button>
               <button
-                onClick={() => adicionarAoCarrinhoDireto(produtoSelecionado, variacaoEscolhida)}
+                type="button"
+                onClick={() => {
+                  adicionarAoCarrinhoDireto(produtoSelecionado, variacaoEscolhida);
+                }}
                 style={{ flex: 1, padding: "10px", background: theme.primary, border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", color: "#fff" }}
               >
                 Confirmar
@@ -862,30 +813,9 @@ export default function PaginaPDV() {
           background: ${isModoNoturno ? "#475569" : "#94a3b8"};
         }
 
-        @media (max-width: 1200px) {
-          .produtos-grid-pdv {
-            grid-template-columns: repeat(4, 1fr) !important;
-          }
-        }
-
         @media (max-width: 900px) {
-          .pdv-main-container {
-            flex-direction: column !important;
-            overflow-y: auto !important;
-            height: auto !important;
-          }
-          .pdv-main-container > div {
-            min-height: 350px !important;
-            height: auto !important;
-          }
-          .produtos-grid-pdv {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
-        }
-
-        @media (max-width: 600px) {
-          .produtos-grid-pdv {
-            grid-template-columns: repeat(2, 1fr) !important;
+          .pdv-grid-layout {
+            grid-template-columns: 1fr !important;
           }
         }
       `}</style>

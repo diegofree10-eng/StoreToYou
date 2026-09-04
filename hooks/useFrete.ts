@@ -9,7 +9,7 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
     setErro(null);
 
     // 📦 Atualizado para ler dsCepCliente corretamente do objeto do pedido
-    const cep = pedido.endereco?.dsCepCliente || pedido.endereco?.dsCep || pedido.endereco?.cep || pedido.cliente?.cep || "";
+    const cep = pedido.dsEndereco?.dsCepCliente || pedido.dsEndereco?.dsCep || pedido.dsEndereco?.cep || pedido.endereco?.dsCepCliente || pedido.endereco?.dsCep || pedido.endereco?.cep || pedido.cliente?.cep || "";
     
     if (!cep || cep.replace(/\D/g, "").length < 8) {
       setLoading(false);
@@ -33,11 +33,14 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
       const resposta = await res.json();
       if (!res.ok) throw new Error(resposta.error || "Erro ao calcular frete");
 
-      let lista: any[] = Array.isArray(resposta) ? resposta : (resposta.fretes || []);
+      // 🛡️ CORRIGIDO: Lê corretamente a chave 'opcoesFrete' retornada pela API do back-end
+      let lista: any[] = Array.isArray(resposta) 
+        ? resposta 
+        : (resposta.opcoesFrete || resposta.fretes || []);
 
       // Lógica de Retirada na Loja
       const cidadeLojista = String(dadosLoja?.cidade || dadosLoja?.dsCidadeLoja || "").trim().toLowerCase();
-      const cidadeCliente = String(pedido.endereco?.dsCidadeCliente || pedido.endereco?.cidade || pedido.endereco?.city || "").trim().toLowerCase();
+      const cidadeCliente = String(pedido.dsEndereco?.dsCidadeCliente || pedido.endereco?.dsCidadeCliente || pedido.endereco?.cidade || pedido.endereco?.city || "").trim().toLowerCase();
       
       if (cidadeLojista && cidadeCliente && cidadeLojista === cidadeCliente) {
         if (!lista.find((f: any) => f.id === "retirar_loja")) {

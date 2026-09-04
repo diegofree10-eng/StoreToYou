@@ -1,3 +1,4 @@
+// app/admin/TabPlanos.tsx
 "use client";
 import React from "react";
 import { db, storage } from "@/lib/firebase";
@@ -8,7 +9,7 @@ import { useTheme } from "@/context/ThemeContext";
 import {
   FiAward, FiUploadCloud, FiZap, FiTruck, FiCreditCard,
   FiStar, FiShoppingBag, FiDollarSign, FiCalendar, FiClock,
-  FiLayers, FiPieChart, FiShield
+  FiLayers, FiPieChart, FiShield, FiUsers, FiBarChart2
 } from "react-icons/fi";
 
 interface TabPlanosProps {
@@ -233,6 +234,21 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
               </label>
 
               <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiUsers color="#3b82f6" /> Gestão de Colaboradores</div>
+                <input type="checkbox" checked={!!planos[key].colaboradores} onChange={() => toggleRecurso(key, 'colaboradores')} />
+              </label>
+
+              <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiBarChart2 color="#8b5cf6" /> Módulo de Relatórios</div>
+                <input type="checkbox" checked={!!planos[key].relatorios} onChange={() => toggleRecurso(key, 'relatorios')} />
+              </label>
+
+              <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiStar color="#eab308" /> Suporte Master</div>
+                <input type="checkbox" checked={!!planos[key].temSuporte} onChange={() => toggleRecurso(key, 'temSuporte')} />
+              </label>
+
+              <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
                 <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiPieChart /> Canais de Renda (CSV)</div>
                 <input type="checkbox" checked={!!planos[key].temCanaisRenda} onChange={() => toggleRecurso(key, 'temCanaisRenda')} />
               </label>
@@ -240,6 +256,12 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
               <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
                 <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiDollarSign /> Módulo de Despesas</div>
                 <input type="checkbox" checked={!!planos[key].temDespesas} onChange={() => toggleRecurso(key, 'temDespesas')} />
+              </label>
+
+              {/* 🌟 Opção Financeiro adicionada seguindo o mesmo padrão */}
+              <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiDollarSign color="#10b981" /> Módulo Financeiro</div>
+                <input type="checkbox" checked={!!planos[key].financeiro} onChange={() => toggleRecurso(key, 'financeiro')} />
               </label>
 
               <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
@@ -279,11 +301,6 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
               <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
                 <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiLayers /> Personalização</div>
                 <input type="checkbox" checked={!!planos[key].temPersonalizacao} onChange={() => toggleRecurso(key, 'temPersonalizacao')} />
-              </label>
-
-              <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiStar /> Suporte Master</div>
-                <input type="checkbox" checked={!!planos[key].temSuporte} onChange={() => toggleRecurso(key, 'temSuporte')} />
               </label>
             </div>
 

@@ -1,30 +1,59 @@
+// app/admin/Sidebar.tsx
 "use client";
 import React, { useEffect, useState, useMemo } from "react";
-import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX, FiArchive, FiDollarSign } from "react-icons/fi";
+import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX, FiArchive, FiDollarSign, FiUsers, FiBarChart2, FiStar } from "react-icons/fi";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot, getDoc, updateDoc } from "firebase/firestore";
 
 interface SidebarProps {
-  telaAtiva: string;
-  setTelaAtiva?: (tela: string) => void;
-  onLogout: () => void;
-  isOpenMobile?: boolean;
-  onCloseMobile?: () => void;
-  planoEfetivo?: any;
-  masterLiberou?: (feature: string) => boolean;
+    telaAtiva: string;
+    setTelaAtiva: (tela: string) => void;
+    onLogout: () => Promise<void>;
+    isOpenMobile: boolean;
+    onCloseMobile: () => void;
+    planoEfetivo: any;
+    masterLiberou: (feature: string) => boolean;
+    colaboradorSessao?: any; // <-- Adicione esta linha aqui
 }
 
 export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobile, onCloseMobile, planoEfetivo, masterLiberou }: SidebarProps) {
   const [role, setRole] = useState<string | null>(null);
   const [lojistaId, setLojistaId] = useState<string | null>(null);
   const [novosPedidosCount, setNovosPedidosCount] = useState<number>(0);
+  const [permissoesColaborador, setPermissoesColaborador] = useState<any | null>(null);
+  const [isColaboradorLogado, setIsColaboradorLogado] = useState(false);
+
   const [dadosLoja, setDadosLoja] = useState({
     nomeLoja: "Carregando...",
     logoUrl: null
   });
 
   const unsubRef = React.useRef<(() => void) | null>(null);
+
+  // 🌟 Lê as permissões do operador ativo no PDV (localStorage) ao carregar e escuta alterações
+  useEffect(() => {
+    const checarOperadorPdv = () => {
+      const operadorSalvo = localStorage.getItem("operadorAtivoPdv");
+      if (operadorSalvo) {
+        try {
+          const colab = JSON.parse(operadorSalvo);
+          setPermissoesColaborador(colab.permissoes || {});
+          setIsColaboradorLogado(true);
+        } catch (e) {
+          setPermissoesColaborador(null);
+          setIsColaboradorLogado(false);
+        }
+      } else {
+        setPermissoesColaborador(null);
+        setIsColaboradorLogado(false);
+      }
+    };
+
+    checarOperadorPdv();
+    window.addEventListener('storage', checarOperadorPdv);
+    return () => window.removeEventListener('storage', checarOperadorPdv);
+  }, []);
 
   // 1. Autenticação e carregamento dos dados do lojista
   useEffect(() => {
@@ -97,9 +126,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
     };
 
     lerContadorLocalStorage();
-
     window.addEventListener('storage', lerContadorLocalStorage);
-
     const interval = setInterval(lerContadorLocalStorage, 1000);
 
     return () => {
@@ -108,7 +135,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
     };
   }, [lojistaId]);
 
-  // Validação reativa e blindada do PDV utilizando useMemo para refletir alterações instantaneamente
+  // Validação reativa e blindada do PDV
   const pdvLiberado = useMemo(() => {
     if (typeof masterLiberou === "function") {
       return masterLiberou("temPdv");
@@ -121,15 +148,88 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
     );
   }, [planoEfetivo, masterLiberou]);
 
-  const menuItens = [
-    { id: 'dash', label: 'Dashboard', icon: <FiPieChart /> },
-    { id: 'produtos', label: 'Produtos', icon: <FiPackage /> },
-    { id: 'pedidos', label: 'Pedidos', icon: <FiShoppingCart />, badge: novosPedidosCount },
-    // O PDV só aparece no menu se a verificação reativa retornar true
-    ...(pdvLiberado ? [{ id: 'pdv', label: 'PDV (Caixa)', icon: <FiDollarSign /> }] : []),
-    { id: 'estoque', label: 'Estoque', icon: <FiArchive /> },
-    { id: 'config', label: 'Configurações', icon: <FiSettings /> },
-  ];
+  // Validação reativa e blindada de Colaboradores
+  const colaboradoresLiberado = useMemo(() => {
+    if (typeof masterLiberou === "function") {
+      return masterLiberou("colaboradores");
+    }
+    return Boolean(
+      planoEfetivo?.colaboradores ??
+      planoEfetivo?.configs?.colaboradores ??
+      planoEfetivo?.dadosPlano?.colaboradores ??
+      false
+    );
+  }, [planoEfetivo, masterLiberou]);
+
+  // Validação reativa e blindada de Relatórios
+  const relatoriosLiberado = useMemo(() => {
+    if (typeof masterLiberou === "function") {
+      return masterLiberou("relatorios");
+    }
+    return Boolean(
+      planoEfetivo?.relatorios ??
+      planoEfetivo?.configs?.relatorios ??
+      planoEfetivo?.dadosPlano?.relatorios ??
+      false
+    );
+  }, [planoEfetivo, masterLiberou]);
+
+  // Validação reativa e blindada de Suporte Master
+  const suporteLiberado = useMemo(() => {
+    if (typeof masterLiberou === "function") {
+      return masterLiberou("temSuporte");
+    }
+    return Boolean(
+      planoEfetivo?.temSuporte ??
+      planoEfetivo?.configs?.temSuporte ??
+      planoEfetivo?.dadosPlano?.temSuporte ??
+      false
+    );
+  }, [planoEfetivo, masterLiberou]);
+
+  // Validação reativa e blindada de Financeiro
+  const financeiroLiberado = useMemo(() => {
+    if (typeof masterLiberou === "function") {
+      return masterLiberou("financeiro");
+    }
+    return Boolean(
+      planoEfetivo?.financeiro ??
+      planoEfetivo?.configs?.financeiro ??
+      planoEfetivo?.dadosPlano?.financeiro ??
+      false
+    );
+  }, [planoEfetivo, masterLiberou]);
+
+  // 🌟 Filtragem inteligente combinando Regras de Plano + Permissões do Colaborador
+  const menuItens = useMemo(() => {
+    const itensBase = [
+      { id: 'dash', label: 'Dashboard', icon: <FiPieChart />, permissaoKey: 'dash' },
+      { id: 'produtos', label: 'Produtos', icon: <FiPackage />, permissaoKey: 'produtos' },
+      { id: 'pedidos', label: 'Pedidos', icon: <FiShoppingCart />, badge: novosPedidosCount, permissaoKey: 'pedidos' },
+      ...(pdvLiberado ? [{ id: 'pdv', label: 'PDV (Caixa)', icon: <FiDollarSign />, permissaoKey: 'pdv' }] : []),
+      { id: 'despesas', label: 'Despesas & Custos', icon: <FiDollarSign />, permissaoKey: 'despesas' },
+      ...(financeiroLiberado ? [{ id: 'financeiro', label: 'Financeiro', icon: <FiDollarSign />, permissaoKey: 'financeiro' }] : []),
+      ...(colaboradoresLiberado ? [{ id: 'colaboradores', label: 'Colaboradores', icon: <FiUsers />, permissaoKey: 'colaboradores' }] : []),
+      { id: 'estoque', label: 'Estoque', icon: <FiArchive />, permissaoKey: 'estoque' },
+      ...(relatoriosLiberado ? [{ id: 'relatorios', label: 'Relatórios', icon: <FiBarChart2 />, permissaoKey: 'relatorios' }] : []),
+      ...(suporteLiberado ? [{ id: 'suporte', label: 'Suporte', icon: <FiStar />, permissaoKey: 'suporte' }] : []),
+      { id: 'config', label: 'Configurações', icon: <FiSettings />, permissaoKey: 'config' },
+    ];
+
+    // Se for o dono/master ou admin do sistema, exibe tudo o que o plano libera
+    const isMasterOuAdmin = role === 'master' || role === 'admin' || !role;
+    if (isMasterOuAdmin && !isColaboradorLogado) {
+      return itensBase;
+    }
+
+    // Se for um colaborador logado por PIN, filtra pelas permissões concedidas a ele individualmente
+    return itensBase.filter(item => {
+      if (!isColaboradorLogado || !permissoesColaborador) return false;
+
+      // Converte explicitamente para booleano para garantir que undefined/false bloqueiem o acesso
+      return Boolean(permissoesColaborador[item.permissaoKey]) === true;
+    });
+  }, [role, isColaboradorLogado, permissoesColaborador, pdvLiberado, colaboradoresLiberado, relatoriosLiberado, suporteLiberado, financeiroLiberado, novosPedidosCount]);
 
   const handleMudarTela = (id: string) => {
     if (typeof setTelaAtiva === 'function') {
@@ -142,7 +242,6 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
   return (
     <>
-      {/* Overlay Escuro no fundo quando o menu estiver aberto no mobile */}
       {isOpenMobile && (
         <div style={styles.overlay} onClick={onCloseMobile} />
       )}
@@ -152,7 +251,6 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
         transform: isOpenMobile ? 'translateX(0)' : undefined,
       }} className="sidebar-container">
 
-        {/* Botão de Fechar no Mobile */}
         {onCloseMobile && (
           <button onClick={onCloseMobile} style={styles.closeBtnMobile} aria-label="Fechar menu">
             <FiX size={24} color="#fff" />
@@ -178,7 +276,6 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
                 <span>{item.label}</span>
               </span>
 
-              {/* Exibe o badge vermelho se houver pedidos novos */}
               {item.id === 'pedidos' && (item.badge ?? 0) > 0 && (
                 <span style={styles.badgeNovo}>
                   {item.badge}
@@ -187,7 +284,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
             </button>
           ))}
 
-          {role === 'master' && (
+          {role === 'master' && !isColaboradorLogado && (
             <button onClick={() => handleMudarTela('gestao-geral')} style={{
               ...styles.navBtn,
               marginTop: '10px',
@@ -262,7 +359,14 @@ const styles: { [key: string]: React.CSSProperties } = {
   logoImg: { width: '100%', height: '100%', objectFit: 'cover' },
   logoPlaceholder: { fontSize: '36px', fontWeight: 'bold', color: '#fdb813' },
   storeName: { fontSize: '18px', color: '#fff', textAlign: 'center', fontWeight: '600' },
-  nav: { flex: 1, padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px', overflow: 'hidden' }, // <--- Alterado de 'overflowY: auto' para 'overflow: 'hidden''
+  nav: { 
+    flex: 1, 
+    padding: '10px', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    gap: '5px', 
+    overflowY: 'auto' 
+  },
   navBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 15px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '15px', width: '100%', transition: 'all 0.2s', textAlign: 'left' },
   badgeNovo: {
     backgroundColor: '#ef4444',

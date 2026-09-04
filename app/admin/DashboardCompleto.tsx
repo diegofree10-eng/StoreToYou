@@ -1,3 +1,4 @@
+// app/admin/DashboardGestao.tsx (ou o caminho correto do seu arquivo)
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
@@ -39,14 +40,19 @@ const VERSAO_SCHEMA_CODE = 2;
 interface ItemPedido {
   id?: string;
   idProduto?: string;
+  dsNomeProduto?: string; // 🌟 Atualizado para o novo padrão
   nome?: string;
-  qty: number;
+  nrQuantidadeProduto?: number; // 🌟 Atualizado para o novo padrão
+  qty?: number;
   quantidade?: number;
+  vlPrecoProduto?: number; // 🌟 Atualizado para o novo padrão
   preco?: number;
-  valor?: number;         // 🌟 Adicionado para corrigir o erro
-  valorUnitario?: number; // 🌟 Adicionado para corrigir o erro
+  valor?: number;         
+  valorUnitario?: number; 
+  dsVariacaoProduto?: string; // 🌟 Atualizado para o novo padrão
   variacao?: string;
   requisitos?: any[];
+  dsFotoCapaProduto?: string; // 🌟 Atualizado para o novo padrão
   foto?: string;
   imagem?: string;
   image?: string;
@@ -56,7 +62,6 @@ interface ItemPedido {
   variacaoSelecionada?: {
     foto?: string;
   };
-
 }
 
 interface CanalRenda {
@@ -79,6 +84,7 @@ const formatarMoeda = (valor: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
 
 const extrairFotoDoItem = (item: any): string => {
+  if (item.dsFotoCapaProduto && typeof item.dsFotoCapaProduto === 'string' && item.dsFotoCapaProduto.startsWith('http')) return item.dsFotoCapaProduto;
   const chavesPossiveis = ['foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
   for (const chave of chavesPossiveis) {
     if (item[chave] && typeof item[chave] === 'string' && item[chave].startsWith('http')) return item[chave];
@@ -89,11 +95,14 @@ const extrairFotoDoItem = (item: any): string => {
 
 const ItemResumido = React.memo(({ item }: { item: ItemPedido }) => {
   const { theme } = useTheme();
-  const qtd = item.quantidade || item.qty || 1;
+  const qtd = Number(item.nrQuantidadeProduto || item.quantidade || item.qty || 1);
 
-  // 🌟 Captura o preço unitário do item padronizado (compatível com 'preco', 'valor', etc.)
-  const precoUnitario = Number(item.preco || item.valor || item.valorUnitario || 0);
+  // 🌟 Captura o preço unitário do item padronizado com os novos campos
+  const precoUnitario = Number(item.vlPrecoProduto || item.preco || item.valor || item.valorUnitario || 0);
   const valorTotalItem = precoUnitario * qtd;
+
+  const nomeExibicaoProduto = item.dsNomeProduto || item.nome || "Produto";
+  const variacaoExibicao = item.dsVariacaoProduto || item.variacao || "";
 
   const fotoUrl = useMemo(() => extrairFotoDoItem(item), [item]);
 
@@ -107,17 +116,16 @@ const ItemResumido = React.memo(({ item }: { item: ItemPedido }) => {
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <span style={{ color: theme.textMain, fontWeight: 'bold', fontSize: '13px' }}>
-            {Number(qtd)}x {item.nome || "Produto"}
+            {qtd}x {nomeExibicaoProduto}
           </span>
-          {item.variacao && (
+          {variacaoExibicao && (
             <span style={{ color: '#0284c7', fontSize: '12px' }}>
-              Variação: {item.variacao}
+              Variação: {variacaoExibicao}
             </span>
           )}
         </div>
       </div>
 
-      {/* 🌟 Exibição padronizada do valor unitário e total do item */}
       <div style={{ textAlign: 'right' }}>
         <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary || '#3b82f6' }}>
           R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
@@ -131,7 +139,9 @@ ItemResumido.displayName = "ItemResumido";
 
 const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dataFormatada }: any) => {
   const { theme, isModoNoturno } = useTheme();
-  const clienteObj = typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : {};
+  
+  // 🌟 Mapeia o cliente usando o novo padrão dsCliente e os campos internos
+  const clienteObj = pedido.dsCliente || (typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : {});
   const nomeExibicao = clienteObj.nmNomeCliente || clienteObj.nome || (typeof pedido.cliente === 'string' ? pedido.cliente : "Cliente Sem Nome");
 
   const fin = pedido.financeiro || {};
@@ -139,11 +149,14 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
 
   const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? fin.valorSubtotal ?? 0);
   const descontoVal = Number(fin.vlDesconto ?? fin.discount ?? fin.descontos ?? 0);
-  const freteVal = Number(log.vlFrete ?? fin.frete ?? fin.vlFrete ?? 0);
-  const freteGratisFlag = fin.freteGratis || fin.dsTransportadoraId === "frete_gratis_ativado";
+  const freteVal = Number(log.vlFrete ?? fin.frete ?? 0);
+  const freteGratisFlag = Boolean(log.isFreteGratis || fin.freteGratis || log.dsTransportadoraId === "frete_gratis_ativado");
 
   const totalCalculadoManual = subtotalVal + (freteGratisFlag ? 0 : freteVal) - descontoVal;
   const totalFinal = Number(fin.vlTotal ?? fin.total ?? fin.valorTotal ?? (totalCalculadoManual > 0 ? totalCalculadoManual : 0));
+  
+  // 🌟 Exibe o número do pedido com suporte ao novo campo nrNumeroPedido
+  const numeroPedidoExibir = pedido.nrNumeroPedido || pedido.numeroPedido || pedido.id?.slice(0, 6) || "000";
 
   return (
     <React.Fragment>
@@ -162,15 +175,13 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
         <td style={{ padding: '16px', borderRadius: '12px 0 0 12px', fontSize: '13px', color: theme.textMain }}>{dataFormatada}</td>
         <td style={{ padding: '16px', fontSize: '13px', fontWeight: '700' }}>
           <span style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: theme.inputBg, color: theme.textMain }}>
-            #{pedido.numeroPedido}
+            #{numeroPedidoExibir}
           </span>
         </td>
         <td style={{ padding: '16px', fontSize: '13px', color: theme.primary, fontWeight: '600' }}>
-
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <FiUser size={14} /> {nomeExibicao} {expandido ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
           </span>
-
         </td>
         <td style={{ padding: '16px', fontSize: '13px', fontWeight: 'bold', color: theme.textMain }}>{formatarMoeda(totalFinal)}</td>
         <td style={{ padding: '16px', borderRadius: '0 12px 12px 0', fontSize: '13px' }}>
@@ -198,18 +209,16 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
               flexDirection: 'column',
               gap: '16px'
             }}>
-
-              {/* PARTE SUPERIOR: ITENS E RESUMO FINANCEIRO */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-
-                {/* Bloco Esquerdo: Itens do Pedido com Preço Unitário e Total */}
                 <div style={{ backgroundColor: theme.bgCard, padding: '14px', borderRadius: '10px', border: `1px solid ${theme.border}` }}>
                   <p style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, marginBottom: '10px' }}>ITENS DO PEDIDO:</p>
                   {(pedido.itens || []).map((item: ItemPedido, idx: number) => {
-                    const qtd = Number(item.quantidade || item.qty || 1);
-                    const precoUnitario = Number(item.preco || item.valor || item.valorUnitario || 0);
+                    const qtd = Number(item.nrQuantidadeProduto || item.quantidade || item.qty || 1);
+                    const precoUnitario = Number(item.vlPrecoProduto || item.preco || item.valor || item.valorUnitario || 0);
                     const valorTotalItem = precoUnitario * qtd;
                     const fotoUrl = extrairFotoDoItem(item);
+                    const nomeProd = item.dsNomeProduto || item.nome || "Produto";
+                    const varProd = item.dsVariacaoProduto || item.variacao || "";
 
                     return (
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '10px' }}>
@@ -221,11 +230,11 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
                           />
                           <div>
                             <span style={{ fontSize: '13px', fontWeight: '600', display: 'block', color: theme.textMain }}>
-                              {qtd}x {item.nome || "Produto"}
+                              {qtd}x {nomeProd}
                             </span>
-                            {item.variacao && (
+                            {varProd && (
                               <span style={{ fontSize: '11px', color: '#0284c7', display: 'block' }}>
-                                Variação: {item.variacao}
+                                Variação: {varProd}
                               </span>
                             )}
                           </div>
@@ -244,7 +253,6 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
                   </div>
                 </div>
 
-                {/* Bloco Direito: Resumo Financeiro */}
                 <div style={{ backgroundColor: theme.bgCard, padding: '14px', borderRadius: '10px', border: `1px solid ${theme.border}` }}>
                   <p style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, marginBottom: '10px' }}>RESUMO FINANCEIRO:</p>
 
@@ -282,7 +290,6 @@ const LinhaPedido = React.memo(({ pedido, expandido, onExpandir, onDevolver, dat
                   </div>
                 </div>
               </div>
-
             </div>
           </td>
         </tr>
@@ -300,6 +307,22 @@ LinhaPedido.displayName = "LinhaPedido";
 export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], lojistaId?: string }) {
   const router = useRouter();
   const { theme } = useTheme();
+
+  // 🌟 Validação de Permissão do Operador Ativo no PDV
+  useEffect(() => {
+    const operadorSalvo = localStorage.getItem("operadorAtivoPdv");
+    if (operadorSalvo) {
+      try {
+        const colab = JSON.parse(operadorSalvo);
+        if (colab && colab.permissoes && colab.permissoes.dash !== true) {
+          alert("⚠️ Você não tem permissão para acessar o Dashboard!");
+          window.location.href = "/admin/pdv";
+        }
+      } catch (e) {
+        console.error("Erro ao validar operador:", e);
+      }
+    }
+  }, []);
 
   const [abaAtiva, setAbaAtiva] = useState("vendas");
   const [buscaNome, setBuscaNome] = useState("");
@@ -440,16 +463,16 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
     try { await updateDoc(doc(db, "lojistas", lojistaId), { metaFaturamentoMensal: novaMeta }); setMetaFaturamento(novaMeta); setEditandoMeta(false); } catch (e) { alert("Erro ao salvar meta."); }
   };
 
-  const parseDataPedido = useCallback((dataStr: string) => {
+  const parseDataPedido = useCallback((dataStr: any) => {
     if (!dataStr) return null;
-    if (dataStr.includes("T") || dataStr.includes("-")) return new Date(dataStr);
-    const [dia, mes, ano] = dataStr.split(",")[0].trim().split("/");
-    return new Date(Number(ano), Number(mes) - 1, Number(dia), 12, 0, 0);
+    if (typeof dataStr === 'object' && typeof dataStr.toDate === 'function') return dataStr.toDate();
+    if (typeof dataStr === 'string' && (dataStr.includes("T") || dataStr.includes("-"))) return new Date(dataStr);
+    return new Date(dataStr);
   }, []);
 
-  const formatarDataExibicao = useCallback((dataStr: string) => {
+  const formatarDataExibicao = useCallback((dataStr: any) => {
     const dataObj = parseDataPedido(dataStr);
-    if (!dataObj || isNaN(dataObj.getTime())) return dataStr?.split("T")[0] || "Data Inválida";
+    if (!dataObj || isNaN(dataObj.getTime())) return "Data Inválida";
     return dataObj.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
   }, [parseDataPedido]);
 
@@ -460,22 +483,39 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
       if (confirm("Confirmar RESTAURAÇÃO deste pedido?")) {
         try {
           const pedidoRef = doc(db, "lojistas", lojistaId!, "pedidos", pedidoObj.id);
-          await updateDoc(pedidoRef, { devolvido: false, dadosDevolucao: null });
+          await updateDoc(pedidoRef, {
+            devolvido: false,
+            "dadosDevolucao.isDevolucaoSolicitado": false,
+            "dadosDevolucao.dsStatusDevolucao": "pendente",
+            "dadosDevolucao.dataSolicitacaoDevolucao": 0,
+          });
           alert("✅ Pedido restaurado com sucesso!");
-        } catch (e: any) { alert("Erro: " + e.message); }
+        } catch (e: any) {
+          alert("Erro: " + e.message);
+        }
       }
     }
   }, [lojistaId]);
 
-  const confirmarDevolucaoComDados = async (dadosDevolucao: any) => {
+  const confirmarDevolucaoComDados = async (dadosModal: any) => {
     if (!lojistaId || !pedidoParaDevolverModal) return;
     try {
       const pedidoRef = doc(db, "lojistas", lojistaId, "pedidos", pedidoParaDevolverModal.id);
-      await updateDoc(pedidoRef, { devolvido: true, dadosDevolucao: { dataSolicitacao: new Date().toISOString(), ...dadosDevolucao } });
-      await estornarEstoqueDoPedido(pedidoParaDevolverModal);
+      await updateDoc(pedidoRef, {
+        devolvido: true,
+        "dadosDevolucao.isDevolucaoSolicitado": true,
+        "dadosDevolucao.dsStatusDevolucao": "solicitada",
+        "dadosDevolucao.dataSolicitacaoDevolucao": new Date().toISOString(),
+        "dadosDevolucao.dsMotivo": dadosModal.motivo,
+        "dadosDevolucao.dsEstadoProduto": dadosModal.estadoProduto,
+        "dadosDevolucao.vlCustoFreteReverso": Number(dadosModal.custoFreteReverso || 0),
+      });
+
       setPedidoParaDevolverModal(null);
-      alert("✅ Devolução registrada com sucesso!");
-    } catch (e: any) { alert("Erro ao registrar devolução: " + e.message); }
+      alert("✅ Devolução registrada com sucesso! O estoque e as estatísticas estão sendo atualizados.");
+    } catch (e: any) {
+      alert("Erro ao registrar devolução: " + e.message);
+    }
   };
 
   const inteligencia = useDashboardInteligencia(pedidos, canaisExternos, despesasLojista, dataInicio, dataFim, recursosLiberados, parseDataPedido);
@@ -508,15 +548,14 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
   const dadosFiltradosBusca = useMemo(() => {
     return pedidos.filter(p => {
-      let clienteNomeStr = "";
-      if (p.cliente && typeof p.cliente === 'object') {
-        clienteNomeStr = String((p.cliente as any).nmNomeCliente || (p.cliente as any).nome || "");
-      } else {
-        clienteNomeStr = String(p.cliente || "");
-      }
+      const clienteObj = p.dsCliente || p.cliente || {};
+      const clienteNomeStr = String(clienteObj.nmNomeCliente || clienteObj.nome || "");
+      const numPedidoStr = String(p.nrNumeroPedido || p.numeroPedido || "");
       const termoBusca = String(buscaNome || "").toLowerCase().trim();
-      if (buscaNome && !clienteNomeStr.toLowerCase().includes(termoBusca) && !String(p.numeroPedido || "").toLowerCase().includes(termoBusca)) return false;
-      const dataP = parseDataPedido(p.data);
+
+      if (buscaNome && !clienteNomeStr.toLowerCase().includes(termoBusca) && !numPedidoStr.toLowerCase().includes(termoBusca)) return false;
+      
+      const dataP = parseDataPedido(p.timestamp || p.data);
       if (dataInicio && dataP && dataP < new Date(dataInicio + "T00:00:00")) return false;
       if (dataFim && dataP && dataP > new Date(dataFim + "T23:59:59")) return false;
       return true;
@@ -631,21 +670,11 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
         {abaAtiva === 'vendas' && (
           <TabVendas
-            pedidos={pedidos.filter(p => {
-              let clienteNomeStr = "";
-              if (p.cliente && typeof p.cliente === 'object') {
-                clienteNomeStr = String((p.cliente as any).nmNomeCliente || (p.cliente as any).nome || "");
-              } else {
-                clienteNomeStr = String(p.cliente || "");
-              }
-              const termoBusca = String(buscaNome || "").toLowerCase().trim();
-              if (buscaNome && !clienteNomeStr.toLowerCase().includes(termoBusca) && !String(p.numeroPedido || "").toLowerCase().includes(termoBusca)) return false;
-              const dataP = parseDataPedido(p.data);
-              if (dataInicio && dataP && dataP < new Date(dataInicio + "T00:00:00")) return false;
-              if (dataFim && dataP && dataP > new Date(dataFim + "T23:59:59")) return false;
-              const statusProd = String(p.StatusProducao?.dsStatusProducao || "").toLowerCase().trim();
-              const statusRaiz = String(p.status || "").toLowerCase().trim();
-              return (statusProd === "concluído" || statusProd === "concluido" || statusRaiz === "concluído" || statusRaiz === "concluido") && !p.devolvido;
+            pedidos={dadosFiltradosBusca.filter(p => {
+              const statusPedidoRaiz = String(p.dsStatusPedido || p.statusPedido || "").toLowerCase().trim();
+              const ehConcluido = statusPedidoRaiz === "concluído" || statusPedidoRaiz === "concluido";
+
+              return ehConcluido && !p.devolvido;
             })}
             formatarDataExibicao={formatarDataExibicao}
             formatarMoeda={formatarMoeda}
@@ -664,14 +693,10 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
         {abaAtiva === 'lucro' && (
           <TabLucroReal
-            faturamento={inteligencia.faturamento}
-            custoTotal={inteligencia.custoTotal}
-            lucroReal={inteligencia.lucroReal}
-            despesaFreteLojista={inteligencia.despesaFreteLojista}
-            despesasFixas={inteligencia.despesasFixas}
-            despesasVariaveis={inteligencia.despesasVariaveis}
+            uid={lojistaId || ""}
             formatarMoeda={formatarMoeda}
             evolucaoMensal={inteligencia.evolucaoPorAno}
+            totalPedidos={dadosFiltradosBusca.length}
           />
         )}
 
@@ -738,6 +763,7 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
 
         {abaAtiva === 'devolucoes' && (
           <TabDevolucoes
+            uid={lojistaId || ""} 
             dadosFiltradosBusca={dadosFiltradosBusca}
             formatarDataExibicao={formatarDataExibicao}
             formatarMoeda={formatarMoeda}
@@ -747,7 +773,6 @@ export function DashboardGestao({ pedidos, lojistaId }: { pedidos: Pedido[], loj
         )}
       </section>
 
-      {/* 🌟 RENDERIZAÇÃO DO MODAL DE DEVOLUÇÃO */}
       {pedidoParaDevolverModal && (
         <ModalDevolucao
           pedido={pedidoParaDevolverModal}
@@ -813,19 +838,15 @@ const styles: { [key: string]: React.CSSProperties } = {
   page: { padding: '0px 16px 24px 16px', fontFamily: 'system-ui, -apple-system, sans-serif', minHeight: '100vh', boxSizing: 'border-box' },
   header: { marginBottom: '24px' },
   btnVoltar: { padding: '8px 16px', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#334155' },
-
   filtrosCard: { display: 'flex', gap: '12px', flexWrap: 'wrap', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px', alignItems: 'center' },
   input: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', flex: 1, minWidth: '240px', outline: 'none', boxSizing: 'border-box' },
   inputDate: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' },
   selectPaginacaoTopo: { padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', cursor: 'pointer', boxSizing: 'border-box', flexShrink: 0 },
   btnAtalho: { padding: '10px 16px', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#475569' },
   btnLimpar: { padding: '10px 16px', backgroundColor: '#fee2e2', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#ef4444', flexShrink: 0, boxSizing: 'border-box' },
-
   tabBar: { display: 'flex', gap: '6px', flexWrap: 'wrap', borderBottom: '1px solid', paddingBottom: '12px' },
-
   tab: { padding: '8px 14px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px', borderRadius: '8px' },
   tabActive: { padding: '8px 14px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontWeight: '600', fontSize: '12px', borderRadius: '8px' },
-
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' },
   card: { padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
   cardLabel: { fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' },
@@ -843,7 +864,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   detalheBox: { padding: '16px' },
   expandInfo: { backgroundColor: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' },
   expandHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px dashed #e2e8f0', fontSize: '14px' },
-
   metaContainer: { padding: '16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' },
   metaInfoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
   metaMiniTitle: { fontSize: '11px', fontWeight: '800', letterSpacing: '0.5px' },
@@ -856,7 +876,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   inputMetaEdit: { padding: '4px 8px', borderRadius: '6px', border: '1px solid', width: '100px', fontSize: '13px', fontWeight: '600', outline: 'none' },
   btnMetaSalvar: { backgroundColor: '#1e293b', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' },
   btnMetaCancelar: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '0 4px' },
-
   precificacaoBox: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', padding: '4px 0' },
   precificacaoInputsForm: { padding: '16px', borderRadius: '12px', border: '1px solid' },
   formRowSimulador: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' },
@@ -865,7 +884,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   precificacaoResultCard: { padding: '20px', borderRadius: '14px', border: '2px solid', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
   precoSugeridoGrande: { fontSize: '32px', margin: '8px 0', fontWeight: '900', letterSpacing: '-1px' },
   finRow: { display: 'flex', justifyContent: 'space-between', fontSize: '13px' },
-
   modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
   modalContent: { width: '100%', maxWidth: '540px', padding: '28px', borderRadius: '20px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)', display: 'flex', flexDirection: 'column' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },

@@ -39,7 +39,9 @@ export default function ItemCarrinho({
     if (!requisitosAtivos) return false;
     if (Array.isArray(requisitosAtivos)) return requisitosAtivos.some((r: any) => r && (r.label || r.id));
     if (typeof requisitosAtivos === "object") {
-      return (requisitosAtivos.pedeNome || requisitosAtivos.pedeIdade || requisitosAtivos.pedeData || requisitosAtivos.pedeObs);
+      // ✨ Lendo o novo formato dsRequisitosProduto ou fallbacks do objeto
+      const reqs = requisitosAtivos.dsRequisitosProduto || requisitosAtivos;
+      return (reqs.pedeNome || reqs.pedeIdade || reqs.pedeData || reqs.pedeObs);
     }
     return false;
   };
@@ -48,19 +50,32 @@ export default function ItemCarrinho({
     <div style={styles.card}>
       <h4 style={{ color: corTexto, margin: '0 0 15px 0', fontSize: '15px', fontWeight: 'bold' }}>ITENS NO CARRINHO</h4>
       {safeCart.length > 0 ? (
-        safeCart.map((item: Produto, index: number) => {
+        safeCart.map((item: Produto | any, index: number) => {
           const key = item.cartItemKey || `item_${index}`;
           const partes = item.variacao ? item.variacao.split("/") : [];
-          const requisitosAtivos = item.requisitos || requisitosDoBanco[item.id];
+          
+          // ✨ Lendo os requisitos do novo padrão dsRequisitosProduto do banco ou do item
+          const requisitosAtivos = item.dsRequisitosProduto || item.requisitos || requisitosDoBanco[item.id];
           const possuiRequisitosValidos = verificarRequisitosValidos(requisitosAtivos);
           const isDigital = isItemDigital(item);
+
+          // ✨ Imagem oficializada (dsFotoProduto da variação ou dsCapaProduto do produto pai)
+          const fotoItem = item.dsFotoProduto || item.dsCapaProduto || item.foto || item.imagem || item.url || "";
+          
+          // ✨ Nome e Preço oficiais
+          const nomeItem = item.dsNomeProduto || item.nome || "Produto sem nome";
+          const precoItem = Number(item.vlPrecoProduto ?? item.vlPrecoBasicoProduto ?? item.preco ?? 0);
+
+          // ✨ Nomes das variáveis oficiais
+          const nomeVar1 = item.dsNomeVar1Produto || item.nomeVar1;
+          const nomeVar2 = item.dsNomeVar2Produto || item.nomeVar2;
 
           return (
             <div key={key} style={styles.itemRowContainer}>
               <div style={styles.itemRowMain}>
                 <div style={{ width: '65px', height: '65px', borderRadius: '10px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f8fafc', border: '1px solid #f1f5f9' }}>
-                  {(item.foto || item.imagem || item.url) ? (
-                    <img src={item.foto || item.imagem || item.url} alt={item.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {fotoItem ? (
+                    <img src={fotoItem} alt={nomeItem} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📦</div>
                   )}
@@ -68,16 +83,16 @@ export default function ItemCarrinho({
                 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                    <b style={{ color: corTexto, fontSize: '13px', wordBreak: 'break-word' }}>{item.nome || item.title}</b>
+                    <b style={{ color: corTexto, fontSize: '13px', wordBreak: 'break-word' }}>{nomeItem}</b>
                     {isDigital && <span style={{ fontSize: '9px', padding: '2px 5px', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1' }}>Digital</span>}
                   </div>
-                  <span style={{ color: corPrimaria, fontSize: '19px', fontWeight: 'bold' }}>R$ {Number(item.preco || item.price || 0).toFixed(2).replace('.', ',')}</span>
+                  <span style={{ color: corPrimaria, fontSize: '19px', fontWeight: 'bold' }}>R$ {precoItem.toFixed(2).replace('.', ',')}</span>
 
                   <div style={{ marginTop: '4px' }}>
                     {item.variacao && item.variacao !== "Padrão" && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '4px' }}>
-                        {item.nomeVar1 && partes && partes[0] && <p style={styles.varText}><b>{item.nomeVar1}:</b> {partes[0].trim()}</p>}
-                        {item.nomeVar2 && partes && partes[1] && <p style={styles.varText}><b>{item.nomeVar2}:</b> {partes[1].trim()}</p>}
+                        {nomeVar1 && partes && partes[0] && <p style={styles.varText}><b>{nomeVar1}:</b> {partes[0].trim()}</p>}
+                        {nomeVar2 && partes && partes[1] && <p style={styles.varText}><b>{nomeVar2}:</b> {partes[1].trim()}</p>}
                       </div>
                     )}
 
@@ -122,7 +137,7 @@ export default function ItemCarrinho({
                 </div>
               </div>
 
-              {/* UTILIZANDO O COMPONENTE SEPARADO ModalPersonalizacaoMobile */}
+              {/* MODAL MOBILE DE PERSONALIZAÇÃO */}
               {itemModalAberto === key && (
                 <ModalPersonalizacaoMobile 
                   itemKey={key}

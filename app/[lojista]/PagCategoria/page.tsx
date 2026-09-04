@@ -1,8 +1,9 @@
+// app/[lojista]/PagCategoria/page.tsx
 "use client";
 
 import React, { useState, useEffect } from 'react';
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, where, limit, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, query, where, limit } from "firebase/firestore";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FiPackage, FiGrid } from "react-icons/fi";
 import { useLoja } from "@/app/[lojista]/_components/LojaContext";
@@ -61,13 +62,31 @@ export default function PagCategoria() {
           const docId = snapLoja.docs[0].id;
           const produtosRef = collection(db, `lojistas/${docId}/produtos`);
           
-          let qProd = subcategoriaAtiva
-            ? query(produtosRef, where("categoria", "==", categoriaAtiva), where("subcategoria", "==", subcategoriaAtiva), where("ativo", "==", true))
-            : query(produtosRef, where("categoria", "==", categoriaAtiva), where("ativo", "==", true));
+          // Leitura rigorosa baseada no novo padrão de nomes dos campos do produto
+          const prodSnap = await getDocs(produtosRef);
+          const listaDocs = prodSnap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...data,
+              nome: data.dsNomeProduto || "",
+              categoria: data.dsCategoriaProduto || "",
+              subcategoria: data.dsSubcategoriaProduto || "",
+              precoBasico: data.vlPrecoBasicoProduto ?? 0,
+              capa: data.dsCapaProduto || (data.dsImagensProduto?.[0]) || "",
+              ativo: data.isAtivoProduto ?? true
+            } as any;
+          });
 
-          const prodSnap = await getDocs(qProd);
-          const lista = prodSnap.docs.map(d => ({ id: d.id, ...d.data() } as Produto));
-          setProdutosResultado(lista);
+          // Filtro local aplicando as regras de categoria, subcategoria e ativo
+          const filtrados = listaDocs.filter((p: any) => {
+            const catMatch = p.categoria.trim().toLowerCase() === categoriaAtiva.trim().toLowerCase();
+            const subMatch = subcategoriaAtiva ? p.subcategoria.trim().toLowerCase() === subcategoriaAtiva.trim().toLowerCase() : true;
+            const ativoMatch = p.ativo === true;
+            return catMatch && subMatch && ativoMatch;
+          });
+
+          setProdutosResultado(filtrados);
         }
       } catch (e) {
         console.error("Erro ao buscar produtos da categoria:", e);
@@ -126,7 +145,7 @@ export default function PagCategoria() {
                     <img src={prod.capa || "https://via.placeholder.com/400"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={prod.nome} />
                   </div>
                   <h4 style={{ fontSize: '11px', fontWeight: 'bold', color: config.corTextoCard, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nome}</h4>
-                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 6px' }}>R$ {prod.precoBasico || "0,00"}</p>
+                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 6px' }}>R$ {typeof prod.precoBasico === 'number' ? prod.precoBasico.toFixed(2).replace('.', ',') : (prod.precoBasico || "0,00")}</p>
                   <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corSecundaria : '#94a3b8', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
                     {isLojaAberta ? "Ver Detalhes" : "Apenas Vitrine"}
                   </button>
@@ -145,7 +164,7 @@ export default function PagCategoria() {
       <div style={{ width: '100%', boxSizing: 'border-box' }}>
         {carregando ? (
           <div style={{ textAlign: 'center', padding: '50px', color: '#888' }}>Carregando produtos...</div>
-        ​) : produtosResultado.length === 0 ? (
+        ) : produtosResultado.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #f1f5f9', color: '#888', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
             <FiPackage size={40} color="#cbd5e1" />
             <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, color: config.corTextoCard }}>Nenhum produto encontrado nesta categoria.</p>
@@ -164,7 +183,7 @@ export default function PagCategoria() {
                   <img src={prod.capa || "https://via.placeholder.com/400"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={prod.nome} />
                 </div>
                 <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: config.corTextoCard, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nome}</h4>
-                <p style={{ fontSize: '15px', fontWeight: '900', color: config.corPrimaria, margin: '0 0 10px' }}>R$ {prod.precoBasico || "0,00"}</p>
+                <p style={{ fontSize: '15px', fontWeight: '900', color: config.corPrimaria, margin: '0 0 10px' }}>R$ {typeof prod.precoBasico === 'number' ? prod.precoBasico.toFixed(2).replace('.', ',') : (prod.precoBasico || "0,00")}</p>
                 <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corPrimaria : '#94a3b8', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
                   {isLojaAberta ? "Ver Detalhes" : "Apenas Vitrine"}
                 </button>

@@ -1,3 +1,4 @@
+// app/[lojista]/layout.tsx
 import { getDadosLoja } from "@/lib/db-loja";
 import { notFound } from "next/navigation";
 import { LojaProvider } from "./_components/LojaContext";
@@ -31,7 +32,15 @@ export default async function LojaLayout({ children, params }: LojaLayoutProps) 
     if (!snap.empty) {
       const docId = snap.docs[0].id;
       const catsSnap = await getDocs(collection(db, "lojistas", docId, "categorias"));
-      categorias = catsSnap.docs.map(c => ({ id: c.id, ...c.data() }));
+      categorias = catsSnap.docs.map(c => {
+        const catData = c.data();
+        return {
+          id: c.id,
+          ...catData,
+          // Caso queira padronizar a categoria do produto futuramente, mas mantendo a leitura original segura
+          nome: catData.dsNomeCategoria || catData.nome || ""
+        };
+      });
     }
   } catch (e) {
     console.error(e);

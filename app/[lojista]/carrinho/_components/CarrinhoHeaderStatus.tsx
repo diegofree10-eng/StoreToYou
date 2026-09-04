@@ -27,7 +27,7 @@ export default function CarrinhoHeaderStatus({ isLojaAberta, nomeLoja, logoUrl, 
           padding: '0 25px', 
           height: '80px', 
           boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
-          backgroundColor: corFundoCabecalho // 👈 Sincronizado com a mesma cor do rodapé
+          backgroundColor: corFundoCabecalho 
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '100%' }}>
@@ -39,7 +39,7 @@ export default function CarrinhoHeaderStatus({ isLojaAberta, nomeLoja, logoUrl, 
             <div style={{ width: '50px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {logoUrl ? <img src={logoUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt={nomeLoja} /> : <div>🛍️</div>}
             </div>
-            <span style={{ fontSize: '15px', fontWeight: '900', color: corTextoCabecalho }}>{nomeLoja.toUpperCase()}</span>
+            <span style={{ fontSize: '15px', fontWeight: '900', color: corTextoCabecalho }}>{String(nomeLoja || "").toUpperCase()}</span>
           </div>
         </div>
       </header>

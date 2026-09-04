@@ -44,23 +44,33 @@ export default function BlocoResumoPedido({
       <div style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #f1f5f9', height: '100%', boxSizing: 'border-box', maxHeight: '235px' }} className="bloco-resumo-container">
         <h4 style={{ color: config.corTexto, margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold' }}>RESUMO DO PEDIDO</h4>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: config.corTexto }}>
+          
+          {/* 1. Subtotal */}
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Subtotal:</span>
             <b>R$ {Number(valorSubtotalProdutos || 0).toFixed(2).replace('.', ',')}</b>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Frete:</span>
-            <b>{temFrete ? (freteSel ? (freteSel.price === 0 ? "Grátis" : `R$ ${Number(freteSel.price).toFixed(2).replace('.', ',')}`) : "0,00") : "Grátis"}</b>
-          </div>
+
+          {/* 2. Cupom (só aparece na listagem se houver desconto ativo) */}
           <div style={{ display: 'flex', justifyContent: 'space-between', color: descontoAtivo.valor > 0 ? '#16a34a' : config.corTexto }}>
             <span>Cupom:</span>
             <b>{descontoAtivo.valor > 0 ? `- R$ ${Number(valorDesconto || 0).toFixed(2).replace('.', ',')}` : "0,00"}</b>
           </div>
+
+          {/* 3. Frete */}
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Frete:</span>
+            <b>{temFrete ? (freteSel ? (freteSel.price === 0 ? "Grátis" : `R$ ${Number(freteSel.price).toFixed(2).replace('.', ',')}`) : "0,00") : "Grátis"}</b>
+          </div>
+
+          {/* 4. Total */}
           <div style={{ borderTop: '1px solid #e2e8f0', margin: '4px 0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '15px' }}>
             <b>Total:</b>
             <b style={{ color: config.corTexto }}>R$ {Number(totalGeral || 0).toFixed(2).replace('.', ',')}</b>
           </div>
         </div>
+
+        {/* Input e botões de cupom */}
         <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
           <input
             placeholder="Cupom de desconto"

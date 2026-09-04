@@ -1,3 +1,4 @@
+// app/[lojista]/_components/HeaderLoja.tsx
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -118,15 +119,18 @@ export default function HeaderLoja() {
 
       {/* 2. FAIXA INFERIOR DE CATEGORIAS */}
       <div style={{ backgroundColor: config.corSecundaria, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '30px', padding: '12px 15px', color: config.corTexto, fontWeight: 'bold', fontSize: '13px', overflowX: 'auto', whiteSpace: 'nowrap', borderTop: '1px solid rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
-        {categoriasState?.map((cat: any) => (
-          <span 
-            key={cat.id} 
-            onClick={() => irParaCategoria(cat.nome)} 
-            style={{ cursor: 'pointer', textTransform: 'uppercase' }}
-          >
-            {cat.nome}
-          </span>
-        ))}
+        {categoriasState?.map((cat: any) => {
+          const nomeCat = cat.dsNome || cat.nome || "";
+          return (
+            <span 
+              key={cat.id} 
+              onClick={() => irParaCategoria(nomeCat)} 
+              style={{ cursor: 'pointer', textTransform: 'uppercase' }}
+            >
+              {nomeCat}
+            </span>
+          );
+        })}
       </div>
 
       {/* 3. MENU LATERAL MOBILE */}
@@ -139,15 +143,18 @@ export default function HeaderLoja() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <span onClick={() => { router.push(`/${slug}`); setMenuMobileAberto(false); }} style={{ cursor: 'pointer', fontWeight: 'bold' }}>Início</span>
-              {categoriasState?.map((cat: any) => (
-                <span 
-                  key={cat.id} 
-                  onClick={() => irParaCategoria(cat.nome)} 
-                  style={{ cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px' }}
-                >
-                  {cat.nome}
-                </span>
-              ))}
+              {categoriasState?.map((cat: any) => {
+                const nomeCat = cat.dsNome || cat.nome || "";
+                return (
+                  <span 
+                    key={cat.id} 
+                    onClick={() => irParaCategoria(nomeCat)} 
+                    style={{ cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px' }}
+                  >
+                    {nomeCat}
+                  </span>
+                );
+              })}
             </div>
           </div>
           <div style={{ flex: 1 }} onClick={() => setMenuMobileAberto(false)} />

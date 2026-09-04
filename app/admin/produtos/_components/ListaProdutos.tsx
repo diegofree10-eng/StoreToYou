@@ -72,7 +72,7 @@ export default function ListaProdutos({
         return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
     };
 
-    const calcularLucro = (venda: string, custo: string) => {
+    const calcularLucro = (venda: any, custo: any) => {
         const v = parseFloat(venda);
         const c = parseFloat(custo);
         if (!v || !c || c === 0) return null;
@@ -81,7 +81,8 @@ export default function ListaProdutos({
 
     const handleExcluirIndividual = async (produto: any) => {
         if (!uid) return;
-        const confirmar = window.confirm(`Deseja realmente excluir o produto "${produto.nome}"? Esta ação não pode ser desfeita.`);
+        const nomeProd = produto.dsNome || produto.dsNomeProduto || produto.nome || "Produto";
+        const confirmar = window.confirm(`Deseja realmente excluir o produto "${nomeProd}"? Esta ação não pode ser desfeita.`);
         if (!confirmar) return;
 
         try {
@@ -146,7 +147,8 @@ export default function ListaProdutos({
                 const produtoAtual = produtos.find(p => p.id === id) || produtosFiltrados.find(p => p.id === id);
                 if (!produtoAtual) continue;
 
-                let precoAntigo = parseFloat(String(produtoAtual.precoBasico || "0").replace(/\./g, "").replace(',', '.')) || 0;
+                const precoAtualBanco = produtoAtual.vlPrecoBasicoProduto !== undefined ? produtoAtual.vlPrecoBasicoProduto : (produtoAtual.vlPrecoBasico !== undefined ? produtoAtual.vlPrecoBasico : (produtoAtual.precoBasico || 0));
+                let precoAntigo = parseFloat(String(precoAtualBanco).replace(',', '.')) || 0;
                 let novoPrecoCalculado = precoAntigo;
 
                 if (tipoAjustePreco === "fixo") {
@@ -160,8 +162,8 @@ export default function ListaProdutos({
                 if (novoPrecoCalculado < 0) novoPrecoCalculado = 0;
 
                 await updateDoc(doc(db, "lojistas", uid, "produtos", id), {
-                    precoBasico: novoPrecoCalculado.toFixed(2).replace(".", ","),
-                    updatedAt: Date.now()
+                    vlPrecoBasicoProduto: Number(novoPrecoCalculado.toFixed(2)),
+                    nrUpdatedAt: Date.now()
                 });
             }
 
@@ -184,13 +186,27 @@ export default function ListaProdutos({
         const cabecalho = ["SKU", "ID Produto", "Nome", "Variacao/Grade", "Categoria", "Preco Venda", "Custo", "Status", "Peso(kg)", "Medidas", "Personalizavel"];
         const linhas: any[] = [];
         produtosFiltrados.forEach(p => {
-            const sku = p.sku || "SEM-SKU";
-            if (p.temVariacoes && p.variacoes && p.variacoes.length > 0) {
+            const sku = p.dsSkuProduto || p.dsSku || p.sku || "SEM-SKU";
+            const nomeProd = p.dsNomeProduto || p.dsNome || p.nome || "";
+            const catProd = p.dsCategoriaProduto || p.dsCategoria || p.categoria || "";
+            const precoProd = p.vlPrecoBasicoProduto ?? p.vlPrecoBasico ?? p.precoBasico ?? 0;
+            const custoProd = p.vlCustoUnitarioProduto ?? p.vlCustoUnitario ?? p.custoUnitario ?? 0;
+            const ativoProd = p.isAtivoProduto ?? p.isAtivo ?? p.ativo ?? true;
+            const pesoProd = p.nrPesoProduto ?? p.nrPeso ?? p.peso ?? 0;
+            const compProd = p.nrComprimentoProduto ?? p.nrComprimento ?? p.comprimento ?? 0;
+            const largProd = p.nrLarguraProduto ?? p.nrLargura ?? p.largura ?? 0;
+            const altProd = p.nrAlturaProduto ?? p.nrAltura ?? p.altura ?? 0;
+            const reqProd = p.dsRequisitosProduto || p.dsRequisitos || p.requisitos;
+
+            if (p.variacoes && p.variacoes.length > 0) {
                 p.variacoes.forEach((v: any) => {
-                    linhas.push([sku, p.id, `"${p.nome?.replace(/"/g, '""')}"`, `"${v.nome?.replace(/"/g, '""')}"`, `"${p.categoria || ""}"`, v.preco || p.precoBasico, v.custo || p.custoUnitario || "0.00", p.ativo ? "Visivel" : "Oculto", p.peso || "0", `${p.comprimento || 0}x${p.largura || 0}x${p.altura || 0}`, p.requisitos ? "Sim" : "Nao"]);
+                    const vNome = v.dsNomeProduto || v.dsNome || v.nome || "";
+                    const vPreco = v.vlPrecoProduto ?? v.vlPreco ?? v.preco ?? precoProd;
+                    const vCusto = v.vlCustoUnitarioProduto ?? v.vlCustoUnitario ?? v.custo ?? custoProd;
+                    linhas.push([sku, p.id, `"${nomeProd.replace(/"/g, '""')}"`, `"${vNome.replace(/"/g, '""')}"`, `"${catProd}"`, vPreco, vCusto, ativoProd ? "Visivel" : "Oculto", pesoProd, `${compProd}x${largProd}x${altProd}`, reqProd ? "Sim" : "Nao"]);
                 });
             } else {
-                linhas.push([sku, p.id, `"${p.nome?.replace(/"/g, '""')}"`, "Unico", `"${p.categoria || ""}"`, p.precoBasico, p.custoUnitario || "0.00", p.ativo ? "Visivel" : "Oculto", p.peso || "0", `${p.comprimento || 0}x${p.largura || 0}x${p.altura || 0}`, p.requisitos ? "Sim" : "Nao"]);
+                linhas.push([sku, p.id, `"${nomeProd.replace(/"/g, '""')}"`, "Unico", `"${catProd}"`, precoProd, custoProd, ativoProd ? "Visivel" : "Oculto", pesoProd, `${compProd}x${largProd}x${altProd}`, reqProd ? "Sim" : "Nao"]);
             }
         });
         const csvContent = "\ufeff" + [cabecalho.join(";"), ...linhas.map(l => l.join(";"))].join("\n");
@@ -204,7 +220,6 @@ export default function ListaProdutos({
 
     return (
         <div style={{ color: theme.textMain }}>
-            {/* ORGANIZAÇÃO LIMPA E PROFISSIONAL EXCLUSIVA PARA O MOBILE */}
             <style jsx>{`
                 .menu-item-hover:hover {
                     background-color: ${theme.border} !important;
@@ -214,14 +229,12 @@ export default function ListaProdutos({
                 }
 
                 @media (max-width: 768px) {
-                    /* Grade de 2 colunas limpa no celular */
                     .product-grid-mobile {
                         display: grid !important;
                         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
                         gap: 8px !important;
                     }
                     
-                    /* Organização compacta do cabeçalho de filtros no mobile */
                     .mobile-filter-row {
                         display: flex !important;
                         flex-direction: row !important;
@@ -248,9 +261,6 @@ export default function ListaProdutos({
                         justify-content: center !important;
                     }
 
-                    /* Painel de Ações em Massa no Mobile exatamente como solicitado:
-                        Linha 1: Mostrar / Ocultar / Excluir (3 colunas iguais)
-                        Linha 2: Preço em Massa / Imprimir (2 colunas iguais) */
                     .mobile-mass-panel {
                         display: flex !important;
                         flex-direction: column !important;
@@ -268,7 +278,6 @@ export default function ListaProdutos({
                         width: 100% !important;
                     }
                     
-                    /* Container dos botões de Ação Exata */
                     .mobile-mass-actions-container {
                         display: flex !important;
                         flex-direction: column !important;
@@ -294,7 +303,6 @@ export default function ListaProdutos({
                         font-size: 11px !important;
                     }
 
-                    /* Menu flutuante seguro contra cortes no celular */
                     .menu-flutuante-pos {
                         right: 0 !important;
                         left: auto !important;
@@ -397,10 +405,10 @@ export default function ListaProdutos({
                         </div>
                         <div className="mobile-mass-actions-container" style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                             <div className="mobile-mass-row-1" style={{ display: 'contents' }}>
-                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: true }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: '#059669', background: theme.inputBg, borderColor: theme.border }}>
+                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { isAtivoProduto: true, isAtivo: true }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: '#059669', background: theme.inputBg, borderColor: theme.border }}>
                                     👁️ Mostrar
                                 </button>
-                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: false }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: theme.textSec, background: theme.inputBg, borderColor: theme.border }}>
+                                <button type="button" onClick={() => { if (selecionados.length === 0 || !uid) return; produtosFiltrados.forEach(p => { if (selecionados.includes(p.id)) updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { isAtivoProduto: false, isAtivo: false }); }); setSelecionados([]); setModoMassa(false); }} style={{ ...styles.btnMass, color: theme.textSec, background: theme.inputBg, borderColor: theme.border }}>
                                     🚫 Ocultar
                                 </button>
                                 <button type="button" onClick={excluirEmMassa} style={{ ...styles.btnMass, color: '#dc2626', background: theme.inputBg, borderColor: theme.border }}>
@@ -434,7 +442,12 @@ export default function ListaProdutos({
                         <p style={{ textAlign: 'center', color: theme.textSec, gridColumn: '1 / -1', padding: '30px' }}>Nenhum produto encontrado.</p>
                     ) : (
                         produtosFiltrados.map(p => {
-                            const lucro = calcularLucro(p.precoBasico, p.custoUnitario);
+                            const nomeProd = p.dsNomeProduto || p.dsNome || p.nome || "";
+                            const precoProd = p.vlPrecoBasicoProduto ?? p.vlPrecoBasico ?? p.precoBasico ?? 0;
+                            const custoProd = p.vlCustoUnitarioProduto ?? p.vlCustoUnitario ?? p.custoUnitario ?? 0;
+                            const ativoProd = p.isAtivoProduto ?? p.isAtivo ?? p.ativo ?? true;
+                            const capaProd = p.dsCapaProduto || p.dsCapa || p.capa || p.dsImagensProduto?.[0] || p.dsImagens?.[0] || p.imagens?.[0] || "";
+                            const lucro = calcularLucro(precoProd, custoProd);
                             const isOpen = menuAbertoId === p.id;
 
                             return (
@@ -445,7 +458,7 @@ export default function ListaProdutos({
                                         background: theme.bgCard,
                                         borderColor: theme.border,
                                         color: theme.textMain,
-                                        opacity: p.ativo ? 1 : 0.6,
+                                        opacity: ativoProd ? 1 : 0.6,
                                         position: 'relative',
                                         zIndex: isOpen ? 50 : 1,
                                         overflow: 'visible'
@@ -460,7 +473,7 @@ export default function ListaProdutos({
                                         />
                                     )}
 
-                                    {p.destaque && (
+                                    {p.isDestaque && (
                                         <div
                                             title="Produto em Destaque"
                                             style={{
@@ -531,13 +544,13 @@ export default function ListaProdutos({
                                                         e.stopPropagation();
                                                         setMenuAbertoId(null);
                                                         if (uid) {
-                                                            updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { destaque: !p.destaque });
+                                                            updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { isDestaque: !p.isDestaque });
                                                         }
                                                     }}
                                                     className="menu-item-hover"
                                                     style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
                                                 >
-                                                    {p.destaque ? "⭐ Remover Destaque" : "⭐ Destacar"}
+                                                    {p.isDestaque ? "⭐ Remover Destaque" : "⭐ Destacar"}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -561,13 +574,13 @@ export default function ListaProdutos({
                                                         e.stopPropagation();
                                                         setMenuAbertoId(null);
                                                         if (uid) {
-                                                            updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { ativo: !p.ativo });
+                                                            updateDoc(doc(db, "lojistas", uid, "produtos", p.id), { isAtivoProduto: !ativoProd, isAtivo: !ativoProd });
                                                         }
                                                     }}
                                                     className="menu-item-hover"
                                                     style={{ padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: theme.textSec, display: 'flex', alignItems: 'center', gap: '8px', width: '100%', transition: 'background 0.15s ease' }}
                                                 >
-                                                    {p.ativo ? "🚫 Ocultar" : "👁️ Mostrar"}
+                                                    {ativoProd ? "🚫 Ocultar" : "👁️ Mostrar"}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -591,13 +604,19 @@ export default function ListaProdutos({
                                     </div>
 
                                     <div style={styles.cardImgContainer}>
-                                        <img src={p.capa || p.imagens?.[0] || ""} style={styles.cardImg} alt={p.nome} />
+                                        {capaProd ? (
+                                            <img src={capaProd} style={styles.cardImg} alt={nomeProd} />
+                                        ) : (
+                                            <div style={{ ...styles.cardImg, display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.border, color: theme.textSec, fontSize: '11px' }}>
+                                                Sem foto
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div style={styles.cardBody}>
-                                        <h4 style={{ ...styles.cardTitle, color: theme.textMain }}>{p.nome}</h4>
+                                        <h4 style={{ ...styles.cardTitle, color: theme.textMain }}>{nomeProd}</h4>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 'auto' }}>
-                                            <span style={{ ...styles.cardPrice, color: theme. primary }}>R$ {p.precoBasico || "0,00"}</span>
+                                            <span style={{ ...styles.cardPrice, color: theme.primary }}>R$ {Number(precoProd).toFixed(2).replace('.', ',')}</span>
                                             {lucro && <span style={styles.markupTag}>+{lucro}%</span>}
                                         </div>
                                     </div>

@@ -28,7 +28,7 @@ const formatarData = (dataStr: string | undefined): string => {
 };
 
 const extrairFotoDoItem = (item: any): string => {
-    const chavesPossiveis = ['foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
+    const chavesPossiveis = ['dsFotoCapaProduto', 'foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
     for (const chave of chavesPossiveis) {
         if (item[chave] && typeof item[chave] === 'string' && item[chave].startsWith('http')) return item[chave];
     }
@@ -39,20 +39,20 @@ const extrairFotoDoItem = (item: any): string => {
 const obterSeloItem = (item: any, pedidoLogistica: any) => {
     const tipoProduto = String(item.dsTipoProduto || item.tipoProduto || '').trim().toLowerCase();
 
-    if (tipoProduto === 'digital_download' || tipoProduto === 'digital_personalizado' || tipoProduto === 'digital' || item.precisaFrete === false) {
+    if (tipoProduto === 'digital_download' || tipoProduto === 'digital_personalizado' || tipoProduto === 'digital' || item.isPrecisaFreteProduto === false || item.precisaFrete === false) {
         return { texto: "Digital", cor: "#3b82f6" };
     }
 
     const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
 
     if (formaItem === 'retirada') return { texto: "Retirada", cor: "#f59e0b" };
-    if (formaItem === 'entrega_local') return { texto: "Entrega Local", cor: "#8b5cf6" };
+    if (formaItem === 'entrega_local' || pedidoLogistica?.dsTransportadoraId === 'entrega_local') return { texto: "Entrega Local", cor: "#8b5cf6" };
 
     return { texto: "Envio", cor: "#10b981" };
 };
 
 const gerarLinkWhatsApp = (pedido: Pedido) => {
-    const clienteObj = typeof pedido.cliente === 'object' && pedido.cliente !== null ? pedido.cliente : ({} as any);
+    const clienteObj = typeof (pedido as any).dsCliente === 'object' && (pedido as any).dsCliente !== null ? (pedido as any).dsCliente : ({} as any);
     const telefoneBruto = clienteObj.dsTelefoneCliente || clienteObj.telefone || clienteObj.whatsapp || clienteObj.celular || (pedido as any).telefone || "";
 
     if (!telefoneBruto) return "";
@@ -62,7 +62,9 @@ const gerarLinkWhatsApp = (pedido: Pedido) => {
 
     const telefoneFinal = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
     const nomeCliente = clienteObj.nmNomeCliente || clienteObj.nome || "Cliente";
-    const numPed = pedido.numeroPedido !== undefined && pedido.numeroPedido !== null ? pedido.numeroPedido : (pedido.numero || pedido.id?.slice(-4));
+    
+    // 🌟 Número do pedido direto da raiz
+    const numPed = (pedido as any).nrNumeroPedido !== undefined && (pedido as any).nrNumeroPedido !== null ? (pedido as any).nrNumeroPedido : (pedido.id?.slice(-4));
 
     const mensagem = encodeURIComponent(`Olá ${nomeCliente}, tudo bem? Estou entrando em contato referente ao seu pedido digital #${numPed}.`);
     return `https://wa.me/${telefoneFinal}?text=${mensagem}`;
@@ -87,23 +89,23 @@ export default function TabDigital({
             if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusGeral === 'enviado' || (p as any).enviado === true) return false;
 
             const statusProdObj = (p as any).StatusProducao || {};
-            const isPago = Boolean(statusProdObj.isPago !== undefined ? statusProdObj.isPago : p.pago);
+            const isPago = Boolean(statusProdObj.isPago !== undefined ? statusProdObj.isPago : (p as any).pago || String((p as any).statusPagamento || '').toLowerCase() === 'pago');
             if (!isPago) return false;
 
             const pedidoLogistica = (p as any).logistica || {};
-            const formaEntrega = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
+            const formaEntrega = String(pedidoLogistica.dsFormaEntrega || (p as any).dsFormaEntrega || '').toLowerCase();
 
             const temItemFisico = Array.isArray(p.itens) && p.itens.some((i: any) => {
                 const tipo = String(i.dsTipoProduto || i.tipoProduto || '').toLowerCase();
                 const tipoEhDigital = tipo.includes('digital');
-                return !tipoEhDigital && i.precisaFrete !== false;
+                return !tipoEhDigital && i.isPrecisaFreteProduto !== false && i.precisaFrete !== false;
             });
 
             const formaEntregaEhFisica = formaEntrega === 'retirada' || formaEntrega === 'entrega_local' || formaEntrega === 'envio' || formaEntrega === 'transportadora';
 
             if (temItemFisico || formaEntregaEhFisica) return false;
 
-            const temItemDigital = Array.isArray(p.itens) && p.itens.some((i: any) => i.precisaFrete === false || String(i.dsTipoProduto || '').toLowerCase().includes('digital'));
+            const temItemDigital = Array.isArray(p.itens) && p.itens.some((i: any) => i.isPrecisaFreteProduto === false || i.precisaFrete === false || String(i.dsTipoProduto || i.tipoProduto || '').toLowerCase().includes('digital'));
             const isDigital = formaEntrega === 'digital' || temItemDigital;
 
             return isDigital;
@@ -271,33 +273,41 @@ export default function TabDigital({
                     </div>
                 ) : (
                     pedidosPaginados.map(pedido => {
-                        const nomeCliente = typeof pedido.cliente === 'object' ? (pedido.cliente?.nmNomeCliente || pedido.cliente?.nome || "Cliente") : (pedido.cliente || "Cliente");
-                        const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
+                        const clienteObj = (pedido as any).dsCliente || {};
+                        const nomeCliente = typeof clienteObj === 'object' ? (clienteObj.nmNomeCliente || clienteObj.nome || "Cliente") : (clienteObj || "Cliente");
+                        
+                        // 🌟 Número do pedido direto da raiz
+                        const numPedidoFormatado = String((pedido as any).nrNumeroPedido ?? (pedido as any).numeroPedido ?? (pedido as any).numero ?? (pedido as any).id?.slice(-4) ?? "").padStart(5, '0');
+                        
                         const expandido = !!pedidosExpandidos[pedido.id];
                         const idPedidoExibicao = String(pedido.id || "");
                         const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
                         const cotacao = (pedido as any).Cotacao || {};
-                        const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
+                        const endereco = (pedido as any).dsEndereco || pedido.endereco || (pedido as any).cliente?.endereco || {};
 
-                        const temPersonalizacao = pedido.itens?.some(i => {
-                            const resp = i.respostasFormatadas || i.personalizacao;
+                        const temPersonalizacao = pedido.itens?.some((i: any) => {
+                            const resp = i.dsRespostasPersonalizadasProduto || i.respostasFormatadas || i.personalizacao;
                             if (!resp) return false;
                             if (typeof resp === 'object' && Object.keys(resp).length > 0) return true;
                             if (typeof resp === 'string' && resp.trim() !== '') return true;
                             return false;
                         });
 
-                        const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).statusPagamento === 'pago';
+                        const isPagoReal = (pedido as any).pago === true || (pedido as any).StatusProducao?.isPago === true || String((pedido as any).statusPagamento || '').toLowerCase() === 'pago';
                         const corBordaCard = isPagoReal ? '#2ecc71' : '#e74c3c';
 
-                        const fin = pedido.financeiro || {};
-                        const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
-                        const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
-                        const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
-                        const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
-                        const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
+                        const fin = (pedido as any).financeiro || {};
+                        const log = (pedido as any).logistica || {};
+
+                        const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? fin.valorSubtotal ?? (pedido as any).subtotal ?? 0);
+                        const freteVal = Number(log.vlFrete ?? fin.vlFrete ?? fin.valorFrete ?? 0);
+                        const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? fin.vlDescontos ?? 0);
+
+                        const totalCalculadoManual = subtotalVal + freteVal - descontoVal;
+                        const totalVal = Number(fin.vlTotal ?? fin.total ?? fin.valorTotal ?? (pedido as any).total ?? (totalCalculadoManual > 0 ? totalCalculadoManual : 0));
+                        const cupomStr = fin.dsCupom ?? fin.cupom ?? fin.codigoCupom ?? "-";
 
                         return (
                             <div key={pedido.id} style={{ ...localStyles.cardContainer, backgroundColor: theme.bgCard, border: `1.5px solid ${corBordaCard}` }}>
@@ -317,8 +327,8 @@ export default function TabDigital({
                                             <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', width: '50px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
 
                                             {/* 🌟 Badge de Origem PC */}
-                                            <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: (pedido.origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
-                                                {pedido.origemPedido || 'Site'}
+                                            <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: ((pedido as any).dsOrigemPedido || (pedido as any).origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
+                                                {(pedido as any).dsOrigemPedido || (pedido as any).origemPedido || 'Site'}
                                             </span>
 
                                             <span style={{ fontWeight: 'bold', color: theme.textMain, fontSize: '14px', width: '220px', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
@@ -327,7 +337,7 @@ export default function TabDigital({
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
                                             <span style={{ fontSize: '12px', color: theme.textSec, fontWeight: '500' }}>
-                                                {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                                {formatarData((pedido as any).data || clienteObj.data)}
                                             </span>
                                             <span style={{ fontSize: '12px', color: theme.textSec }}>{expandido ? '▲' : '▼'}</span>
                                         </div>
@@ -345,11 +355,28 @@ export default function TabDigital({
                                                 <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
 
                                                 {/* 🌟 Badge de Origem Mobile */}
-                                                <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 5px', borderRadius: '4px', backgroundColor: (pedido.origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
-                                                    {pedido.origemPedido || 'Site'}
+                                                <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 5px', borderRadius: '4px', backgroundColor: ((pedido as any).dsOrigemPedido || (pedido as any).origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
+                                                    {(pedido as any).dsOrigemPedido || (pedido as any).origemPedido || 'Site'}
                                                 </span>
 
                                                 <span style={{ fontWeight: 'bold', color: theme.textMain, fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nomeCliente}>{nomeCliente}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mobile-linha-baixo">
+                                            <span
+                                                className="mobile-id-badge"
+                                                onClick={(e) => copiarIdCompleto(e, idPedidoExibicao)}
+                                                title="Toque para copiar o ID completo"
+                                            >
+                                                📋 ID: {idEncurtadoMobile}
+                                            </span>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                                <span style={{ fontSize: '11px', color: theme.textSec, fontWeight: '500' }}>
+                                                    {formatarData((pedido as any).data || clienteObj.data)}
+                                                </span>
+                                                <span style={{ fontSize: '12px', color: theme.textSec }}>{expandido ? '▲' : '▼'}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -378,7 +405,7 @@ export default function TabDigital({
                                                 </div>
                                                 {temPersonalizacao ? (
                                                     pedido.itens.map((item: any, idx: number) => {
-                                                        const resp = item.respostasFormatadas || item.personalizacao;
+                                                        const resp = item.dsRespostasPersonalizadasProduto || item.respostasFormatadas || item.personalizacao;
                                                         if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
                                                         return (
                                                             <div key={idx} style={{ fontSize: '11px', color: theme.textMain, lineHeight: '1.3', marginBottom: '4px' }}>
@@ -416,7 +443,7 @@ export default function TabDigital({
                                                     <div><strong>Forma de Entrega:</strong> {pedidoLogistica.dsFormaEntrega || 'Digital'}</div>
                                                     <div><strong>Método de Pagamento:</strong> {fin.dsMetodoPagamento || fin.metodo || 'PIX'}</div>
                                                     <div><strong>Transportadora ID:</strong> {fin.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || '-'}</div>
-                                                    <div><strong>Serviço:</strong> {pedido?.logistica?.dsServico || 'Digital'}</div>
+                                                    <div><strong>Serviço:</strong> {(pedido as any)?.logistica?.dsServico || 'Digital'}</div>
                                                 </div>
                                             </div>
 
@@ -436,12 +463,11 @@ export default function TabDigital({
                                                     {/* 🌟 Exibição da Forma de Pagamento salva no pedido */}
                                                     <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                         <strong>Forma de Pagamento:</strong> {
-                                                            pedido.financeiro?.dsFormaPagamentoCarrinho
-                                                                ? pedido.financeiro.dsFormaPagamentoCarrinho.replace('_', ' ').toUpperCase()
+                                                            fin.dsFormaPagamentoCarrinho
+                                                                ? fin.dsFormaPagamentoCarrinho.replace('_', ' ').toUpperCase()
                                                                 : 'PIX'
                                                         }
                                                     </div>
-
 
                                                     <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                         <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
@@ -482,13 +508,13 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
     const { theme } = useTheme();
 
     const selo = obterSeloItem(item, pedidoLogistica);
-    const qtd = item.quantidade || item.qty || 1;
+    const qtd = item.nrQuantidadeProduto || item.quantidade || item.qty || 1;
 
-    // 🌟 Captura o preço unitário do item padronizado (compatível com 'preco', 'valor', etc.)
-    const precoUnitario = Number(item.preco || item.valor || item.valorUnitario || 0);
+    // 🌟 Captura o preço unitário do item padronizado
+    const precoUnitario = Number(item.vlPrecoProduto || item.preco || item.valor || item.valorUnitario || 0);
     const valorTotalItem = precoUnitario * qtd;
 
-    // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido, sem consultas ao Firebase
+    // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido
     const fotoUrl = useMemo(() => {
         return extrairFotoDoItem(item);
     }, [item]);
@@ -505,19 +531,19 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
                             {selo.texto}
                         </span>
                         <span style={{ fontSize: '14px', fontWeight: 'bold', color: theme.textMain }}>
-                            {qtd}x {item.nome || item.title}
+                            {qtd}x {item.dsNomeProduto || item.nome || item.title}
                         </span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        {item.variacao && (
+                        {item.dsVariacaoProduto && (
                             <span style={{ fontSize: '12px', color: theme.textSec, marginLeft: '2px' }}>
-                                Variação: {item.variacao}
+                                Variação: {item.dsVariacaoProduto}
                             </span>
                         )}
                         {/* 🌟 Exibição padronizada do valor unitário e total do item */}
                         <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary }}>
-                            R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
+                             R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
                         </span>
                     </div>
                 </div>

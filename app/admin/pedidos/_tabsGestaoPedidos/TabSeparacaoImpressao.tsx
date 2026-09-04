@@ -1,3 +1,4 @@
+// app/admin/pedidos/_tabsGestaoPedidos/TabSeparacaoImpressao.tsx
 'use client';
 import React, { useState } from 'react';
 import { Pedido } from '@/types/pedido';
@@ -22,19 +23,21 @@ export default function TabSeparacaoImpressao({ pedidos }: TabSeparacaoProps) {
     const win = window.open("", "_blank", "width=800,height=900");
     if (win) {
       const lines = pToPrint.map(p => {
-        const clienteNome = typeof p.cliente === 'object' ? p.cliente.nome : p.cliente;
+        const clienteObj = (p as any).dsCliente || (typeof p.cliente === 'object' && p.cliente !== null ? p.cliente : {});
+        const clienteNome = typeof clienteObj === 'object' ? ((clienteObj as any).nmNomeCliente || (clienteObj as any).nome || (clienteObj as any).dsNomeCliente || "Cliente") : (p.cliente || "Cliente");
+        
         return `
           <tr style="border-bottom: 1px solid #000;">
-            <td style="padding: 6px; font-size: 12px; font-weight: bold; vertical-align: top;">#${p.numeroPedido || p.numero || p.id.slice(-4)}</td>
+            <td style="padding: 6px; font-size: 12px; font-weight: bold; vertical-align: top;">#${(p as any).numeroPedido || p.numero || p.id.slice(-4)}</td>
             <td style="padding: 6px; font-size: 12px; vertical-align: top;">${clienteNome}</td>
             <td style="padding: 6px; font-size: 12px; vertical-align: top;">
-              ${p.itens.map(i => `
+              ${Array.isArray(p.itens) ? p.itens.map((i: any) => `
                 <div style="margin-bottom: 6px; border-bottom: 1px dotted #ccc; padding-bottom: 2px;">
-                  <strong>${i.nome || i.title}</strong> (${i.quantidade || i.qty || 1}x)<br>
-                  <small style="color: #000; font-weight: bold;">SKU: ${i.sku || 'N/A'}</small>
-                  ${i.variacao ? `<br><small style="color: #444;">Var: ${i.variacao}</small>` : ''}
+                  <strong>${i.dsNomeProduto || i.nome || i.title}</strong> (${i.nrQuantidadeProduto || i.quantidade || i.qty || 1}x)<br>
+                  <small style="color: #000; font-weight: bold;">SKU: ${i.dsSkuProduto || i.sku || 'N/A'}</small>
+                  ${i.dsVariacaoProduto || i.variacao ? `<br><small style="color: #444;">Var: ${i.dsVariacaoProduto || i.variacao}</small>` : ''}
                 </div>
-              `).join('')}
+              `).join('') : ''}
             </td>
           </tr>
         `;
@@ -67,8 +70,8 @@ export default function TabSeparacaoImpressao({ pedidos }: TabSeparacaoProps) {
 
   const imprimirEtiquetas = () => {
     const pToPrint = selecionados.length > 0
-      ? pedidos.filter(p => selecionados.includes(p.id) && p.etiquetaGerada && p.urlEtiqueta)
-      : pedidos.filter(p => p.etiquetaGerada && p.urlEtiqueta);
+      ? pedidos.filter(p => selecionados.includes(p.id) && p.etiquetaGerada && (p as any).urlEtiqueta)
+      : pedidos.filter(p => p.etiquetaGerada && (p as any).urlEtiqueta);
 
     if (pToPrint.length === 0) return alert("Nenhum pedido selecionado possui etiqueta gerada.");
 
@@ -87,7 +90,7 @@ export default function TabSeparacaoImpressao({ pedidos }: TabSeparacaoProps) {
           <body>
             ${pToPrint.map(p => `
               <div class="etiqueta">
-                <img src="${p.urlEtiqueta}" style="width:100%; height:100%; object-fit: contain;"/>
+                <img src="${(p as any).urlEtiqueta}" style="width:100%; height:100%; object-fit: contain;"/>
               </div>
             `).join('')}
             <script>window.print(); window.onafterprint=()=>window.close();</script>
@@ -116,18 +119,23 @@ export default function TabSeparacaoImpressao({ pedidos }: TabSeparacaoProps) {
         <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#334155' }}>Selecionar / Desmarcar Todos os Pedidos</span>
       </div>
 
-      {pedidos.map(p => (
-        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderBottom: '1px solid #e2e8f0' }}>
-          <input
-            type="checkbox"
-            checked={selecionados.includes(p.id)}
-            onChange={() => setSelecionados(prev => prev.includes(p.id) ? prev.filter(i => i !== p.id) : [...prev, p.id])}
-          />
-          <span style={{ fontSize: '14px', color: '#334155' }}>
-            <b>#{p.numeroPedido || p.id.slice(-4)}</b> - {typeof p.cliente === 'object' ? p.cliente.nome : p.cliente}
-          </span>
-        </div>
-      ))}
+      {pedidos.map(p => {
+        const clienteObj = (p as any).dsCliente || (typeof p.cliente === 'object' && p.cliente !== null ? p.cliente : {});
+        const clienteNome = typeof clienteObj === 'object' ? ((clienteObj as any).nmNomeCliente || (clienteObj as any).nome || (clienteObj as any).dsNomeCliente || "Cliente") : (p.cliente || "Cliente");
+
+        return (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderBottom: '1px solid #e2e8f0' }}>
+            <input
+              type="checkbox"
+              checked={selecionados.includes(p.id)}
+              onChange={() => setSelecionados(prev => prev.includes(p.id) ? prev.filter(i => i !== p.id) : [...prev, p.id])}
+            />
+            <span style={{ fontSize: '14px', color: '#334155' }}>
+              <b>#{(p as any).numeroPedido || p.id.slice(-4)}</b> - {clienteNome}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

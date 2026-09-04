@@ -1,3 +1,4 @@
+// app/[lojista]/carrinho/_components/ModalFreteMobile.tsx
 "use client";
 
 interface ModalFreteMobileProps {
@@ -67,8 +68,9 @@ export default function ModalFreteMobile({
                     transition: 'all 0.2s ease'
                   }}
                 >
+                  {/* ✨ Leitura unificada para o novo padrão de nomes do frete/serviço */}
                   <span style={{ fontSize: '13px', fontWeight: 'bold', color: selecionado ? '#ffffff' : (config.corTextoCard || config.corTexto || '#1e293b') }}>
-                    {opcao.name}
+                    {opcao.dsNomeServico || opcao.name || opcao.dsNome || ""}
                   </span>
                   <span style={{ fontSize: '13px', fontWeight: '900', color: selecionado ? '#ffffff' : config.corPrimaria }}>
                     {Number(precoFinal) === 0 ? "Grátis" : `R$ ${Number(precoFinal).toFixed(2).replace('.', ',')}`}

@@ -1,4 +1,5 @@
-// CardLogistica.tsx
+// components/_tabsGestaoPedidos/CardLogistica.tsx
+'use client';
 import React from 'react';
 
 export const CardLogistica = ({ pedido, onTentarPagamento, onResetar, onCotar, ehFinalizado, isDigital, isRetirada, ehFretePagoNoCarrinho, erroFrete }: any) => {
@@ -6,22 +7,30 @@ export const CardLogistica = ({ pedido, onTentarPagamento, onResetar, onCotar, e
   if (isRetirada) return <div style={{ padding: '8px', color: '#f59e0b', fontWeight: 'bold', fontSize: '12px' }}>🏪 Retirada na Loja</div>;
   if (ehFinalizado) return <div style={{ padding: '8px', color: '#2ecc71', fontWeight: 'bold', fontSize: '12px' }}>FINALIZADO</div>;
 
-  const temEtiqueta = pedido.etiquetaGerada || pedido.statusEtiqueta === 'pendente' || pedido.statusEtiqueta === 'erro';
+  // ✨ Lendo estritamente do objeto aninhado Etiqueta ou da flag booleana da raiz
+  const etiquetaData = pedido.Etiqueta || {};
+  const statusEtiquetaStr = String(etiquetaData.dsStatusEtiqueta || pedido.statusEtiqueta || '').toLowerCase().trim();
+
+  const temEtiqueta = pedido.etiquetaGerada === true || statusEtiquetaStr === 'pendente' || statusEtiquetaStr === 'erro' || statusEtiquetaStr === 'paga';
 
   if (temEtiqueta) {
-    const isPaga = pedido.statusEtiqueta === 'paga';
-    const isErro = pedido.statusEtiqueta === 'erro';
+    const isPaga = statusEtiquetaStr === 'paga' || statusEtiquetaStr === 'pago';
+    const isErro = statusEtiquetaStr === 'erro';
+    const isPendente = statusEtiquetaStr === 'pendente' || !statusEtiquetaStr;
+
     return (
       <div style={{ padding: '10px', backgroundColor: isPaga ? '#ecfdf5' : (isErro ? '#fee2e2' : '#fef3c7'), border: `1px solid ${isPaga ? '#a7f3d0' : (isErro ? '#fecaca' : '#fbbf24')}`, borderRadius: '6px', textAlign: 'center', fontSize: '12px' }}>
         <div style={{ fontWeight: 'bold', color: isPaga ? '#065f46' : (isErro ? '#991b1b' : '#92400e') }}>
           {isPaga ? '✅ Etiqueta Paga' : (isErro ? '❌ Erro Pagamento' : '⏳ Pendente')}
         </div>
-        {(pedido.statusEtiqueta === 'pendente' || isErro) && (
+        
+        {(isPendente || isErro) && (
           <button onClick={() => onTentarPagamento(pedido)} style={{ color: isErro ? '#991b1b' : '#92400e', textDecoration: 'underline', border: 'none', background: 'none', cursor: 'pointer', marginTop: '8px' }}>
             🔄 Tentar Novamente
           </button>
         )}
-        <button onClick={() => onResetar(pedido)} style={{ display: 'block', width: '100%', border: 'none', background: 'none', color: '#64748b', fontSize: '10px', marginTop: '8px' }}>Resetar</button>
+        
+        <button onClick={() => onResetar(pedido)} style={{ display: 'block', width: '100%', border: 'none', background: 'none', color: '#64748b', fontSize: '10px', marginTop: '8px', cursor: 'pointer' }}>Resetar</button>
       </div>
     );
   }
@@ -34,4 +43,4 @@ export const CardLogistica = ({ pedido, onTentarPagamento, onResetar, onCotar, e
       {erroFrete && <div style={{ color: '#ef4444', fontSize: '10px' }}>{erroFrete}</div>}
     </div>
   );
-}; 
+};

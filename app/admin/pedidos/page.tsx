@@ -1,3 +1,4 @@
+// components/GestaoPedidos.tsx
 'use client';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useFrete } from "@/hooks/useFrete";
@@ -6,7 +7,10 @@ import BarraDeAcoes from './_tabsGestaoPedidos/BarraAcoesTabEtiquetas';
 
 import { Pedido } from '@/types/pedido';
 import { descobrirAbaDoPedido } from '@/utils/classificarPedido';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, writeBatch } from 'firebase/firestore';
+
+// 🌟 Importando a função utilitária otimizada de embalagens (Custo mínimo no Firebase)
+import { buscarEmbalagensLoja, EmbalagemLoja } from "@/utils/buscarEmbalagens";
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
@@ -54,11 +58,16 @@ export default function GestaoPedidos({
     const [filtroLogistica, setFiltroLogistica] = useState("todos");
     const [ordenacao, setOrdenacao] = useState("recentes");
 
+    // 📦 Estados otimizados para gerenciar as embalagens na aba de Produção
+    const [listaEmbalagensLoja, setListaEmbalagensLoja] = useState<EmbalagemLoja[]>([]);
+    const [embalagemEscolhidaParaLote, setEmbalagemEscolhidaParaLote] = useState<string>("");
+
     const funcaoCotarRef = useRef<() => void>(() => { });
     const funcaoConcluirRetiradaRef = useRef<() => void>(() => { });
     const funcaoConcluirEntregaLocalRef = useRef<() => void>(() => { });
     const funcaoConcluirDigitalRef = useRef<() => void>(() => { });
     const funcaoConfirmarRecebimentoRef = useRef<() => void>(() => { });
+    const funcaoSalvarEmbalagemProducaoRef = useRef<() => void>(() => { });
 
     useEffect(() => {
         const handler = setTimeout(() => setDebouncedBusca(busca), 300);
@@ -86,6 +95,16 @@ export default function GestaoPedidos({
         return () => unsubscribe();
     }, [db, lojistaIdApp]);
 
+    // 📦 Busca única e eficiente das embalagens cadastradas pelo lojista
+    useEffect(() => {
+        async function carregarEmbalagens() {
+            if (!db || !lojistaIdApp) return;
+            const embalagens = await buscarEmbalagensLoja(db, lojistaIdApp);
+            setListaEmbalagensLoja(embalagens);
+        }
+        carregarEmbalagens();
+    }, [db, lojistaIdApp]);
+
     const isAutomacaoHabilitada = useMemo(() =>
         Boolean(dadosLoja?.sistema?.isAutomacaoCompletaMelhorEnvio),
         [dadosLoja?.sistema?.isAutomacaoCompletaMelhorEnvio]
@@ -93,6 +112,34 @@ export default function GestaoPedidos({
 
     const [localPedidos, setLocalPedidos] = useState<Pedido[]>(pedidos);
     useEffect(() => { setLocalPedidos(pedidos); }, [pedidos]);
+
+    // 🛡️ Filtro inteligente: Oculta da gestão pedidos de PDV de pronta-entrega (Fisico_Sem + retirada)
+    const pedidosFiltradosParaGestao = useMemo(() => {
+        return localPedidos.filter(p => {
+            if (!p) return false;
+
+            const origem = String(p.origemPedido || "").trim().toLowerCase();
+            const ehPdv = origem === "pdv" || origem === "balcão" || origem === "balcao";
+
+            if (ehPdv) {
+                const logistica = p.logistica || {};
+                const formaEntrega = String(logistica.dsFormaEntrega || "").trim().toLowerCase();
+                const ehRetirada = formaEntrega === "retirada" || logistica.isRetirada === true;
+
+                const itens = p.itens || [];
+                const todosItensSaoProntaEntrega = itens.length > 0 && itens.every((item: any) => {
+                    const tipoProd = String(item.dsTipoProduto || "").trim();
+                    return tipoProd === "Fisico_Sem";
+                });
+
+                if (ehRetirada && todosItensSaoProntaEntrega) {
+                    return false; // Sai da tela de gestão (venda balcão pronta-entrega pura)
+                }
+            }
+
+            return true; // Demais pedidos (Site, WhatsApp, ou PDV personalizados) continuam visíveis
+        });
+    }, [localPedidos]);
 
     const { alterarStatusPedido, excluirPedidoComEstorno } = useGerenciarPedido({
         db,
@@ -110,10 +157,11 @@ export default function GestaoPedidos({
     const obterAbaDoPedidoEfetiva = useCallback((p: Pedido): string => {
         if (!p) return 'pedidos';
         const statusGeral = String(p.status || '').trim().toLowerCase();
+        const dsStatusPedido = String((p as any).dsStatusPedido || '').trim().toLowerCase();
         const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
         const isConcluidoFlag = (p as any).enviado === true && statusGeral === 'concluído';
 
-        if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusProd === 'concluído' || statusProd === 'concluido' || isConcluidoFlag) {
+        if (statusGeral === 'concluído' || statusGeral === 'concluido' || dsStatusPedido === 'concluído' || dsStatusPedido === 'concluido' || statusProd === 'concluído' || statusProd === 'concluido' || isConcluidoFlag) {
             return 'concluidos';
         }
 
@@ -124,8 +172,8 @@ export default function GestaoPedidos({
         setAbaAtiva('pedidos');
         setTermoBuscaAtivo("");
 
-        if (localPedidos.length > 0) {
-            const idsAtuaisDaAba = localPedidos.filter(p => obterAbaDoPedidoEfetiva(p) === 'pedidos').map(p => p.id);
+        if (pedidosFiltradosParaGestao.length > 0) {
+            const idsAtuaisDaAba = pedidosFiltradosParaGestao.filter(p => obterAbaDoPedidoEfetiva(p) === 'pedidos').map(p => p.id);
             setIdsConhecidos(idsAtuaisDaAba);
             localStorage.setItem(`ids_conhecidos_pedidos_${lojistaIdApp}`, JSON.stringify(idsAtuaisDaAba));
         }
@@ -149,14 +197,14 @@ export default function GestaoPedidos({
     const { cotarFrete } = useFrete(lojistaIdApp, dadosLoja);
 
     const novosPedidosCount = useMemo(() => {
-        const pedidosNaAbaPedidos = localPedidos.filter(p => {
+        const pedidosNaAbaPedidos = pedidosFiltradosParaGestao.filter(p => {
             if (!p) return false;
             return obterAbaDoPedidoEfetiva(p) === 'pedidos';
         });
 
         const novos = pedidosNaAbaPedidos.filter(p => !idsConhecidos.includes(p.id));
         return novos.length;
-    }, [localPedidos, idsConhecidos, obterAbaDoPedidoEfetiva]);
+    }, [pedidosFiltradosParaGestao, idsConhecidos, obterAbaDoPedidoEfetiva]);
 
     useEffect(() => {
         if (lojistaIdApp) {
@@ -169,26 +217,27 @@ export default function GestaoPedidos({
             pedidos: 0, pendente: 0, producao: 0, cotar: 0, etiquetas: 0, retirada: 0, entregalocal: 0, digital: 0, enviados: 0, concluidos: 0
         };
 
-        localPedidos.forEach(p => {
+        pedidosFiltradosParaGestao.forEach(p => {
             if (!p) return;
             const abaInfo = obterAbaDoPedidoEfetiva(p);
             counts[abaInfo] = (counts[abaInfo] || 0) + 1;
         });
 
         return counts;
-    }, [localPedidos, obterAbaDoPedidoEfetiva]);
+    }, [pedidosFiltradosParaGestao, obterAbaDoPedidoEfetiva]);
 
     const verificarMatchBusca = useCallback((p: Pedido, termo: string): boolean => {
         const numPedidoStr = p.numeroPedido !== undefined && p.numeroPedido !== null ? String(p.numeroPedido) : (p.numero !== undefined && p.numero !== null ? String(p.numero) : "");
         const idStr = String(p.id || "").toLowerCase();
 
-        const clienteNome = typeof p.cliente === 'object'
-            ? String(p.cliente.nome || p.cliente.nmNomeCliente || "").toLowerCase()
+        const clienteObj = (p as any).dsCliente || (typeof p.cliente === 'object' && p.cliente !== null ? p.cliente : {});
+        const clienteNome = typeof clienteObj === 'object'
+            ? String((clienteObj as any).nmNomeCliente || (clienteObj as any).nome || (clienteObj as any).dsNomeCliente || "").toLowerCase()
             : String(p.cliente || "").toLowerCase();
 
         const nomeComecaComTermo = clienteNome.trim().startsWith(termo);
-        const itensNomes = (p.itens || []).map(i => String(i.nome || i.title || "").toLowerCase());
-        const itemComecaComTermo = itensNomes.some(item => item.trim().startsWith(termo));
+        const itensNomes = (p.itens || []).map((i: any) => String(i.dsNomeProduto || i.nome || i.title || "").toLowerCase());
+        const itemComecaComTermo = itensNomes.some((item: string) => item.trim().startsWith(termo));
 
         const numeroBate = numPedidoStr.toLowerCase().startsWith(termo);
         const idBate = idStr.startsWith(termo);
@@ -200,11 +249,11 @@ export default function GestaoPedidos({
         const termo = busca.toLowerCase().trim();
         if (!termo || termo.length < 2) return [];
 
-        return localPedidos.filter(p => {
+        return pedidosFiltradosParaGestao.filter(p => {
             if (!p) return false;
             return verificarMatchBusca(p, termo);
         }).slice(0, 8);
-    }, [busca, localPedidos, verificarMatchBusca]);
+    }, [busca, pedidosFiltradosParaGestao, verificarMatchBusca]);
 
     const selecionarPedidoDoMenu = (pedidoSelecionado: Pedido) => {
         const abaDestino = obterAbaDoPedidoEfetiva(pedidoSelecionado);
@@ -223,7 +272,7 @@ export default function GestaoPedidos({
 
     const pedidosFiltradosGlobais = useMemo(() => {
         const termoBuscaEfetivo = debouncedBusca.toLowerCase().trim();
-        return localPedidos.filter(p => {
+        return pedidosFiltradosParaGestao.filter(p => {
             if (!p) return false;
 
             const abaInfo = obterAbaDoPedidoEfetiva(p);
@@ -240,10 +289,10 @@ export default function GestaoPedidos({
 
             const formaEntregaStr = String(p.logistica?.dsFormaEntrega || p.formaEntrega || '').trim().toLowerCase();
             const ehRetirada = p.logistica?.isRetirada === true || p.retirada === true || p.retirarNaLoja === true || formaEntregaStr === 'retirada';
-            const ehSemFrete = Array.isArray(p.itens) && p.itens.length > 0 ? p.itens.every(item => item.precisaFrete === true) : false;
+            const ehSemFrete = Array.isArray(p.itens) && p.itens.length > 0 ? p.itens.every((item: any) => item.precisaFrete === true) : false;
 
             if (filtroLogistica === "pendentes") return p.etiquetaGerada && p.statusEtiqueta === 'pendente';
-            if (filtroLogistica === "freteGratis") return (p.logistica?.isFreteGratis || p.financeiro?.freteGratis) === true;
+            if (filtroLogistica === "freteGratis") return (p.logistica?.isFreteGratis || (p.financeiro as any)?.freteGratis) === true;
             if (filtroLogistica === "semFrete") return ehSemFrete;
             if (filtroLogistica === "retirada") return ehRetirada;
 
@@ -253,7 +302,78 @@ export default function GestaoPedidos({
             const d2 = new Date(b.data || (b.cliente as any)?.data || 0).getTime();
             return ordenacao === "recentes" ? d2 - d1 : d1 - d2;
         });
-    }, [localPedidos, termoBuscaAtivo, debouncedBusca, filtroLogistica, ordenacao, abaAtiva, verificarMatchBusca, obterAbaDoPedidoEfetiva]);
+    }, [pedidosFiltradosParaGestao, termoBuscaAtivo, debouncedBusca, filtroLogistica, ordenacao, abaAtiva, verificarMatchBusca, obterAbaDoPedidoEfetiva]);
+
+    // 📦 Função otimizada com writeBatch para salvar a embalagem em lote na aba de Produção
+    // No arquivo components/GestaoPedidos.tsx (dentro de lidarComSalvarEmbalagemEAvancar)
+
+    const lidarComSalvarEmbalagemEAvancar = async () => {
+        const selecionadosNaAba = pedidosFiltradosGlobais.filter(p => selecionados.includes(p.id));
+        if (selecionadosNaAba.length === 0) {
+            return alert("Selecione ao menos um pedido na lista para definir a embalagem.");
+        }
+        if (!embalagemEscolhidaParaLote) {
+            return alert("Por favor, selecione uma embalagem antes de prosseguir.");
+        }
+
+        const dadosEmbalagemObj = listaEmbalagensLoja.find(e => e.id === embalagemEscolhidaParaLote);
+        if (!dadosEmbalagemObj) {
+            return alert("Embalagem selecionada inválida.");
+        }
+
+        if (!confirm(`Deseja definir a embalagem "${dadosEmbalagemObj.nome}" para os ${selecionadosNaAba.length} pedido(s) selecionado(s)?`)) {
+            return;
+        }
+
+        try {
+            const batch = writeBatch(db);
+
+            selecionadosNaAba.forEach(pedido => {
+                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedido.id);
+
+                // 🛡️ Obtém a recomendação atual salva no pedido com segurança
+                const recomendacaoExistente = pedido.Embalagem?.recomendada || pedido.Embalagem || {};
+
+                batch.update(pedidoRef, {
+                    "Embalagem": {
+                        recomendada: {
+                            id: recomendacaoExistente.id || "",
+                            dsModeloEmbalagemRecomendado: recomendacaoExistente.dsModeloEmbalagemRecomendado || recomendacaoExistente.nome || "Não calculada",
+                            dsTipoEmbalagem: recomendacaoExistente.dsTipoEmbalagem || "envelope_seguranca",
+                            vlCustoEmbalagemRecomendado: Number(recomendacaoExistente.vlCustoEmbalagemRecomendado || recomendacaoExistente.custo || 0),
+                            altura: Number(recomendacaoExistente.altura ?? 4),
+                            comprimento: Number(recomendacaoExistente.comprimento ?? 32),
+                            largura: Number(recomendacaoExistente.largura ?? 22),
+                            pesoEmbarque: Number(recomendacaoExistente.pesoEmbarque ?? 0),
+                        },
+                        escolhida: {
+                            id: dadosEmbalagemObj.id,
+                            dsModeloEmbalagemEscolhida: dadosEmbalagemObj.nome,
+                            dsTipoEmbalagem: (dadosEmbalagemObj as any).tipo || "envelope_seguranca",
+                            vlCustoEmbalagemEscolhida: Number(dadosEmbalagemObj.custo || 0),
+                            altura: Number(dadosEmbalagemObj.altura ?? 4),
+                            comprimento: Number(dadosEmbalagemObj.comprimento ?? 32),
+                            largura: Number(dadosEmbalagemObj.largura ?? 22),
+                            pesoEmbarque: Number(dadosEmbalagemObj.peso ?? 0), // 👈 Padronizado idêntico ao helper
+                        }
+                    }
+                });
+            });
+
+            await batch.commit();
+
+            setSelecionados([]);
+            setEmbalagemEscolhidaParaLote("");
+            alert("Embalagem recomendada vs escolhida salva com sucesso! ✅");
+        } catch (error) {
+            console.error("Erro ao salvar embalagem nos pedidos:", error);
+            alert("Ocorreu um erro ao salvar a embalagem.");
+        }
+    };
+
+    useEffect(() => {
+        funcaoSalvarEmbalagemProducaoRef.current = lidarComSalvarEmbalagemEAvancar;
+    }, [selecionados, pedidosFiltradosGlobais, embalagemEscolhidaParaLote, listaEmbalagensLoja]);
 
     const executarExclusaoPermanente = async () => {
         if (!db || !lojistaIdApp || !pedidoParaDeletar) return;
@@ -350,7 +470,8 @@ export default function GestaoPedidos({
                                 <div style={styles.dropdownList}>
                                     {resultadosBuscaMenu.map((p) => {
                                         const numPed = p.numeroPedido !== undefined && p.numeroPedido !== null ? p.numeroPedido : (p.numero || p.id.slice(-6));
-                                        const clienteNome = typeof p.cliente === 'object' ? (p.cliente.nome || p.cliente.nmNomeCliente || "Cliente") : (p.cliente || "Cliente");
+                                        const clienteObj = (p as any).dsCliente || (typeof p.cliente === 'object' && p.cliente !== null ? p.cliente : {});
+                                        const clienteNome = typeof clienteObj === 'object' ? ((clienteObj as any).nmNomeCliente || (clienteObj as any).nome || (clienteObj as any).dsNomeCliente || "Cliente") : (p.cliente || "Cliente");
                                         const infoAba = obterAbaDoPedidoEfetiva(p);
 
                                         return (
@@ -423,7 +544,7 @@ export default function GestaoPedidos({
                 <BarraDeAcoes
                     selecionados={selecionados || []}
                     idsVisiveisDaAba={pedidosFiltradosGlobais.map(p => p.id)}
-                    localPedidos={localPedidos}
+                    localPedidos={pedidosFiltradosParaGestao}
                     lojistaIdApp={lojistaIdApp}
                     db={db}
                     isAutomacaoAtiva={isAutomacaoHabilitada}
@@ -433,11 +554,15 @@ export default function GestaoPedidos({
                     setLocalPedidos={setLocalPedidos}
                     setAbaAtiva={setAbaAtiva}
                     cotarFrete={cotarFrete}
+                    listaEmbalagens={listaEmbalagensLoja}
+                    embalagemEscolhida={embalagemEscolhidaParaLote}
+                    setEmbalagemEscolhida={setEmbalagemEscolhidaParaLote}
                     onCotarSelecionados={() => funcaoCotarRef.current()}
                     onConcluirRetirada={() => funcaoConcluirRetiradaRef.current()}
                     onConcluirEntregaLocal={() => funcaoConcluirEntregaLocalRef.current()}
                     onConcluirDigital={() => funcaoConcluirDigitalRef.current()}
                     onConfirmarRecebimento={() => funcaoConfirmarRecebimentoRef.current()}
+                    onSalvarEmbalagemProducao={() => funcaoSalvarEmbalagemProducaoRef.current()}
                 />
             </div>
 
@@ -518,7 +643,7 @@ export default function GestaoPedidos({
                     />
                 ) : abaAtiva === 'concluidos' ? (
                     <TabPedidosConcluidos
-                        pedidos={localPedidos}
+                        pedidos={pedidosFiltradosParaGestao}
                         lojistaIdApp={lojistaIdApp}
                         db={db}
                         dadosLoja={dadosLoja}
@@ -570,17 +695,16 @@ export default function GestaoPedidos({
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-    // 🌟 Reduzimos o padding superior de '20px' para '5px' para colar no topo
     contentArea: { padding: '5px 20px 20px 20px', fontFamily: 'system-ui, sans-serif', minHeight: '100vh', boxSizing: 'border-box' },
 
     headerFixoContainer: {
         position: 'relative',
-        paddingTop: '0px', // 🌟 Zerado para remover qualquer folga interna
-        paddingBottom: '5px', // 🌟 Encurtado para aproximar o título das abas
+        paddingTop: '0px',
+        paddingBottom: '5px',
         borderBottom: '1px solid',
         zIndex: 10
     },
-    
+
     filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid' },
     selectLogistica: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', outline: 'none', cursor: 'pointer' },
     selectOrdenacaoStyle: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', outline: 'none', cursor: 'pointer' },

@@ -1,4 +1,4 @@
-// app/auth/page.tsx (ou o caminho exato do seu arquivo de login)
+// app/auth/page.tsx
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
@@ -46,8 +46,57 @@ export default function AuthPage() {
 
         try {
             if (isLogin) {
+                // 1. Faz o login no Firebase Auth
                 const userCredential = await signInWithEmailAndPassword(auth, email, senha);
-                const lojaRef = doc(db, "lojistas", userCredential.user.uid);
+                const uid = userCredential.user.uid;
+
+                // 2. Consulta primeiro a coleção global "usuarios" para identificar o perfil
+                const userDocRef = doc(db, "usuarios", uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (!userDocSnap.exists()) {
+                    await signOut(auth);
+                    router.push("/atendimentoSuporte");
+                    throw new Error("Perfil de usuário não encontrado no banco de dados.");
+                }
+
+                const userData = userDocSnap.data();
+
+                // 🌟 SE FOR COLABORADOR
+                if (userData.dsTipoConta === "colaborador" || userData.role === "colaborador") {
+                    const lojaId = userData.dsLojaId || userData.lojaId;
+                    if (!lojaId) {
+                        await signOut(auth);
+                        throw new Error("Loja do colaborador não vinculada.");
+                    }
+
+                    // Valida se a loja principal do lojista está suspensa
+                    const lojaRef = doc(db, "lojistas", lojaId);
+                    const lojaDoc = await getDoc(lojaRef);
+                    if (lojaDoc.exists()) {
+                        const dadosLoja = lojaDoc.data().dadosLoja;
+                        if (dadosLoja?.dsStatusLoja === "suspenso") {
+                            await signOut(auth);
+                            router.push("/atendimentoSuporte");
+                            return;
+                        }
+                    }
+
+                    // Salva a referência da loja ativa no navegador para o painel admin saber qual loja consultar
+                    if (typeof window !== "undefined") {
+                        localStorage.setItem("colaborador_loja_id", lojaId);
+                    }
+
+                    router.push("/admin");
+                    return;
+                }
+
+                // 🌟 SE FOR LOJISTA PRINCIPAL (Admin ou Master)
+                if (typeof window !== "undefined") {
+                    localStorage.removeItem("colaborador_loja_id");
+                }
+
+                const lojaRef = doc(db, "lojistas", uid);
                 const lojaDoc = await getDoc(lojaRef);
 
                 if (!lojaDoc.exists()) {
@@ -79,7 +128,7 @@ export default function AuthPage() {
                 }
 
                 // ✨ Atualiza automaticamente contas antigas e valida o schema e a versão do sistema ao logar
-                await sincronizarNovosCamposLojista(userCredential.user.uid, lojaDoc.data(), schemaGlobal, versaoSistemaGlobal);
+                await sincronizarNovosCamposLojista(uid, lojaDoc.data(), schemaGlobal, versaoSistemaGlobal);
 
                 await setDoc(lojaRef, { ultimoLogin: serverTimestamp() }, { merge: true });
                 router.push("/admin");
@@ -109,6 +158,7 @@ export default function AuthPage() {
                     lojaId: user.uid,
                     email: email,
                     role: email === "diegofree10@gmail.com" ? "master" : "admin",
+                    dsTipoConta: "logista",
                     criadoEm: Date.now()
                 }, { merge: true });
 
@@ -116,6 +166,7 @@ export default function AuthPage() {
                 await setDoc(doc(db, "lojistas", user.uid), {
                     uid: user.uid,
                     email: email,
+                    dsTipoConta: "logista",
                     dataCadastro: Date.now(),
                     ultimoLogin: serverTimestamp(),
                     sistema: obterModeloPadrao(), // ✨ Garantido com todos os campos novos para novas contas

@@ -1,3 +1,4 @@
+// lib/firebase.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
 import { getAuth, setPersistence, browserSessionPersistence } from "firebase/auth"; 
@@ -19,13 +20,17 @@ export const firebaseConfig = {
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Inicialização segura para servidor e cliente
-const db = !getApps().length 
-  ? initializeFirestore(app, {
-      ignoreUndefinedProperties: true,
-      cacheSizeBytes: CACHE_SIZE_UNLIMITED
-    })
-  : getFirestore(app);
+// Inicialização segura do Firestore evitando erros de múltiplas instâncias
+let db: any;
+try {
+  db = initializeFirestore(app, {
+    ignoreUndefinedProperties: true,
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED
+  });
+} catch (err) {
+  // Se já foi inicializado anteriormente pelo Next.js, apenas pega a instância existente
+  db = getFirestore(app);
+}
 
 export { db };
 export const auth = getAuth(app);

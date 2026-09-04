@@ -27,7 +27,7 @@ const formatarData = (dataStr: string | undefined): string => {
 };
 
 const extrairFotoDoItem = (item: any): string => {
-    const chavesPossiveis = ['foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
+    const chavesPossiveis = ['dsFotoCapaProduto', 'foto', 'imagem', 'image', 'url', 'urlOriginal', 'thumb'];
     for (const chave of chavesPossiveis) {
         if (item[chave] && typeof item[chave] === 'string' && item[chave].startsWith('http')) return item[chave];
     }
@@ -38,7 +38,7 @@ const extrairFotoDoItem = (item: any): string => {
 const obterSeloItem = (item: any, pedidoLogistica: any) => {
     const formaItem = String(item.dsFormaEntrega || pedidoLogistica?.dsFormaEntrega || '').trim().toLowerCase();
     const isRetirada = pedidoLogistica?.isRetirada === true || formaItem === 'retirada';
-    const isDigital = item.precisaFrete === false || formaItem === 'digital';
+    const isDigital = item.isPrecisaFreteProduto === false || item.precisaFrete === false || formaItem === 'digital';
 
     if (isRetirada) return { texto: "Retirada", cor: "#f59e0b" };
     if (isDigital) return { texto: "Digital", cor: "#3b82f6" };
@@ -60,8 +60,8 @@ export default function TabPedidosEnviados({
         return (pedidos || []).filter(p => {
             if (!p) return false;
 
-            const statusGeral = String(p.status || '').trim().toLowerCase();
-            const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
+            const statusGeral = String(p.dsStatusPedido || p.status || '').trim().toLowerCase();
+            const statusProd = String((p as any).StatusProducao?.dsStatusProducao || '').trim().toLowerCase();
             const isConcluidoFlag = (p as any).enviado === true && statusGeral === 'concluído';
 
             // 🛑 Bloqueio absoluto: Se o pedido estiver concluído por qualquer via, remove imediatamente da aba de enviados
@@ -69,8 +69,8 @@ export default function TabPedidosEnviados({
                 return false;
             }
 
-            const etiquetaGerada = p.etiquetaGerada === true || p.statusEtiqueta === 'paga' || p.statusEtiqueta === 'enviado';
-            return etiquetaGerada || p.rastreio || p.codigoRastreio || (p as any).logistica?.tracking;
+            const etiquetaGerada = (p as any).Etiqueta?.isEtiquetaGerada === true || p.etiquetaGerada === true || p.statusEtiqueta === 'paga' || p.statusEtiqueta === 'enviado';
+            return etiquetaGerada || p.dsNumRastreio || p.rastreio || p.codigoRastreio || (p as any).logistica?.tracking;
         });
     }, [pedidos]);
 
@@ -108,11 +108,11 @@ export default function TabPedidosEnviados({
                 if (p.id === pedidoAlvo.id) {
                     return {
                         ...p,
-                        status: 'Concluído',
+                        dsStatusPedido: 'Concluído',
                         enviado: true,
                         StatusProducao: {
                             ...(p as any).StatusProducao,
-                            dsStatusProdução: 'Concluído',
+                            dsStatusProducao: 'Concluído',
                             isConcluido: true
                         }
                     };
@@ -236,42 +236,43 @@ export default function TabPedidosEnviados({
                     </div>
                 ) : (
                     pedidosPaginados.map(pedido => {
-                        const nomeCliente = typeof pedido.cliente === 'object' ? (pedido.cliente?.nmNomeCliente || pedido.cliente?.nome || "Cliente") : (pedido.cliente || "Cliente");
-                        const numPedidoFormatado = String(pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
+                        const clienteObj = (pedido as any).cliente || {};
+                        const nomeCliente = typeof clienteObj === 'object' ? (clienteObj.nmNomeCliente || clienteObj.nome || "Cliente") : (pedido.cliente || "Cliente");
+                        const numPedidoFormatado = String((pedido as any).nrNumeroPedido || pedido.numeroPedido || pedido.numero || pedido.id?.slice(-4) || "").padStart(5, '0');
                         const idPedidoExibicao = String(pedido.id || "");
                         const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
                         const expandido = !!pedidosExpandidos[pedido.id];
 
                         const logistica = (pedido as any).logistica || {};
                         const etiquetaData = (pedido as any).Etiqueta || {};
-                        const codigoRastreio = pedido.dsNumRastreio || etiquetaData.dsNumRastreio || logistica.dsNumRastreio || "Indisponível";
-                        const linkRastreio = pedido.linkRastreio || logistica.linkRastreio || `https://www.melhorrastreio.com.br/rastreio/${codigoRastreio}`;
+                        const codigoRastreio = (pedido as any).dsNumRastreio || etiquetaData.dsNumRastreio || logistica.dsNumRastreio || "Indisponível";
+                        const linkRastreio = (pedido as any).linkRastreio || logistica.linkRastreio || `https://www.melhorrastreio.com.br/rastreio/${codigoRastreio}`;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
                         const cotacao = (pedido as any).Cotacao || {};
-                        const endereco = pedido.endereco || (pedido as any).cliente?.endereco || {};
+                        const endereco = (pedido as any).endereco || clienteObj.endereco || {};
                         const formaEntrega = String(pedidoLogistica.dsFormaEntrega || '').toLowerCase();
-                        const isRetirada = pedidoLogistica.isRetirada === true || formaEntrega === 'retirada' || pedido.retirada || pedido.retirarNaLoja;
+                        const isRetirada = pedidoLogistica.isRetirada === true || formaEntrega === 'retirada' || (pedido as any).retirada || (pedido as any).retirarNaLoja;
                         const isDigital = formaEntrega === 'digital';
-                        const precisaFrete = pedido.itens?.some((i: any) => i.precisaFrete !== false) && !isRetirada && !isDigital;
+                        const precisaFrete = pedido.itens?.some((i: any) => i.isPrecisaFreteProduto !== false && i.precisaFrete !== false) && !isRetirada && !isDigital;
 
-                        const temPersonalizacao = pedido.itens?.some(i => {
-                            const resp = i.respostasFormatadas || i.personalizacao;
+                        const temPersonalizacao = pedido.itens?.some((i: any) => {
+                            const resp = i.dsRespostasPersonalizadasProduto || i.respostasFormatadas || i.personalizacao;
                             if (!resp) return false;
                             if (typeof resp === 'object' && Object.keys(resp).length > 0) return true;
                             if (typeof resp === 'string' && resp.trim() !== '') return true;
                             return false;
                         });
 
-                        const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).statusPagamento === 'pago';
+                        const isPagoReal = pedido.pago === true || (pedido as any).StatusProducao?.isPago === true || (pedido as any).financeiro?.dsStatusPagamento === 'pago' || (pedido as any).statusPagamento === 'pago';
                         const corBordaCard = isPagoReal ? '#2ecc71' : '#e74c3c';
 
                         const fin = pedido.financeiro || {};
-                        const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
-                        const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
-                        const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
-                        const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
-                        const cupomStr = fin.dsCupom ?? fin.cupom ?? "-";
+                        const subtotalVal = Number(fin.vlSubtotal ?? 0);
+                        const freteVal = Number(fin.vlFrete ?? 0);
+                        const descontoVal = Number(fin.vlDesconto ?? 0);
+                        const totalVal = Number(fin.vlTotal ?? (subtotalVal + freteVal - descontoVal));
+                        const cupomStr = fin.dsCupom ?? "-";
 
                         return (
                             <div key={pedido.id} style={{ ...localStyles.cardContainer, backgroundColor: theme.bgCard, border: `1.5px solid ${corBordaCard}` }}>
@@ -295,7 +296,7 @@ export default function TabPedidosEnviados({
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0, marginLeft: '10px' }}>
                                             <span style={{ fontSize: '12px', color: theme.textSec, fontWeight: '500' }}>
-                                                {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                                {formatarData(pedido.timestamp || (pedido as any).data || clienteObj.data)}
                                             </span>
                                             <span style={{ fontSize: '12px', color: theme.textSec }}>{expandido ? '▲' : '▼'}</span>
                                         </div>
@@ -326,7 +327,7 @@ export default function TabPedidosEnviados({
 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                                                 <span style={{ fontSize: '11px', color: theme.textSec, fontWeight: '500' }}>
-                                                    {formatarData(pedido.data || (pedido.cliente as any)?.data)}
+                                                    {formatarData(pedido.timestamp || (pedido as any).data || clienteObj.data)}
                                                 </span>
                                                 <span style={{ fontSize: '12px', color: theme.textSec }}>{expandido ? '▲' : '▼'}</span>
                                             </div>
@@ -355,7 +356,7 @@ export default function TabPedidosEnviados({
                                                 </div>
                                                 {temPersonalizacao ? (
                                                     pedido.itens.map((item: any, idx: number) => {
-                                                        const resp = item.respostasFormatadas || item.personalizacao;
+                                                        const resp = item.dsRespostasPersonalizadasProduto || item.respostasFormatadas || item.personalizacao;
                                                         if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
                                                         return (
                                                             <div key={idx} style={{ fontSize: '12px', color: theme.textMain, lineHeight: '1.4', marginBottom: '4px' }}>
@@ -393,18 +394,18 @@ export default function TabPedidosEnviados({
                                                     ) : isRetirada ? (
                                                         <div>
                                                             <div><strong>Forma:</strong> Retirada na Loja</div>
-                                                            <div><strong>Status:</strong> {pedidoLogistica.dsMetodoPagamento || "Retirar na Loja (Grátis)"}</div>
+                                                            <div><strong>Status:</strong> {pedidoLogistica.dsServico || pedidoLogistica.dsMetodoPagamento || "Retirar na Loja (Grátis)"}</div>
                                                         </div>
                                                     ) : isDigital ? (
                                                         <div>
                                                             <div><strong>Forma:</strong> Digital</div>
                                                             <div><strong>Status:</strong> Envio por E-mail</div>
                                                         </div>
-                                                    ) : (pedido.financeiro?.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || pedido.etiquetaGerada) ? (
+                                                    ) : (pedido.financeiro?.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || etiquetaData.isEtiquetaGerada) ? (
                                                         <div>
-                                                            <div><strong>Método:</strong> {cotacao.dsMetodoPagamentoCotado || pedido.financeiro?.metodo?.replace('Logística: ', '') || pedidoLogistica.dsMetodoPagamento || "Definida"}</div>
+                                                            <div><strong>Método:</strong> {cotacao.dsServicoCotado || pedidoLogistica.dsServico || "Definida"}</div>
                                                             <div><strong>Valor:</strong> R$ {Number(cotacao.vlFreteCotado ?? pedido.financeiro?.vlFrete ?? 0).toFixed(2).replace('.', ',')}</div>
-                                                            <div><strong>Prazo:</strong> {cotacao.prazoEntregaCotado ?? pedido.financeiro?.prazoEntrega ?? 0} dias</div>
+                                                            <div><strong>Prazo:</strong> {cotacao.nrPrazoEntregaCotado ?? 0} dias</div>
                                                         </div>
                                                     ) : (
                                                         <div>
@@ -419,13 +420,13 @@ export default function TabPedidosEnviados({
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                     <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
                                                         <div><b>Código Rastreio:</b> {codigoRastreio}</div>
-                                                        {codigoRastreio !== "Disponível no Melhor Envio" && (
+                                                        {codigoRastreio !== "Indisponível" && (
                                                             <a href={linkRastreio} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px', fontWeight: 'bold' }}>
                                                                 🔍 Rastrear Envio
                                                             </a>
                                                         )}
-                                                        {etiquetaData.urlEtiqueta || pedido.urlEtiqueta ? (
-                                                            <a href={etiquetaData.urlEtiqueta || pedido.urlEtiqueta} target="_blank" rel="noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px' }}>
+                                                        {etiquetaData.urlEtiqueta || (pedido as any).urlEtiqueta ? (
+                                                            <a href={etiquetaData.urlEtiqueta || (pedido as any).urlEtiqueta} target="_blank" rel="noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px' }}>
                                                                 Ver Etiqueta PDF
                                                             </a>
                                                         ) : null}
@@ -442,16 +443,13 @@ export default function TabPedidosEnviados({
                                             <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                 <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                 <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-
-                                                    {/* 🌟 Exibição da Forma de Pagamento salva no pedido */}
                                                     <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                         <strong>Forma de Pagamento:</strong> {
-                                                            pedido.financeiro?.dsFormaPagamentoCarrinho
-                                                                ? pedido.financeiro.dsFormaPagamentoCarrinho.replace('_', ' ').toUpperCase()
+                                                            fin.dsFormaPagamentoCarrinho
+                                                                ? fin.dsFormaPagamentoCarrinho.replace('_', ' ').toUpperCase()
                                                                 : 'PIX'
                                                         }
                                                     </div>
-
 
                                                     <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                         <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
@@ -491,10 +489,10 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
     const { theme } = useTheme();
 
     const selo = obterSeloItem(item, pedidoLogistica);
-    const qtd = item.quantidade || item.qty || 1;
+    const qtd = item.nrQuantidadeProduto || item.quantidade || item.qty || 1;
 
-    // 🌟 Captura o preço unitário do item padronizado (compatível com 'preco', 'valor', etc.)
-    const precoUnitario = Number(item.preco || item.valor || item.valorUnitario || 0);
+    // 🌟 Captura o preço unitário do item padronizado (compatível com 'vlPrecoProduto', 'preco', etc.)
+    const precoUnitario = Number(item.vlPrecoProduto ?? item.preco ?? item.valor ?? item.valorUnitario ?? 0);
     const valorTotalItem = precoUnitario * qtd;
 
     // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido, sem consultas ao Firebase
@@ -512,14 +510,14 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
                             {selo.texto}
                         </span>
                         <span style={{ fontSize: '14px', fontWeight: 'bold', color: theme.textMain }}>
-                            {qtd}x {item.nome || item.title}
+                            {qtd}x {item.dsNomeProduto || item.nome || item.title}
                         </span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        {item.variacao && (
+                        {(item.dsVariacaoProduto || item.variacao) && (
                             <span style={{ fontSize: '12px', color: theme.textSec, marginLeft: '2px' }}>
-                                Variação: {item.variacao}
+                                Variação: {item.dsVariacaoProduto || item.variacao}
                             </span>
                         )}
                         {/* 🌟 Exibição padronizada do valor unitário e total do item */}

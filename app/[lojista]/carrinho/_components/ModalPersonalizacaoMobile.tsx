@@ -28,13 +28,23 @@ export default function ModalPersonalizacaoMobile({
     if (!requisitos) return false;
     if (Array.isArray(requisitos)) return requisitos.some((r: any) => r && (r.label || r.id));
     if (typeof requisitos === "object") {
-      return (requisitos.pedeNome || requisitos.pedeIdade || requisitos.pedeData || requisitos.pedeObs);
+      // ✨ Compatibilidade com as chaves do novo formato ou booleans legados
+      return (
+        requisitos.dsRequisitosProduto?.pedeNome || requisitos.pedeNome ||
+        requisitos.dsRequisitosProduto?.pedeIdade || requisitos.pedeIdade ||
+        requisitos.dsRequisitosProduto?.pedeData || requisitos.pedeData ||
+        requisitos.dsRequisitosProduto?.pedeObs || requisitos.pedeObs
+      );
     }
     return false;
   };
 
   const possuiRequisitosValidos = verificarRequisitosValidos(requisitosAtivos);
   const partes = item?.variacao ? item.variacao.split("/") : [];
+
+  // ✨ Lendo estritamente o novo padrão de nomes para as variações do produto
+  const nomeVar1 = item?.dsNomeVar1Produto || item?.nomeVar1;
+  const nomeVar2 = item?.dsNomeVar2Produto || item?.nomeVar2;
 
   return (
     <div className="mobile-modal-overlay">
@@ -50,8 +60,8 @@ export default function ModalPersonalizacaoMobile({
           {item?.variacao && item.variacao !== "Padrão" && (
             <div style={{ backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
               <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Variações Escolhidas:</span>
-              {item.nomeVar1 && partes && partes[0] && <p style={{ margin: '2px 0', fontSize: '13px' }}><b>{item.nomeVar1}:</b> {partes[0].trim()}</p>}
-              {item.nomeVar2 && partes && partes[1] && <p style={{ margin: '2px 0', fontSize: '13px' }}><b>{item.nomeVar2}:</b> {partes[1].trim()}</p>}
+              {nomeVar1 && partes && partes[0] && <p style={{ margin: '2px 0', fontSize: '13px' }}><b>{nomeVar1}:</b> {partes[0].trim()}</p>}
+              {nomeVar2 && partes && partes[1] && <p style={{ margin: '2px 0', fontSize: '13px' }}><b>{nomeVar2}:</b> {partes[1].trim()}</p>}
             </div>
           )}
 

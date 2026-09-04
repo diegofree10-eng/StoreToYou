@@ -8,6 +8,7 @@ import { storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
 import ImageCropperModal from "@/utils/ImageCropperModalProduto";
 import ModalGeradorSkuVariacoes from "@/app/admin/_components/ModalGeradorSkuVariaçoes";
+import ModalCadastroInsumos from "@/app/admin/produtos/_components/ModalCadastroInsumos";
 import { formatarPeso, formatarMedida } from "@/utils/formatters";
 
 // 🌟 Importando o hook do tema global (ThemeContext)
@@ -21,30 +22,26 @@ const formatarCaixaEletronico = (texto: string) => {
   return numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
 };
 
-// 🌟 Converte "1.234,56" para formato numérico padrão ("1234.56") para salvar no banco/carrinho sem quebrar
-const converterParaPadraoMonetario = (textoFormatado: string) => {
-  if (!textoFormatado) return "";
-  const limpo = textoFormatado.toString().replace(/\./g, "").replace(",", ".");
-  const num = parseFloat(limpo);
-  return isNaN(num) ? "" : num.toFixed(2);
-};
-
-// Converte do padrão do banco ("1234.56") para a visualização do caixa eletrônico ("1.234,56") ao abrir o modal
 const converterDoPadraoParaCaixa = (valorBanco: any) => {
-  if (!valorBanco && valorBanco !== 0) return "";
-  const str = valorBanco.toString().replace(",", ".");
-  const num = parseFloat(str);
+  if (valorBanco === null || valorBanco === undefined || valorBanco === "") return "";
+  let num;
+  if (typeof valorBanco === 'number') {
+    num = valorBanco;
+  } else {
+    const limpo = valorBanco.toString().trim();
+    if (limpo.includes(',')) {
+      num = parseFloat(limpo.replace(/\./g, '').replace(',', '.'));
+    } else {
+      num = parseFloat(limpo);
+    }
+  }
   if (isNaN(num)) return "";
   const centavos = Math.round(num * 100).toString();
   return formatarCaixaEletronico(centavos);
 };
 
-/**
- * Função inteligente para gerar sufixos para nomes compostos
- */
 const gerarSufixoInteligente = (texto: string) => {
   if (!texto) return "";
-  
   const palavras = texto
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -80,28 +77,31 @@ interface VariacoesModalProps {
   pesosDiferentesPorVariacao?: boolean;
   setPesosDiferentesPorVariacao?: (val: boolean) => void;
   lojistaId?: string;
+  listaInsumos?: any[];
 }
 
 export default function VariacoesModal({
   showVarModal, setShowVarModal, nomeVar1, setNomeVar1, opcoesVar1, setOpcoesVar1,
   nomeVar2, setNomeVar2, opcoesVar2, setOpcoesVar2, tabelaPrecos, onSave, gerarCombinacoes,
-  pesosDiferentesPorVariacao = false, setPesosDiferentesPorVariacao = () => {},
-  lojistaId
+  pesosDiferentesPorVariacao = false, setPesosDiferentesPorVariacao = () => { },
+  lojistaId,
+  listaInsumos = []
 }: VariacoesModalProps) {
 
-  const { theme, isModoNoturno } = useTheme();
+  const { theme } = useTheme();
 
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [precoGlobal, setPrecoGlobal] = useState("");
   const [custoGlobal, setCustoGlobal] = useState("");
   const [estoqueGlobal, setEstoqueGlobal] = useState("");
-  const [draftTabela, setDraftTabela] = useState(tabelaPrecos);
+  const [draftTabela, setDraftTabela] = useState(tabelaPrecos || {});
   const [showVar2, setShowVar2] = useState(nomeVar2 !== "" || opcoesVar2.length > 0);
 
   const [showModalGeradorSkuVar, setShowModalGeradorSkuVar] = useState(false);
-
   const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
   const [combsParaAtualizar, setCombsParaAtualizar] = useState<any[]>([]);
+
+  const [modalInsumosKeyAtiva, setModalInsumosKeyAtiva] = useState<string | null>(null);
 
   useEffect(() => {
     const checkScreen = () => {
@@ -116,14 +116,96 @@ export default function VariacoesModal({
     if (showVarModal) {
       const tabelaFormatada: any = {};
       if (tabelaPrecos) {
-        Object.keys(tabelaPrecos).forEach((k) => {
-          const item = tabelaPrecos[k];
-          tabelaFormatada[k] = {
-            ...item,
-            preco: converterDoPadraoParaCaixa(item.preco),
-            custo: converterDoPadraoParaCaixa(item.custo),
-          };
-        });
+        if (Array.isArray(tabelaPrecos)) {
+          tabelaPrecos.forEach((item: any) => {
+            const v1 = item.dsModeloProduto || item.dsModelo || item.v1 || "";
+            const v2Raw = item.nrTamanhoProduto ?? item.nrTamanho ?? item.v2;
+            const v2 = v2Raw !== null && v2Raw !== undefined ? String(v2Raw) : "";
+            const key = v2 ? `${v1}___${v2}` : v1;
+
+            const precoItem = item.vlPrecoProduto ?? item.vlPreco ?? item.preco ?? 0;
+            const custoItem = item.vlCustoUnitarioProduto ?? item.vlCustoUnitario ?? item.custo ?? 0;
+            const estoqueItem = item.nrEstoqueProduto ?? item.nrEstoque ?? item.estoque ?? "";
+            const skuItem = item.dsSkuProduto ?? item.dsSku ?? item.sku ?? "";
+            const gtinItem = item.dsGtinProduto ?? item.dsGtin ?? item.gtin ?? item.cdBarra ?? "";
+            const fotoItem = item.dsFotoProduto ?? item.dsFoto ?? item.foto ?? "";
+            const pesoItem = item.nrPesoProduto ?? item.nrPeso ?? item.peso ?? "";
+            const compItem = item.nrComprimentoProduto ?? item.nrComprimento ?? item.comprimento ?? "";
+            const largItem = item.nrLarguraProduto ?? item.nrLargura ?? item.largura ?? "";
+            const altItem = item.nrAlturaProduto ?? item.nrAltura ?? item.altura ?? "";
+
+            const insumosVar = item.insumosComposicao || [];
+            const outrosCustosVar = item.vlOutrosCustosProduto !== undefined && item.vlOutrosCustosProduto !== null
+              ? converterDoPadraoParaCaixa(item.vlOutrosCustosProduto)
+              : (item.outrosCustos || "");
+
+            tabelaFormatada[key] = {
+              ...item,
+              v1: v1,
+              v2: v2,
+              dsSkuProduto: skuItem,
+              dsGtinProduto: gtinItem,
+              vlPrecoProduto: converterDoPadraoParaCaixa(precoItem),
+              vlCustoUnitarioProduto: converterDoPadraoParaCaixa(custoItem),
+              nrEstoqueProduto: estoqueItem !== null && estoqueItem !== undefined && estoqueItem !== "" ? String(estoqueItem) : "",
+              dsFotoProduto: fotoItem,
+              nrPesoProduto: pesoItem !== null && pesoItem !== undefined && String(pesoItem).trim() !== "" ? String(pesoItem).replace('.', ',') : "",
+              nrComprimentoProduto: compItem !== null && compItem !== undefined ? String(compItem) : "",
+              nrLarguraProduto: largItem !== null && largItem !== undefined ? String(largItem) : "",
+              nrAlturaProduto: altItem !== null && altItem !== undefined ? String(altItem) : "",
+              insumosComposicao: insumosVar,
+              vlOutrosCustosProduto: outrosCustosVar
+            };
+          });
+        } else {
+          Object.keys(tabelaPrecos).forEach((k) => {
+            const item = tabelaPrecos[k];
+            if (!item) return;
+
+            const partes = k.split("___");
+            const fallbackV1 = partes[0] || "";
+            const fallbackV2 = partes[1] || "";
+
+            const v1 = item.dsModeloProduto || item.dsModelo || item.v1 || fallbackV1;
+            const v2Raw = item.nrTamanhoProduto ?? item.nrTamanho ?? item.v2;
+            const v2 = v2Raw !== null && v2Raw !== undefined && String(v2Raw).trim() !== "" ? String(v2Raw) : fallbackV2;
+            const keyReal = v2 ? `${v1}___${v2}` : v1;
+
+            const precoItem = item.vlPrecoProduto ?? item.vlPreco ?? item.preco ?? 0;
+            const custoItem = item.vlCustoUnitarioProduto ?? item.vlCustoUnitario ?? item.custo ?? 0;
+            const estoqueItem = item.nrEstoqueProduto ?? item.nrEstoque ?? item.estoque ?? "";
+            const skuItem = item.dsSkuProduto ?? item.dsSku ?? item.sku ?? "";
+            const gtinItem = item.dsGtinProduto ?? item.dsGtin ?? item.gtin ?? item.cdBarra ?? "";
+            const fotoItem = item.dsFotoProduto ?? item.dsFoto ?? item.foto ?? "";
+            const pesoItem = item.nrPesoProduto ?? item.nrPeso ?? item.peso ?? "";
+            const compItem = item.nrComprimentoProduto ?? item.nrComprimento ?? item.comprimento ?? "";
+            const largItem = item.nrLarguraProduto ?? item.nrLargura ?? item.largura ?? "";
+            const altItem = item.nrAlturaProduto ?? item.nrAltura ?? item.altura ?? "";
+
+            const insumosVar = item.insumosComposicao || [];
+            const outrosCustosVar = item.vlOutrosCustosProduto !== undefined && item.vlOutrosCustosProduto !== null
+              ? converterDoPadraoParaCaixa(item.vlOutrosCustosProduto)
+              : ((item.vlOutrosCustos ?? item.outrosCustos) || "");
+
+            tabelaFormatada[keyReal] = {
+              ...item,
+              v1: v1,
+              v2: v2,
+              dsSkuProduto: skuItem,
+              dsGtinProduto: gtinItem,
+              vlPrecoProduto: converterDoPadraoParaCaixa(precoItem),
+              vlCustoUnitarioProduto: converterDoPadraoParaCaixa(custoItem),
+              nrEstoqueProduto: estoqueItem !== null && estoqueItem !== undefined && estoqueItem !== "" ? String(estoqueItem) : "",
+              dsFotoProduto: fotoItem,
+              nrPesoProduto: pesoItem !== null && pesoItem !== undefined && String(pesoItem).trim() !== "" ? String(pesoItem).replace('.', ',') : "",
+              nrComprimentoProduto: compItem !== null && compItem !== undefined && String(compItem).trim() !== "" ? String(compItem) : "",
+              nrLarguraProduto: largItem !== null && largItem !== undefined && String(largItem).trim() !== "" ? String(largItem) : "",
+              nrAlturaProduto: altItem !== null && altItem !== undefined && String(altItem).trim() !== "" ? String(altItem) : "",
+              insumosComposicao: insumosVar,
+              vlOutrosCustosProduto: outrosCustosVar
+            };
+          });
+        }
       }
       setDraftTabela(tabelaFormatada);
     }
@@ -132,11 +214,11 @@ export default function VariacoesModal({
   if (!showVarModal) return null;
 
   const combinacoesValidas = gerarCombinacoes();
-  const temVariaçõesVisiveis = opcoesVar1.some(op => op.trim() !== "");
+  const temVariaçõesVisiveis = opcoesVar1.some(op => op && op.trim() !== "");
 
-  const handleDraftInput = async (key: string, campo: string, valor: string) => {
-    if (campo === "foto" && valor === "") {
-      const fotoAntiga = draftTabela[key]?.foto;
+  const handleDraftInput = async (key: string, campo: string, valor: any) => {
+    if (campo === "dsFotoProduto" && valor === "") {
+      const fotoAntiga = draftTabela[key]?.dsFotoProduto || draftTabela[key]?.dsFoto || draftTabela[key]?.foto;
       if (fotoAntiga && fotoAntiga.includes("firebasestorage.googleapis.com")) {
         try {
           await deleteObject(ref(storage, fotoAntiga));
@@ -153,18 +235,31 @@ export default function VariacoesModal({
   };
 
   const handleSalvarGrade = () => {
-    const tabelaParaSalvar: any = {};
-    
-    Object.keys(draftTabela).forEach((k) => {
-      const item = draftTabela[k];
-      tabelaParaSalvar[k] = {
-        ...item,
-        preco: converterParaPadraoMonetario(item.preco),
-        custo: converterParaPadraoMonetario(item.custo),
+    const novaTabelaPadrao: any = {};
+
+    combinacoesValidas.forEach((c) => {
+      const itemDraft = draftTabela[c.key] || {};
+
+      novaTabelaPadrao[c.key] = {
+        ...itemDraft,
+        dsModeloProduto: c.v1,
+        nrTamanhoProduto: c.v2 || null,
+        dsSkuProduto: itemDraft.dsSkuProduto || itemDraft.dsSku || itemDraft.sku || "",
+        dsGtinProduto: itemDraft.dsGtinProduto || itemDraft.dsGtin || itemDraft.gtin || itemDraft.cdBarra || "",
+        vlPrecoProduto: itemDraft.vlPrecoProduto || itemDraft.vlPreco || itemDraft.preco || "",
+        vlCustoUnitarioProduto: itemDraft.vlCustoUnitarioProduto || itemDraft.vlCustoUnitario || itemDraft.custo || "",
+        nrEstoqueProduto: itemDraft.nrEstoqueProduto || itemDraft.nrEstoque || itemDraft.estoque || "",
+        dsFotoProduto: itemDraft.dsFotoProduto || itemDraft.dsFoto || itemDraft.foto || "",
+        nrPesoProduto: itemDraft.nrPesoProduto || itemDraft.nrPeso || itemDraft.peso || "",
+        nrComprimentoProduto: itemDraft.nrComprimentoProduto || itemDraft.nrComprimento || itemDraft.comprimento || "",
+        nrLarguraProduto: itemDraft.nrLarguraProduto || itemDraft.nrLargura || itemDraft.largura || "",
+        nrAlturaProduto: itemDraft.nrAlturaProduto || itemDraft.nrAltura || itemDraft.altura || "",
+        insumosComposicao: itemDraft.insumosComposicao || [],
+        vlOutrosCustosProduto: itemDraft.vlOutrosCustosProduto || itemDraft.vlOutrosCustos || itemDraft.outrosCustos || ""
       };
     });
 
-    onSave(tabelaParaSalvar);
+    onSave(novaTabelaPadrao);
     setShowVarModal(false);
   };
 
@@ -176,7 +271,7 @@ export default function VariacoesModal({
         color: theme.textMain,
         border: `1px solid ${theme.border}`,
         width: isMobile ? '95%' : shopeeStyles.modal.width,
-        maxWidth: isMobile ? '100%' : (pesosDiferentesPorVariacao ? '1200px' : '950px'),
+        maxWidth: isMobile ? '100%' : (pesosDiferentesPorVariacao ? '1350px' : '1100px'),
         maxHeight: isMobile ? '90vh' : '95vh',
         boxSizing: 'border-box',
         display: 'flex',
@@ -186,7 +281,7 @@ export default function VariacoesModal({
       }}>
         {/* Cabeçalho */}
         <div style={{ ...shopeeStyles.header, borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <h3 style={{ ...shopeeStyles.title, color: theme.textMain }}>Grade de Variações</h3>
+          <h3 style={{ ...shopeeStyles.title, color: theme.textMain }}>Grade de Variações, GTIN/EAN e Custos</h3>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {temVariaçõesVisiveis && (
               <button
@@ -202,26 +297,26 @@ export default function VariacoesModal({
         </div>
 
         <div style={{ ...shopeeStyles.content, overflowY: 'auto', flex: 1, padding: isMobile ? '10px' : '20px' }}>
-          
+
           {/* VARIAÇÃO 1 */}
           <div style={shopeeStyles.section}>
             <label style={{ ...shopeeStyles.label, color: theme.textSec }}>Variação 1 (ex: Cor)</label>
             <div style={{ backgroundColor: theme.bgApp, border: `1px solid ${theme.border}`, padding: '14px', borderRadius: '8px' }}>
-              <input 
-                style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, marginBottom: '12px' }} 
-                value={nomeVar1} 
-                onChange={e => setNomeVar1(e.target.value)} 
-                placeholder="Ex: Cor" 
+              <input
+                style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, marginBottom: '12px' }}
+                value={nomeVar1}
+                onChange={e => setNomeVar1(e.target.value)}
+                placeholder="Ex: Cor"
               />
-              
+
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {opcoesVar1.map((op, idx) => (
-                  <div key={idx} style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    backgroundColor: theme.inputBg, 
-                    border: `1px solid ${theme.border}`, 
-                    borderRadius: '4px', 
+                  <div key={idx} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    backgroundColor: theme.inputBg,
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: '4px',
                     padding: '6px 10px',
                     width: 'auto',
                     minWidth: '140px'
@@ -248,15 +343,15 @@ export default function VariacoesModal({
                   <button onClick={() => { setShowVar2(false); setNomeVar2(""); setOpcoesVar2([]); }} style={{ border: 'none', background: 'none', color: '#ef4444', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}>Remover</button>
                 </div>
                 <input style={{ ...styles.input, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, marginBottom: '12px' }} value={nomeVar2} onChange={e => setNomeVar2(e.target.value)} placeholder="Ex: Tamanho" />
-                
+
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {opcoesVar2.map((op, idx) => (
-                    <div key={idx} style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      backgroundColor: theme.inputBg, 
-                      border: `1px solid ${theme.border}`, 
-                      borderRadius: '4px', 
+                    <div key={idx} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor: theme.inputBg,
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: '4px',
                       padding: '6px 10px',
                       width: 'auto',
                       minWidth: '140px'
@@ -271,7 +366,7 @@ export default function VariacoesModal({
             )}
           </div>
 
-          {/* SELETOR DE PESOS E MEDIDAS (Checkbox isolado e sem quadro em volta) */}
+          {/* SELETOR DE PESOS E MEDIDAS */}
           <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '500', color: theme.textMain, cursor: 'default' }}>
               <input
@@ -322,9 +417,9 @@ export default function VariacoesModal({
                     const key = comb.key;
                     novaTabela[key] = {
                       ...(novaTabela[key] || {}),
-                      preco: precoGlobal || novaTabela[key]?.preco,
-                      custo: custoGlobal || novaTabela[key]?.custo,
-                      estoque: estoqueGlobal || novaTabela[key]?.estoque
+                      vlPrecoProduto: precoGlobal || novaTabela[key]?.vlPrecoProduto,
+                      vlCustoUnitarioProduto: custoGlobal || novaTabela[key]?.vlCustoUnitarioProduto,
+                      nrEstoqueProduto: estoqueGlobal || novaTabela[key]?.nrEstoqueProduto
                     };
                   });
                   return novaTabela;
@@ -340,18 +435,25 @@ export default function VariacoesModal({
           {temVariaçõesVisiveis && combinacoesValidas.length > 0 && (
             isMobile ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
-                {opcoesVar1.filter(v1 => v1.trim() !== "").map((v1) => {
+                {opcoesVar1.filter(v1 => v1 && v1.trim() !== "").map((v1) => {
                   const combsDesteGrupo = combinacoesValidas.filter(c => c.v1 === v1);
                   return combsDesteGrupo.map((c, idx) => {
-                    const valorPreco = draftTabela[c.key]?.preco || "";
-                    const valorCusto = draftTabela[c.key]?.custo || "";
-                    const valorEstoque = draftTabela[c.key]?.estoque || "";
-                    const valorSku = draftTabela[c.key]?.sku || "";
-                    const temFoto = !!draftTabela[c.key]?.foto;
-                    const valorPeso = draftTabela[c.key]?.peso || "";
-                    const valorComprimento = draftTabela[c.key]?.comprimento || "";
-                    const valorLargura = draftTabela[c.key]?.largura || "";
-                    const valorAltura = draftTabela[c.key]?.altura || "";
+                    const valorPreco = draftTabela[c.key]?.vlPrecoProduto || "";
+                    const valorCusto = draftTabela[c.key]?.vlCustoUnitarioProduto || "";
+                    const valorEstoque = draftTabela[c.key]?.nrEstoqueProduto || "";
+                    const valorSku = draftTabela[c.key]?.dsSkuProduto || "";
+                    const valorGtin = draftTabela[c.key]?.dsGtinProduto || "";
+                    const temFoto = !!(draftTabela[c.key]?.dsFotoProduto);
+                    const fotoUrl = draftTabela[c.key]?.dsFotoProduto;
+                    const valorPeso = draftTabela[c.key]?.nrPesoProduto || "";
+                    const valorComprimento = draftTabela[c.key]?.nrComprimentoProduto || "";
+                    const valorLargura = draftTabela[c.key]?.nrLarguraProduto || "";
+                    const valorAltura = draftTabela[c.key]?.nrAlturaProduto || "";
+
+                    const insumosItem = draftTabela[c.key]?.insumosComposicao || [];
+                    const custoInsumosTot = insumosItem.reduce((acc: number, item: any) => acc + (Number(item.vlCustoUnitarioInsumo || 0) * Number(item.nrQuantidadeConsumida || 0)), 0);
+                    const outrosCustosItem = parseFloat(String(draftTabela[c.key]?.vlOutrosCustosProduto || "0").replace(/\./g, "").replace(",", ".")) || 0;
+                    const custoCalculadoTotal = custoInsumosTot + outrosCustosItem;
 
                     return (
                       <div key={`${c.key}-${idx}`} style={{ background: theme.bgApp, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -363,12 +465,12 @@ export default function VariacoesModal({
                             <div style={{ width: '45px', height: '45px', border: temFoto ? `1px solid ${theme.primary}` : `1px dashed ${theme.border}`, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', background: theme.inputBg }}>
                               {temFoto ? (
                                 <>
-                                  <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
+                                  <img src={fotoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
                                   <button
                                     onClick={async (e) => {
                                       e.preventDefault();
                                       for (const comb of combsDesteGrupo) {
-                                        await handleDraftInput(comb.key, "foto", "");
+                                        await handleDraftInput(comb.key, "dsFotoProduto", "");
                                       }
                                     }}
                                     style={{ position: 'absolute', top: 0, right: 0, background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '9px', padding: '1px 3px' }}
@@ -379,17 +481,17 @@ export default function VariacoesModal({
                               ) : (
                                 <>
                                   <span style={{ fontSize: '14px', color: theme.textSec }}>+</span>
-                                  <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} 
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
                                       setArquivoParaCortar(file);
                                       setCombsParaAtualizar(combsDesteGrupo);
                                       e.target.value = "";
-                                    }} 
+                                    }}
                                   />
                                 </>
                               )}
@@ -398,17 +500,35 @@ export default function VariacoesModal({
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <div>
-                            <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>SKU</label>
-                            <input style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" />
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>SKU</label>
+                              <input style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} value={valorSku} onChange={e => handleDraftInput(c.key, "dsSkuProduto", e.target.value)} placeholder="SKU" />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>GTIN / EAN (Leitor)</label>
+                              <input
+                                style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
+                                value={valorGtin}
+                                onChange={e => handleDraftInput(c.key, "dsGtinProduto", e.target.value.replace(/\D/g, ""))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    // Se bipado com leitor, pode focar no preço ou próximo campo se desejar
+                                  }
+                                }}
+                                placeholder="EAN / Código de Barras"
+                              />
+                            </div>
                           </div>
+
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <div style={{ flex: 1 }}>
                               <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>Preço (R$)</label>
                               <input
                                 style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
                                 value={valorPreco}
-                                onChange={(e) => handleDraftInput(c.key, "preco", formatarCaixaEletronico(e.target.value))}
+                                onChange={(e) => handleDraftInput(c.key, "vlPrecoProduto", formatarCaixaEletronico(e.target.value))}
                                 placeholder="0,00"
                               />
                             </div>
@@ -416,8 +536,8 @@ export default function VariacoesModal({
                               <label style={{ fontSize: '11px', color: theme.textSec, display: 'block', marginBottom: '2px' }}>Custo (R$)</label>
                               <input
                                 style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
-                                value={valorCusto}
-                                onChange={(e) => handleDraftInput(c.key, "custo", formatarCaixaEletronico(e.target.value))}
+                                value={custoCalculadoTotal > 0 ? formatarCaixaEletronico((custoCalculadoTotal * 100).toFixed(0)) : valorCusto}
+                                onChange={(e) => handleDraftInput(c.key, "vlCustoUnitarioProduto", formatarCaixaEletronico(e.target.value))}
                                 placeholder="0,00"
                               />
                             </div>
@@ -426,49 +546,64 @@ export default function VariacoesModal({
                               <input
                                 style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
                                 value={valorEstoque}
-                                onChange={e => handleDraftInput(c.key, "estoque", e.target.value.replace(/\D/g, ""))}
+                                onChange={e => handleDraftInput(c.key, "nrEstoqueProduto", e.target.value.replace(/\D/g, ""))}
                                 placeholder="0"
                               />
                             </div>
+                          </div>
+
+                          {/* ✨ BOTÃO DE GERENCIAR INSUMOS DA VARIAÇÃO (MOBILE) */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: theme.inputBg, padding: '8px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain }}>Insumos da Variação</span>
+                              <span style={{ fontSize: '10px', color: '#16a34a' }}>Custo Insumos: R$ {custoCalculadoTotal.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setModalInsumosKeyAtiva(c.key)}
+                              style={{ background: theme.primary, color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                              Gerenciar ({insumosItem.length})
+                            </button>
                           </div>
 
                           {pesosDiferentesPorVariacao && (
                             <div style={{ background: theme.inputBg, padding: '8px', borderRadius: '6px', border: `1px dashed ${theme.border}`, marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <div>
                                 <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Peso (kg)</label>
-                                <input 
-                                  style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
-                                  value={valorPeso} 
-                                  onChange={e => handleDraftInput(c.key, "peso", formatarPeso(e.target.value))} 
-                                  placeholder="0.00" 
+                                <input
+                                  style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
+                                  value={valorPeso}
+                                  onChange={e => handleDraftInput(c.key, "nrPesoProduto", formatarPeso(e.target.value))}
+                                  placeholder="0,00"
                                 />
                               </div>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
                                 <div>
                                   <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Comp (cm)</label>
-                                  <input 
-                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
-                                    value={valorComprimento} 
-                                    onChange={e => handleDraftInput(c.key, "comprimento", formatarMedida(e.target.value))} 
-                                    placeholder="0" 
+                                  <input
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
+                                    value={valorComprimento}
+                                    onChange={e => handleDraftInput(c.key, "nrComprimentoProduto", formatarMedida(e.target.value))}
+                                    placeholder="0"
                                   />
                                 </div>
                                 <div>
                                   <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Larg (cm)</label>
-                                  <input 
-                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
-                                    value={valorLargura} 
-                                    onChange={e => handleDraftInput(c.key, "largura", formatarMedida(e.target.value))} 
-                                    placeholder="0" 
+                                  <input
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
+                                    value={valorLargura}
+                                    onChange={e => handleDraftInput(c.key, "nrLarguraProduto", formatarMedida(e.target.value))}
+                                    placeholder="0"
                                   />
                                 </div>
                                 <div>
                                   <label style={{ fontSize: '10px', color: theme.textSec, fontWeight: 'bold', display: 'block' }}>Alt (cm)</label>
-                                  <input 
-                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }} 
-                                    value={valorAltura} 
-                                    onChange={e => handleDraftInput(c.key, "altura", formatarMedida(e.target.value))} 
-                                    placeholder="0" 
+                                  <input
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.bgApp, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
+                                    value={valorAltura}
+                                    onChange={e => handleDraftInput(c.key, "nrAlturaProduto", formatarMedida(e.target.value))}
+                                    placeholder="0"
                                   />
                                 </div>
                               </div>
@@ -484,53 +619,62 @@ export default function VariacoesModal({
               <table style={{ ...shopeeStyles.table, width: '100%', marginTop: '20px', color: theme.textMain }}>
                 <thead>
                   <tr style={{ background: theme.bgApp }}>
-                    <th style={{ ...shopeeStyles.th, color: theme.textSec, width: '150px', textAlign: 'center' }}>Var 1</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, width: '140px', textAlign: 'center' }}>Var 1</th>
                     {showVar2 && (
-                      <th style={{ ...shopeeStyles.th, color: theme.textSec, width: '100px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <th style={{ ...shopeeStyles.th, color: theme.textSec, width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         Var 2
                       </th>
                     )}
-                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center' }}>SKU</th>
-                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center' }}>Preço</th>
-                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center' }}>Custo</th>
-                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '90px' }}>Estoque</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '130px' }}>SKU</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '150px' }}>GTIN / EAN</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '90px' }}>Preço</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '90px' }}>Custo</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '120px' }}>Insumos</th>
+                    <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '75px' }}>Estoque</th>
                     {pesosDiferentesPorVariacao && (
                       <>
-                        <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '90px' }}>Peso (kg)</th>
-                        <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '220px' }}>Dimensões (CxLxA cm)</th>
+                        <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '80px' }}>Peso (kg)</th>
+                        <th style={{ ...shopeeStyles.th, color: theme.textSec, textAlign: 'center', width: '200px' }}>Dimensões (CxLxA)</th>
                       </>
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  {opcoesVar1.filter(v1 => v1.trim() !== "").map((v1) => {
+                  {opcoesVar1.filter(v1 => v1 && v1.trim() !== "").map((v1) => {
                     const combsDesteGrupo = combinacoesValidas.filter(c => c.v1 === v1);
                     return combsDesteGrupo.map((c, idx) => {
 
-                      const valorPreco = draftTabela[c.key]?.preco || "";
-                      const valorCusto = draftTabela[c.key]?.custo || "";
-                      const valorEstoque = draftTabela[c.key]?.estoque || "";
-                      const valorSku = draftTabela[c.key]?.sku || "";
-                      const temFoto = !!draftTabela[c.key]?.foto;
-                      const valorPeso = draftTabela[c.key]?.peso || "";
-                      const valorComprimento = draftTabela[c.key]?.comprimento || "";
-                      const valorLargura = draftTabela[c.key]?.largura || "";
-                      const valorAltura = draftTabela[c.key]?.altura || "";
+                      const valorPreco = draftTabela[c.key]?.vlPrecoProduto || "";
+                      const valorCusto = draftTabela[c.key]?.vlCustoUnitarioProduto || "";
+                      const valorEstoque = draftTabela[c.key]?.nrEstoqueProduto || "";
+                      const valorSku = draftTabela[c.key]?.dsSkuProduto || "";
+                      const valorGtin = draftTabela[c.key]?.dsGtinProduto || "";
+                      const temFoto = !!(draftTabela[c.key]?.dsFotoProduto);
+                      const fotoUrl = draftTabela[c.key]?.dsFotoProduto;
+                      const valorPeso = draftTabela[c.key]?.nrPesoProduto || "";
+                      const valorComprimento = draftTabela[c.key]?.nrComprimentoProduto || "";
+                      const valorLargura = draftTabela[c.key]?.nrLarguraProduto || "";
+                      const valorAltura = draftTabela[c.key]?.nrAlturaProduto || "";
+
+                      const insumosItem = draftTabela[c.key]?.insumosComposicao || [];
+                      const custoInsumosTot = insumosItem.reduce((acc: number, item: any) => acc + (Number(item.vlCustoUnitarioInsumo || 0) * Number(item.nrQuantidadeConsumida || 0)), 0);
+                      const outrosCustosItem = parseFloat(String(draftTabela[c.key]?.vlOutrosCustosProduto || "0").replace(/\./g, "").replace(",", ".")) || 0;
+                      const custoCalculadoTotal = custoInsumosTot + outrosCustosItem;
 
                       return (
                         <tr key={`${c.key}-${idx}`} style={{ borderBottom: `1px solid ${theme.border}` }}>
                           {idx === 0 && (
-                            <td rowSpan={combsDesteGrupo.length} style={{ ...shopeeStyles.td, textAlign: 'center', backgroundColor: theme.bgApp, width: '150px', verticalAlign: 'middle', borderRight: `1px solid ${theme.border}` }}>
+                            <td rowSpan={combsDesteGrupo.length} style={{ ...shopeeStyles.td, textAlign: 'center', backgroundColor: theme.bgApp, width: '140px', verticalAlign: 'middle', borderRight: `1px solid ${theme.border}` }}>
                               <div style={{ fontWeight: 'bold', marginBottom: '8px', textAlign: 'center', color: theme.textMain }}>{v1}</div>
-                              <div style={{ width: '60px', height: '60px', margin: '0 auto', border: temFoto ? `1px solid ${theme.primary}` : `1px dashed ${theme.border}`, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', backgroundColor: theme.inputBg }}>
+                              <div style={{ width: '55px', height: '55px', margin: '0 auto', border: temFoto ? `1px solid ${theme.primary}` : `1px dashed ${theme.border}`, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', backgroundColor: theme.inputBg }}>
                                 {temFoto ? (
                                   <>
-                                    <img src={draftTabela[c.key].foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
+                                    <img src={fotoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Var" />
                                     <button
                                       onClick={async (e) => {
                                         e.preventDefault();
                                         for (const comb of combsDesteGrupo) {
-                                          await handleDraftInput(comb.key, "foto", "");
+                                          await handleDraftInput(comb.key, "dsFotoProduto", "");
                                         }
                                       }}
                                       style={{
@@ -550,17 +694,17 @@ export default function VariacoesModal({
                                 ) : (
                                   <>
                                     <span style={{ fontSize: '18px', color: theme.textSec }}>+</span>
-                                    <input 
-                                      type="file" 
-                                      accept="image/*" 
-                                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} 
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
                                       onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (!file) return;
                                         setArquivoParaCortar(file);
                                         setCombsParaAtualizar(combsDesteGrupo);
                                         e.target.value = "";
-                                      }} 
+                                      }}
                                     />
                                   </>
                                 )}
@@ -568,29 +712,64 @@ export default function VariacoesModal({
                             </td>
                           )}
 
-                          {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '100px', color: theme.textMain }}> {c.v2 || "-"}</td>)}
-                          <td style={shopeeStyles.td}><input style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }} value={valorSku} onChange={e => handleDraftInput(c.key, "sku", e.target.value)} placeholder="SKU" /></td>
+                          {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '90px', color: theme.textMain }}> {c.v2 || "-"}</td>)}
+                          
+                          <td style={shopeeStyles.td}>
+                            <input
+                              style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
+                              value={valorSku}
+                              onChange={e => handleDraftInput(c.key, "dsSkuProduto", e.target.value)}
+                              placeholder="SKU"
+                            />
+                          </td>
+
+                          <td style={shopeeStyles.td}>
+                            <input
+                              style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
+                              value={valorGtin}
+                              onChange={e => handleDraftInput(c.key, "dsGtinProduto", e.target.value.replace(/\D/g, ""))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                }
+                              }}
+                              placeholder="EAN / Código"
+                            />
+                          </td>
+
                           <td style={shopeeStyles.td}>
                             <input
                               style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                               value={valorPreco}
-                              onChange={(e) => handleDraftInput(c.key, "preco", formatarCaixaEletronico(e.target.value))}
+                              onChange={(e) => handleDraftInput(c.key, "vlPrecoProduto", formatarCaixaEletronico(e.target.value))}
                               placeholder="0,00"
                             />
                           </td>
                           <td style={shopeeStyles.td}>
                             <input
                               style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
-                              value={valorCusto}
-                              onChange={(e) => handleDraftInput(c.key, "custo", formatarCaixaEletronico(e.target.value))}
+                              value={custoCalculadoTotal > 0 ? formatarCaixaEletronico((custoCalculadoTotal * 100).toFixed(0)) : valorCusto}
+                              onChange={(e) => handleDraftInput(c.key, "vlCustoUnitarioProduto", formatarCaixaEletronico(e.target.value))}
                               placeholder="0,00"
                             />
                           </td>
+
+                          {/* ✨ BOTÃO DE GERENCIAR INSUMOS DA VARIAÇÃO (DESKTOP) */}
+                          <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setModalInsumosKeyAtiva(c.key)}
+                              style={{ background: theme.bgApp, border: `1px solid ${theme.border}`, color: theme.textMain, padding: '6px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', width: '100%' }}
+                            >
+                              📦 ({insumosItem.length}) R$ {custoCalculadoTotal.toFixed(2).replace('.', ',')}
+                            </button>
+                          </td>
+
                           <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
                             <input
-                              style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '70px', textAlign: 'center' }}
+                              style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '60px', textAlign: 'center' }}
                               value={valorEstoque}
-                              onChange={e => handleDraftInput(c.key, "estoque", e.target.value.replace(/\D/g, ""))}
+                              onChange={e => handleDraftInput(c.key, "nrEstoqueProduto", e.target.value.replace(/\D/g, ""))}
                               placeholder="0"
                             />
                           </td>
@@ -601,30 +780,30 @@ export default function VariacoesModal({
                                 <input
                                   style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '70px', textAlign: 'center' }}
                                   value={valorPeso}
-                                  onChange={e => handleDraftInput(c.key, "peso", formatarPeso(e.target.value))}
-                                  placeholder="0.00"
+                                  onChange={e => handleDraftInput(c.key, "nrPesoProduto", formatarPeso(e.target.value))}
+                                  placeholder="0,00"
                                 />
                               </td>
                               <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
                                 <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
                                   <input
-                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '55px', textAlign: 'center' }}
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '50px', textAlign: 'center' }}
                                     value={valorComprimento}
-                                    onChange={e => handleDraftInput(c.key, "comprimento", formatarMedida(e.target.value))}
+                                    onChange={e => handleDraftInput(c.key, "nrComprimentoProduto", formatarMedida(e.target.value))}
                                     placeholder="Comp"
                                   />
                                   <span style={{ color: theme.textSec }}>x</span>
                                   <input
-                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '55px', textAlign: 'center' }}
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '50px', textAlign: 'center' }}
                                     value={valorLargura}
-                                    onChange={e => handleDraftInput(c.key, "largura", formatarMedida(e.target.value))}
+                                    onChange={e => handleDraftInput(c.key, "nrLarguraProduto", formatarMedida(e.target.value))}
                                     placeholder="Larg"
                                   />
                                   <span style={{ color: theme.textSec }}>x</span>
                                   <input
-                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '55px', textAlign: 'center' }}
+                                    style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '50px', textAlign: 'center' }}
                                     value={valorAltura}
-                                    onChange={e => handleDraftInput(c.key, "altura", formatarMedida(e.target.value))}
+                                    onChange={e => handleDraftInput(c.key, "nrAlturaProduto", formatarMedida(e.target.value))}
                                     placeholder="Alt"
                                   />
                                 </div>
@@ -648,7 +827,7 @@ export default function VariacoesModal({
               setPrecoGlobal("");
               setCustoGlobal("");
               setEstoqueGlobal("");
-              setDraftTabela(tabelaPrecos);
+              setDraftTabela(tabelaPrecos || {});
               setShowVarModal(false);
             }}
             style={{ padding: '10px 20px', borderRadius: '4px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, cursor: 'pointer', flex: isMobile ? 1 : 'unset', fontWeight: '500' }}
@@ -664,6 +843,36 @@ export default function VariacoesModal({
         </div>
       </div>
 
+      {/* ✨ MODAL DE CADASTRO DE INSUMOS ESPECÍFICO PARA A VARIAÇÃO ATIVA */}
+      {modalInsumosKeyAtiva && (
+        <ModalCadastroInsumos
+          isOpen={true}
+          onClose={() => setModalInsumosKeyAtiva(null)}
+          listaInsumos={listaInsumos}
+          insumosComposicao={draftTabela[modalInsumosKeyAtiva]?.insumosComposicao || []}
+          setInsumosComposicao={(novosInsumos) => {
+            setDraftTabela((prev: any) => ({
+              ...prev,
+              [modalInsumosKeyAtiva]: {
+                ...prev[modalInsumosKeyAtiva],
+                insumosComposicao: novosInsumos
+              }
+            }));
+          }}
+          outrosCustos={draftTabela[modalInsumosKeyAtiva]?.vlOutrosCustosProduto || ""}
+          setOutrosCustos={(val) => {
+            setDraftTabela((prev: any) => ({
+              ...prev,
+              [modalInsumosKeyAtiva]: {
+                ...prev[modalInsumosKeyAtiva],
+                vlOutrosCustosProduto: val
+              }
+            }));
+          }}
+          formatInput={formatarCaixaEletronico}
+        />
+      )}
+
       {/* MODAL DE CORTE PARA AS FOTOS DAS VARIAÇÕES */}
       {arquivoParaCortar && (
         <ImageCropperModal
@@ -675,7 +884,7 @@ export default function VariacoesModal({
             reader.onloadend = () => {
               const base64data = reader.result as string;
               combsParaAtualizar.forEach(comb => {
-                handleDraftInput(comb.key, "foto", base64data);
+                handleDraftInput(comb.key, "dsFotoProduto", base64data);
               });
             };
           }}
@@ -697,7 +906,7 @@ export default function VariacoesModal({
 
               novaTabela[c.key] = {
                 ...novaTabela[c.key],
-                sku: skuFinal
+                dsSkuProduto: skuFinal
               };
             });
             setDraftTabela(novaTabela);

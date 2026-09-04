@@ -20,6 +20,13 @@ import Pedidos from "./pedidos/page";
 import PaginaEstoque from "./estoque/page";
 import AdminConfig from "./config/page";
 import DashboardMaster from "./_tabDashBoardMaster/DashboardMaster";
+import PaginaColaboradores from "./colaboradores/page";
+
+// 🌟 Importando as páginas de Relatórios, Suporte, Despesas e Financeiro
+import RelatoriosPage from "./relatorios/page";
+import SuportePage from "./suporte/page";
+import { TabGestaoDespesas } from "./despesas/page";
+import GestaoFinanceiroPage from "./financeiro/page";
 
 // 🌟 Importando o hook de tema para usar as cores dinâmicas reais
 import { useTheme } from "@/context/ThemeContext";
@@ -37,6 +44,9 @@ function AdminLayoutGridDefinitivo() {
   const [planosConfig, setPlanosConfig] = useState<any>(null);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [lojistaIdReal, setLojistaIdReal] = useState<string | null>(null);
+
+  // 🌟 Estado para guardar os dados e permissões do colaborador logado
+  const [colaboradorSessao, setColaboradorSessao] = useState<any>(null);
 
   const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
@@ -97,6 +107,26 @@ function AdminLayoutGridDefinitivo() {
           setLojistaIdReal(userData.lojaId);
 
           if (userData.lojaId) {
+            // 🌟 Se for colaborador, busca direto pelo UID do Auth na subcoleção da loja
+            if (userData.role === 'colaborador') {
+              try {
+                const colabDocRef = doc(db, "lojistas", userData.lojaId, "colaboradores", user.uid);
+                const colabSnap = await getDoc(colabDocRef);
+
+                if (colabSnap.exists()) {
+                  const colabEncontrado = { id: colabSnap.id, ...colabSnap.data() };
+                  setColaboradorSessao(colabEncontrado);
+
+                  const primeiraTela = Object.entries((colabEncontrado as any).permissoes || {}).find(([k, v]) => v === true)?.[0];
+                  if (primeiraTela) {
+                    setTelaAtiva(primeiraTela);
+                  }
+                }
+              } catch (err) {
+                console.error("Erro ao carregar permissões do colaborador:", err);
+              }
+            }
+
             if (unsubLojaRef.current) unsubLojaRef.current();
             if (unsubPedidosRef.current) unsubPedidosRef.current();
 
@@ -120,11 +150,13 @@ function AdminLayoutGridDefinitivo() {
             });
 
             if (userData.lojaId) {
-              const qPedidos = query(collection(db, "lojistas", userData.lojaId, "pedidos"), orderBy("numeroPedido", "desc"));
+              // 🌟 CORREÇÃO AQUI: Removido o orderBy restrito para garantir que 100% dos documentos de pedidos venham sem falhar
+              const qPedidos = query(collection(db, "lojistas", userData.lojaId, "pedidos"));
               unsubPedidosRef.current = onSnapshot(qPedidos, (snapPedidos) => {
                 setPedidos(snapPedidos.docs.map(d => ({ id: d.id, ...d.data() })));
                 setLoading(false);
               }, (error) => {
+                console.error("Erro ao escutar pedidos:", error);
                 setLoading(false);
               });
             } else {
@@ -137,6 +169,7 @@ function AdminLayoutGridDefinitivo() {
           setLoading(false);
         }
       } catch (e) {
+        console.error("Erro na autenticação do layout:", e);
         setLoading(false);
       }
     });
@@ -238,6 +271,7 @@ function AdminLayoutGridDefinitivo() {
           onCloseMobile={() => setMenuMobileAberto(false)}
           planoEfetivo={planoEfetivo}
           masterLiberou={masterLiberou}
+          colaboradorSessao={colaboradorSessao}
         />
       </div>
 
@@ -252,38 +286,86 @@ function AdminLayoutGridDefinitivo() {
             >
               <FiMenu size={24} color={theme.textMain} />
             </button>
-            <span style={{ fontSize: '15px', fontWeight: 'bold', color: theme.textMain }}>Painel Administrativo</span>
+            <span style={{ fontSize: '15px', fontWeight: 'bold', color: theme.textMain }}>
+              {colaboradorSessao ? `Painel - ${colaboradorSessao.dsNomeColaborador || colaboradorSessao.nome}` : 'Painel Administrativo'}
+            </span>
+
           </div>
         </div>
 
         <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
+          {/* Validação de acesso por tela para colaboradores */}
           {telaAtiva === 'dash' && planoEfetivo && (
-            planoEfetivo.configs?.tipoDashboard === 'gestao' ? (
-              <DashboardGestao pedidos={pedidos} lojistaId={lojistaIdReal || undefined} />
+            (!colaboradorSessao || colaboradorSessao.permissoes?.dash !== false) ? (
+              planoEfetivo.configs?.tipoDashboard === 'gestao' ? (
+                <DashboardGestao pedidos={pedidos} lojistaId={lojistaIdReal || undefined} />
+              ) : (
+                <DashboardBronze pedidos={pedidos} dadosLojista={dadosLojista || undefined} />
+              )
             ) : (
-              <DashboardBronze pedidos={pedidos} dadosLojista={dadosLojista || undefined} />
+              <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Dashboard.</div>
             )
           )}
 
-          {telaAtiva === 'produtos' && <CadastroProdutos />}
-          {telaAtiva === 'pedidos' && lojistaIdReal && <Pedidos pedidos={pedidos} db={db} lojistaIdApp={lojistaIdReal} />}
-          {telaAtiva === 'pdv' && <PaginaPDV />}
-          {telaAtiva === 'estoque' && <PaginaEstoque />}
-          {telaAtiva === 'config' && <AdminConfig />}
+          {telaAtiva === 'produtos' && (!colaboradorSessao || colaboradorSessao.permissoes?.produtos !== false ? <CadastroProdutos /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Produtos.</div>)}
+          {telaAtiva === 'pedidos' && lojistaIdReal && (!colaboradorSessao || colaboradorSessao.permissoes?.pedidos !== false ? <Pedidos pedidos={pedidos} db={db} lojistaIdApp={lojistaIdReal} /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Pedidos.</div>)}
+          {telaAtiva === 'despesas' && lojistaIdReal && (!colaboradorSessao || colaboradorSessao.permissoes?.despesas !== false ? <TabGestaoDespesas uid={lojistaIdReal} /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Despesas.</div>)}
+          
+          {/* 🌟 Exibindo a página completa de financeiro (app/admin/financeiro/page.tsx) ao clicar na sidebar */}
+          {telaAtiva === 'financeiro' && (!colaboradorSessao || colaboradorSessao.permissoes?.financeiro !== false ? <GestaoFinanceiroPage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Financeiro.</div>)}
+
+          {telaAtiva === 'pdv' && (!colaboradorSessao || colaboradorSessao.permissoes?.pdv !== false ? <PaginaPDV /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao PDV.</div>)}
+          {telaAtiva === 'colaboradores' && (userRole === 'master' || userRole === 'admin' || !colaboradorSessao ? <PaginaColaboradores /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito.</div>)}
+          {telaAtiva === 'estoque' && (!colaboradorSessao || colaboradorSessao.permissoes?.estoque !== false ? <PaginaEstoque /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Estoque.</div>)}
+          
+          {/* 🌟 Novas abas de Relatórios e Suporte */}
+          {telaAtiva === 'relatorios' && (!colaboradorSessao || colaboradorSessao.permissoes?.relatorios !== false ? <RelatoriosPage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Relatórios.</div>)}
+          {telaAtiva === 'suporte' && (!colaboradorSessao || colaboradorSessao.permissoes?.suporte !== false ? <SuportePage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Suporte.</div>)}
+
+          {telaAtiva === 'config' && (!colaboradorSessao || colaboradorSessao.permissoes?.config !== false ? <AdminConfig /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Configurações.</div>)}
           {telaAtiva === 'gestao-geral' && userRole === 'master' && <DashboardMaster />}
         </div>
 
       </main>
 
       <style jsx global>{`
-        // ... (Mantive EXATAMENTE o seu bloco de estilos abaixo)
         *, *::before, *::after { box-sizing: border-box; }
         html, body, #__next { margin: 0 !important; padding: 0 !important; background-color: ${theme.bgApp} !important; color: ${theme.textMain} !important; overflow-x: hidden !important; width: 100%; min-height: 100vh; }
         .admin-layout-wrapper { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; width: 100vw; background-color: ${theme.bgApp}; margin: 0; padding: 0; overflow-x: hidden; }
         .sidebar-area { width: 260px; height: 100vh; position: sticky; top: 0; left: 0; z-index: 1000; }
         .main-content-area { background-color: ${theme.bgApp}; min-height: 100vh; width: 100%; max-width: 100%; padding: 24px; overflow-y: auto; overflow-x: hidden; box-sizing: border-box; }
         .mobile-header-bar { display: none; }
-        @media (max-width: 768px) { .admin-layout-wrapper { grid-template-columns: 1fr; } .sidebar-area { position: fixed; height: 100vh; width: 0; z-index: 1000; } .main-content-area { width: 100vw; max-width: 100vw; padding: 12px; padding-top: 80px; padding-bottom: 10px; overflow-y: auto; } .mobile-header-bar { display: flex !important; justify-content: space-between; position: fixed; top: 0; left: 0; right: 0; height: 60px; background: ${theme.bgCard}; border-bottom: 1px solid ${theme.border}; align-items: center; padding: 0 15px; z-index: 900; box-shadow: 0 1px 3px rgba(0,0,0,0.05); } }
+
+        /* 🌟 Barra de Rolagem Adaptativa ao Tema (Modo Claro / Escuro) */
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: ${isModoNoturno ? '#334155 #1e293b' : '#cbd5e1 #f1f5f9'};
+        }
+
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: ${isModoNoturno ? '#0f172a' : '#f8fafc'};
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: ${isModoNoturno ? '#334155' : '#cbd5e1'};
+          border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+          background: ${isModoNoturno ? '#475569' : '#94a3b8'};
+        }
+
+        @media (max-width: 768px) { 
+          .admin-layout-wrapper { grid-template-columns: 1fr; } 
+          .sidebar-area { position: fixed; height: 100vh; width: 0; z-index: 1000; } 
+          .main-content-area { width: 100vw; max-width: 100vw; padding: 12px; padding-top: 80px; padding-bottom: 10px; overflow-y: auto; } 
+          .mobile-header-bar { display: flex !important; justify-content: space-between; position: fixed; top: 0; left: 0; right: 0; height: 60px; background: ${theme.bgCard}; border-bottom: 1px solid ${theme.border}; align-items: center; padding: 0 15px; z-index: 900; box-shadow: 0 1px 3px rgba(0,0,0,0.05); } 
+        }
       `}</style>
     </div>
   );

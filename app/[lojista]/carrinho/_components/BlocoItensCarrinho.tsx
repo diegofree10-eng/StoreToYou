@@ -84,26 +84,39 @@ export default function BlocoItensCarrinho({
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {safeCart.map((item: any, idx: number) => {
-                const chaveUnica = `${item.cartItemId || item.id || 'prod'}_${idx}`;
-                const precoUnit = Number(item.preco || item.price || 0);
+                const chaveUnica = `${item.cartItemKey || item.cartItemId || item.id || 'prod'}_${idx}`;
+                
+                // ✨ Lendo o preço estritamente do novo padrão
+                const precoUnit = Number(item.vlPrecoProduto ?? item.vlPrecoBasicoProduto ?? 0);
                 const qtd = Number(item.qty || 1);
-                const requisitosProduto = requisitosDoBanco[item.id] || [];
+                
+                // ✨ Lendo os requisitos do novo formato dsRequisitosProduto ou fallback do banco
+                const requisitosProduto = item.dsRequisitosProduto || requisitosDoBanco[item.id] || [];
                 const temRequisitos = Array.isArray(requisitosProduto) && requisitosProduto.length > 0;
                 
-                // ✨ Validação exata conforme solicitado
-                const tipoProduto = String(item.dsTipoProduto || item.tipoProduto || "").trim();
+                // ✨ Validação exata do tipo de produto digital no novo padrão
+                const tipoProduto = String(item.dsTipoProduto || "").trim();
                 const isDigital = tipoProduto === "digital_download" || tipoProduto === "Digital_Personalizado";
 
-                // ✨ Captura o prazo de produção do item
-                const diasProducao = Number(item.nrDiasProducao || item.diasProducao || item.dsDiasProducao || 0);
+                // ✨ Captura o prazo de produção oficial do item (nrDiasProducao)
+                const diasProducao = Number(item.nrDiasProducao || 0);
+
+                // ✨ Imagem oficializada (dsFotoProduto da variação ou dsCapaProduto do produto pai)
+                const fotoItem = item.dsFotoProduto || item.dsCapaProduto || "";
+                const nomeItem = item.dsNomeProduto || "Produto";
+
+                // ✨ Nomes das variações oficiais
+                const nomeVar1 = item.dsNomeVar1Produto;
+                const nomeVar2 = item.dsNomeVar2Produto;
+                const partes = item?.variacao ? item.variacao.split("/") : [];
 
                 return (
                   <div key={chaveUnica} style={{ display: 'flex', flexDirection: 'column', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
                       <div style={{ width: '60px', height: '60px', borderRadius: '10px', backgroundColor: '#f1f5f9', overflow: 'hidden', flexShrink: 0 }}>
-                        {item.foto || item.imagem || item.url ? (
-                          <img src={item.foto || item.imagem || item.url} alt={item.dsNomeProduto || item.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {fotoItem ? (
+                          <img src={fotoItem} alt={nomeItem} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: '20px' }}>📦</div>
                         )}
@@ -111,18 +124,21 @@ export default function BlocoItensCarrinho({
 
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <h5 style={{ margin: '0 0 4px 0', fontSize: '13px', fontWeight: 'bold', color: config.corTexto, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.dsNomeProduto || item.nome || "Produto"}
+                          {nomeItem}
                         </h5>
-                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: config.TextoCard, marginBottom: '2px' }}>
+                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: config.corPrimaria || '#000', marginBottom: '2px' }}>
                           R$ {precoUnit.toFixed(2).replace('.', ',')}
                         </span>
-                        <span style={{ display: 'block', fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.variacao && item.variacao !== "Padrão" ? `Variação: ${item.variacao}` : ""}
-                          {item.selectedCor ? ` • Cor: ${item.selectedCor}` : ""}
-                          {item.selectedTamanho ? ` • Tam: ${item.selectedTamanho}` : ""}
-                        </span>
+                        
+                        {/* Exibição limpa das variações usando os nomes oficiais */}
+                        {item.variacao && item.variacao !== "Padrão" && (
+                          <span style={{ display: 'block', fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {nomeVar1 && partes[0] ? `${nomeVar1}: ${partes[0].trim()}` : ""}
+                            {nomeVar2 && partes[1] ? ` • ${nomeVar2}: ${partes[1].trim()}` : (!nomeVar1 && `Variação: ${item.variacao}`)}
+                          </span>
+                        )}
 
-                        {/* ✨ Exibição dos Dias de Produção */}
+                        {/* ✨ Exibição dos Dias de Produção baseada em nrDiasProducao */}
                         {diasProducao > 0 && (
                           <span style={{ display: 'block', fontSize: '11px', color: '#b45309', fontWeight: '600', marginTop: '2px' }}>
                             ⏱️ Prazo de produção: {diasProducao} {diasProducao === 1 ? 'dia útil' : 'dias úteis'}

@@ -1,3 +1,4 @@
+// app/[lojista]/produto/[id]/page.tsx
 "use client";
 
 import React, { useEffect, useState, useMemo, useCallback } from "react";
@@ -29,12 +30,10 @@ export default function ProdutoAgrupadoPage() {
   const [motivoDenuncia, setMotivoDenuncia] = useState("");
   const [enviandoDenuncia, setEnviandoDenuncia] = useState(false);
 
-  // ✨ Estados para o Zoom estilo Mercado Livre (Lente + Painel Lateral)
   const [isZooming, setIsZooming] = useState(false);
   const [lensStyle, setLensStyle] = useState<React.CSSProperties>({ display: 'none' });
   const [zoomResultStyle, setZoomResultStyle] = useState<React.CSSProperties>({ display: 'none' });
-  
-  // ✨ Estados para o Modal Lightbox de tela cheia e Zoom de Inspeção
+
   const [showLightbox, setShowLightbox] = useState(false);
   const [isFullZoom, setIsFullZoom] = useState(false);
 
@@ -88,7 +87,21 @@ export default function ProdutoAgrupadoPage() {
           const prodSnap = await getDoc(prodRef);
 
           if (prodSnap.exists()) {
-            setProduto({ id: prodSnap.id, ...prodSnap.data() });
+            const rawData = prodSnap.data();
+            setProduto({
+              id: prodSnap.id,
+              ...rawData,
+              nome: rawData.dsNomeProduto || rawData.dsNome || rawData.nome || "",
+              descricao: rawData.dsDescricaoProduto || rawData.dsDescricao || rawData.descricao || "",
+              precoBasico: rawData.vlPrecoBasicoProduto ?? rawData.vlPrecoBasico ?? rawData.precoBasico ?? 0,
+              capa: rawData.dsCapaProduto || rawData.dsCapa || rawData.capa || "",
+              imagens: rawData.dsImagensProduto || rawData.dsImagens || rawData.imagens || [],
+              sku: rawData.dsSkuProduto || rawData.dsSku || rawData.sku || "",
+              nomeVar1: rawData.dsNomeVar1Produto || rawData.dsNomeVar1 || rawData.nomeVar1 || null,
+              nomeVar2: rawData.dsNomeVar2Produto || rawData.dsNomeVar2 || rawData.nomeVar2 || null,
+              variacoes: rawData.variacoes || rawData.dsVariacoes || [],
+              requisitos: rawData.dsRequisitosProduto || rawData.dsRequisitos || rawData.requisitos || {},
+            });
           }
         }
       } catch (e) {
@@ -141,10 +154,10 @@ export default function ProdutoAgrupadoPage() {
   useEffect(() => {
     if (!produto?.variacoes || !v1Selecionada) return;
     const match = produto.variacoes.find((v: any) => {
-      const val1 = (v.v1 || v.sabor || v.cor || v.modelo || "").trim().toLowerCase();
+      const val1 = (v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim().toLowerCase();
       const bateV1 = val1 === v1Selecionada.toLowerCase();
       if (!produto.nomeVar2) return bateV1;
-      const val2 = (v.v2 || v.tamanho || v.quantidade || "").trim().toLowerCase();
+      const val2 = (v.nrTamanhoProduto || v.v2 || v.nrTamanho || v.tamanho || v.quantidade || "").trim().toLowerCase();
       return bateV1 && val2 === v2Selecionada.toLowerCase();
     });
     setVariacaoFinal(match || null);
@@ -154,7 +167,7 @@ export default function ProdutoAgrupadoPage() {
     if (!produto?.variacoes) return [];
     const vistas = new Set();
     return produto.variacoes.filter((v: any) => {
-      const valor = (v.v1 || v.sabor || v.cor || v.modelo || "").trim();
+      const valor = (v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim();
       if (!valor || vistas.has(valor.toLowerCase())) return false;
       vistas.add(valor.toLowerCase());
       return true;
@@ -164,10 +177,10 @@ export default function ProdutoAgrupadoPage() {
   const listaOpcoesV2 = useMemo(() => {
     if (!v1Selecionada || !produto?.variacoes) return [];
     const sub = produto.variacoes.filter((v: any) =>
-      (v.v1 || v.sabor || v.cor || v.modelo || "").trim().toLowerCase() === v1Selecionada.toLowerCase()
+      (v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim().toLowerCase() === v1Selecionada.toLowerCase()
     );
     const vistas = new Set();
-    return sub.map((v: any) => (v.v2 || v.tamanho || v.quantidade || "").trim()).filter((v: string) => {
+    return sub.map((v: any) => String(v.nrTamanhoProduto || v.v2 || v.nrTamanho || v.tamanho || v.quantidade || "").trim()).filter((v: string) => {
       if (!v || vistas.has(v.toLowerCase())) return false;
       vistas.add(v.toLowerCase());
       return true;
@@ -202,32 +215,79 @@ export default function ProdutoAgrupadoPage() {
       }
     }
 
-    const cartItemKey = `${produtoId}_${v1Selecionada || "padrao"}_${v2Selecionada || "padrao"}`;
-    const skuParaSalvar = variacaoFinal ? variacaoFinal.sku : (produto.sku || "SEM-SKU");
-    const diasProdFinal = Number(variacaoFinal?.nrDiasProducao || produto.nrDiasProducao || 0);
-    const tipoProdutoFinal = String(produto.dsTipoProduto || produto.tipoProduto || "Fisico_Sem");
+    const temVariacoesReais = Boolean(
+      produto.isTemVariacoesProduto === true || 
+      (produto.nomeVar1 && produto.nomeVar1.trim() !== "" && Array.isArray(produto.variacoes) && produto.variacoes.length > 0)
+    );
+
+    const nomeProdutoPuro = String(produto.dsNomeProduto || produto.dsNome || produto.nome || "Produto").trim();
+
+    let variacaoTextoFinal = "";
+    if (temVariacoesReais && variacaoFinal) {
+      const modelo = String(variacaoFinal.dsModeloProduto || v1Selecionada || "").trim();
+      const tamanho = String(variacaoFinal.nrTamanhoProduto || v2Selecionada || "").trim();
+      variacaoTextoFinal = modelo && tamanho ? `${modelo} / ${tamanho}` : (modelo || tamanho || "");
+    }
+
+    const cartItemKey = `${produtoId}_${variacaoTextoFinal || "padrao"}`;
+    const skuParaSalvar = variacaoFinal ? (variacaoFinal.dsSkuProduto || variacaoFinal.sku || "") : (produto.dsSkuProduto || produto.sku || "SEM-SKU");
+    const gtinParaSalvar = variacaoFinal ? (variacaoFinal.dsGtinProduto || variacaoFinal.gtin || "") : (produto.dsGtinProduto || produto.gtin || "");
+    const precoFinal = variacaoFinal ? Number(variacaoFinal.vlPrecoProduto ?? 0) : Number(produto.vlPrecoBasicoProduto || produto.precoBasico || 0);
+    const diasProdFinal = Number(variacaoFinal?.nrDiasProducaoProduto || produto.nrDiasProducaoProduto || 0);
+    
+    // Tratamento de custo (considerando insumos e outros custos da variação se existirem)
+    let custoUnitarioFinal = variacaoFinal ? Number(variacaoFinal.vlCustoUnitarioProduto ?? 0) : Number(produto.vlCustoUnitarioProduto ?? 0);
+    if (isNaN(custoUnitarioFinal)) custoUnitarioFinal = 0;
+
+    const fotoProdutoFinal = variacaoFinal?.dsFotoProduto || imgAtiva || produto.dsCapaProduto || produto.capa || "";
+
+    // Repasse seguro dos insumos de composição e movimentações
+    const insumosComposicaoFinal = variacaoFinal?.insumosComposicao || produto.insumosComposicao || [];
+    const outrosCustosFinal = variacaoFinal?.vlOutrosCustosProduto || produto.vlOutrosCustosProduto || 0;
+    const movimentarEstoqueFinal = produto.movimentarEstoque ?? true;
+    const movimentarEstoqueComposicaoFinal = produto.movimentarEstoqueComposicao ?? true;
 
     const novoItem = {
-      cartItemKey,
       id: produtoId,
+      idProduto: produtoId,
+      cartItemKey,
       sku: skuParaSalvar,
-      nome: produto.nome,
-      preco: variacaoFinal ? Number(variacaoFinal.preco) : Number(produto.precoBasico || 0),
-      variacao: v1Selecionada + (v2Selecionada ? ` / ${v2Selecionada}` : ""),
-      nomeVar1: produto.nomeVar1 || null,
-      v1: v1Selecionada || null,
-      nomeVar2: produto.nomeVar2 || null,
-      v2: v2Selecionada || null,
-      imagem: imgAtiva || produto.capa,
+      dsSkuProduto: skuParaSalvar,
+      gtin: gtinParaSalvar,
+      dsGtinProduto: gtinParaSalvar,
+      nome: nomeProdutoPuro,
+      dsNomeProduto: nomeProdutoPuro,
+      preco: precoFinal,
+      vlPrecoProduto: precoFinal,
+      custoUnitario: custoUnitarioFinal,
+      vlCustoUnitarioProduto: custoUnitarioFinal,
+      isTemVariacoesProduto: temVariacoesReais,
+      variacao: variacaoTextoFinal,
+      dsVariacaoProduto: variacaoTextoFinal,
+      nomeVar1: temVariacoesReais ? (produto.nomeVar1 || null) : null,
+      v1: temVariacoesReais ? (v1Selecionada || null) : null,
+      nomeVar2: temVariacoesReais ? (produto.nomeVar2 || null) : null,
+      v2: temVariacoesReais ? (v2Selecionada || null) : null,
+      imagem: fotoProdutoFinal,
+      dsFotoProduto: fotoProdutoFinal,
+      dsCapaProduto: produto.dsCapaProduto || produto.capa || "",
       quantidade: 1,
       qty: 1,
-      requisitos: produto.requisitos || {},
-      permiteRetirada: !!produto.permiteRetirada,
-      envioTransportadora: !!produto.envioTransportadora,
-      precisaFrete: !!produto.precisaFrete,
-      peso: produto.peso || 0.3,
+      requisitos: produto.requisitos || produto.dsRequisitosProduto || {},
+      permiteRetirada: !!(produto.permiteRetirada ?? produto.isPermiteRetirada ?? false),
+      envioTransportadora: !!(produto.envioTransportadora ?? produto.isEnvioTransportadora ?? false),
+      isPrecisaFreteProduto: !!(produto.isPrecisaFreteProduto ?? produto.precisaFrete ?? true),
+      peso: Number(variacaoFinal?.nrPesoProduto ?? produto.nrPesoProduto ?? 0.3),
+      nrAlturaProduto: Number(variacaoFinal?.nrAlturaProduto ?? produto.nrAlturaProduto ?? 0),
+      nrLarguraProduto: Number(variacaoFinal?.nrLarguraProduto ?? produto.nrLarguraProduto ?? 0),
+      nrComprimentoProduto: Number(variacaoFinal?.nrComprimentoProduto ?? produto.nrComprimentoProduto ?? 0),
       nrDiasProducao: diasProdFinal,
-      dsTipoProduto: tipoProdutoFinal
+      nrDiasProducaoProduto: diasProdFinal,
+      // ✨ Repasse das propriedades de composição e controle de estoque
+      insumosComposicao: insumosComposicaoFinal,
+      vlOutrosCustosProduto: outrosCustosFinal,
+      movimentarEstoque: movimentarEstoqueFinal,
+      movimentarEstoqueComposicao: movimentarEstoqueComposicaoFinal
     };
 
     const idx = dadosExistentes.items.findIndex((i: any) => i.cartItemKey === cartItemKey);
@@ -250,11 +310,11 @@ export default function ProdutoAgrupadoPage() {
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const { left, top, width, height } = container.getBoundingClientRect();
-    
+
     let x = e.clientX - left;
     let y = e.clientY - top;
 
-    const lensSize = 130; 
+    const lensSize = 130;
 
     let posX = x - lensSize / 2;
     let posY = y - lensSize / 2;
@@ -290,7 +350,8 @@ export default function ProdutoAgrupadoPage() {
     setZoomResultStyle({ display: 'none' });
   };
 
-  const diasProducaoExibicao = Number(variacaoFinal?.nrDiasProducao || produto?.nrDiasProducao || 0);
+  const precoExibicao = variacaoFinal ? (variacaoFinal.vlPrecoProduto ?? variacaoFinal.preco ?? variacaoFinal.vlPreco ?? 0) : (produto?.precoBasico || 0);
+  const diasProducaoExibicao = Number(variacaoFinal?.nrDiasProducaoProduto || variacaoFinal?.nrDiasProducao || produto?.nrDiasProducaoProduto || produto?.nrDiasProducao || 0);
 
   if (loading) return <div style={styles.center}>Carregando...</div>;
   if (!produto) return <div style={styles.center}>Produto não encontrado.</div>;
@@ -326,44 +387,44 @@ export default function ProdutoAgrupadoPage() {
               ))}
             </div>
 
-            <div 
-              className="card-principal-foto" 
+            <div
+              className="card-principal-foto"
               onMouseMove={handleMouseMove}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
               onClick={() => setShowLightbox(true)}
-              style={{ 
-                width: '400px', 
-                minWidth: '400px', 
-                maxWidth: '400px', 
-                height: '400px', 
-                maxHeight: '400px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                boxSizing: 'border-box', 
-                flexShrink: 0, 
-                overflow: 'hidden', 
-                backgroundColor: '#ffffff', 
-                borderRadius: '12px', 
-                border: '1px solid #f1f5f9', 
-                boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
+              style={{
+                width: '400px',
+                minWidth: '400px',
+                maxWidth: '400px',
+                height: '400px',
+                maxHeight: '400px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxSizing: 'border-box',
+                flexShrink: 0,
+                overflow: 'hidden',
+                backgroundColor: '#ffffff',
+                borderRadius: '12px',
+                border: '1px solid #f1f5f9',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
                 padding: '10px',
                 position: 'relative',
                 cursor: 'zoom-in'
               }}
             >
-              <img 
-                src={imgAtiva || produto.capa} 
-                style={{ 
-                  maxWidth: '100%', 
-                  maxHeight: '100%', 
-                  width: 'auto', 
-                  height: 'auto', 
-                  objectFit: 'contain', 
-                  display: 'block' 
-                }} 
-                alt={produto.nome} 
+              <img
+                src={imgAtiva || produto.capa}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  width: 'auto',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  display: 'block'
+                }}
+                alt={produto.nome}
               />
 
               <div style={{
@@ -401,7 +462,7 @@ export default function ProdutoAgrupadoPage() {
             <div style={{ flex: 1, backgroundColor: '#fff', borderRadius: '12px', padding: '18px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: config.corTextoDestaque, margin: 0, lineHeight: '1.2' }}>{produto.nome}</h1>
               <div style={{ fontSize: '24px', fontWeight: '800', color: config.corTextoDestaque, margin: 0 }}>
-                R$ {variacaoFinal ? variacaoFinal.preco : (produto.precoBasico || "0,00")}
+                R$ {typeof precoExibicao === 'number' ? precoExibicao.toFixed(2).replace('.', ',') : (precoExibicao || "0,00")}
               </div>
 
               {diasProducaoExibicao > 0 && (
@@ -410,25 +471,25 @@ export default function ProdutoAgrupadoPage() {
                 </div>
               )}
 
-              {produto.nomeVar1 && (
+              {produto.nomeVar1 && produto.nomeVar1.trim() !== "" && (
                 <div>
                   <p style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#64748b', marginBottom: '5px', margin: 0 }}>{produto.nomeVar1}</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {listaOpcoesV1.map((item: any, i: number) => {
-                      const valor = (item.v1 || item.sabor || item.cor || item.modelo || "").trim();
+                      const valor = (item.dsModeloProduto || item.v1 || item.dsModelo || item.dsNome || item.sabor || item.cor || item.modelo || "").trim();
                       const ativo = v1Selecionada === valor;
+                      const fotoOpcao = item.dsFotoProduto || item.dsFoto || item.foto || item.imagem || item.url || item.fotoCapa;
                       return (
                         <div
                           key={i}
                           onClick={() => {
                             setV1Selecionada(valor);
-                            const fotoDesejada = item.foto || item.imagem || item.url || item.fotoCapa;
-                            if (fotoDesejada) setImgAtiva(fotoDesejada);
+                            if (fotoOpcao) setImgAtiva(fotoOpcao);
                           }}
                           style={{ width: '50px', textAlign: 'center', borderRadius: '6px', overflow: 'hidden', cursor: 'pointer', backgroundColor: '#fff', border: ativo ? `2px solid ${config.corDestaque}` : '1px solid #ddd', padding: '2px' }}
                         >
                           <div style={{ width: '100%', height: '34px', borderRadius: '4px', overflow: 'hidden' }}>
-                            {(item.foto || item.imagem || item.url) ? <img src={item.foto || item.imagem || item.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={valor} /> : <div style={{ background: '#f0f0f0', height: '100%' }} />}
+                            {fotoOpcao ? <img src={fotoOpcao} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={valor} /> : <div style={{ background: '#f0f0f0', height: '100%' }} />}
                           </div>
                           <span style={{ fontSize: '8px', padding: '1px 0', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{valor}</span>
                         </div>
@@ -438,7 +499,7 @@ export default function ProdutoAgrupadoPage() {
                 </div>
               )}
 
-              {produto.nomeVar2 && listaOpcoesV2.length > 0 && (
+              {produto.nomeVar2 && produto.nomeVar2.trim() !== "" && listaOpcoesV2.length > 0 && (
                 <div>
                   <p style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#64748b', marginBottom: '5px', margin: 0 }}>{produto.nomeVar2}</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
@@ -519,13 +580,12 @@ export default function ProdutoAgrupadoPage() {
         </div>
       </div>
 
-      {/* ✨ Modal Lightbox de Tela Cheia com Zoom de Inspeção (Clique para ampliar/reduzir) */}
       {showLightbox && (
-        <div 
+        <div
           onClick={() => {
             setIsFullZoom(false);
             setShowLightbox(false);
-          }} 
+          }}
           style={{
             position: 'fixed',
             inset: 0,
@@ -538,12 +598,12 @@ export default function ProdutoAgrupadoPage() {
             overflow: isFullZoom ? 'auto' : 'hidden'
           }}
         >
-          <button 
-            onClick={(e) => { 
-              e.stopPropagation(); 
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
               setIsFullZoom(false);
-              setShowLightbox(false); 
-            }} 
+              setShowLightbox(false);
+            }}
             style={{
               position: 'fixed',
               top: '20px',
@@ -560,12 +620,12 @@ export default function ProdutoAgrupadoPage() {
             ✕
           </button>
 
-          <img 
-            src={imgAtiva || produto.capa} 
-            alt="Zoom Tela Cheia" 
+          <img
+            src={imgAtiva || produto.capa}
+            alt="Zoom Tela Cheia"
             onClick={(e) => {
-              e.stopPropagation(); 
-              setIsFullZoom(!isFullZoom); 
+              e.stopPropagation();
+              setIsFullZoom(!isFullZoom);
             }}
             style={{
               maxWidth: isFullZoom ? 'none' : '90vw',

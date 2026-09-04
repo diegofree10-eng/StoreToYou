@@ -1,3 +1,4 @@
+// app/admin/produtos/_helpers/executarFluxoPedido.ts
 import { db } from "@/lib/firebase";
 import {
   doc,
@@ -6,6 +7,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import { calcularEmbalagemEspecificaDoPedido } from "@/utils/calculoEmbalagens";
 
 export const executarFluxoPedido = async ({
   lojistaId,
@@ -25,18 +27,38 @@ export const executarFluxoPedido = async ({
   freteGratisConfig,
   payloadPixBruto,
   freteSel,
-  dsFormaPagamentoCarrinho = "pix", // 🌟 Parâmetro flexível com "pix" como padrão atual
+  dsFormaPagamentoCarrinho = "pix",
+  vlEntrada = 0,
+  vlRestante = 0,
+  dsPrazoRestante = "À vista",
+  dsOperadorCaixa = "Balcão",
+  embalagemDoCheckout = null,
+  embalagemRecomendada = null, // 🌟 Parquet capturado diretamente da API de frete
 }: any) => {
   try {
     // 🛡️ BLINDAGEM FINANCEIRA: Garantia de precisão matemática antes de salvar
     const subtotalFinal = Number(Number(valorSubtotalProdutos || 0).toFixed(2));
     const descontoFinal = Number(Number(valorDesconto || 0).toFixed(2));
-    const freteFinal = Number(Number(logistica?.valorFrete || logistica?.vlFrete || 0).toFixed(2));
-    
-    // Cálculo de controle para total líquido (Subtotal - Desconto + Frete)
-    const totalCalculadoManual = Number((subtotalFinal - descontoFinal + freteFinal).toFixed(2));
-    const totalGeralFinal = Number(Number(totalGeral || totalCalculadoManual).toFixed(2));
+    const freteFinal = Number(
+      Number(logistica?.valorFrete || logistica?.vlFrete || 0).toFixed(2),
+    );
 
+    const totalCalculadoManual = Number(
+      (subtotalFinal - descontoFinal + freteFinal).toFixed(2),
+    );
+    const totalGeralFinal = Number(
+      Number(totalGeral || totalCalculadoManual).toFixed(2),
+    );
+
+    // 🌟 Identificação rigorosa da origem do pedido antes de prosseguir
+    const origemIdentificada =
+      lojistaSlug === "pdv-balcao" ||
+      logistica?.origem === "Pdv" ||
+      logistica?.origem === "pdv"
+        ? "Pdv"
+        : "Site";
+
+    // 🌟 Incremento seguro do contador sequencial do pedido no Firebase
     const contadorRef = doc(
       db,
       "lojistas",
@@ -48,46 +70,11 @@ export const executarFluxoPedido = async ({
     const numPedidoSequencial = await runTransaction(
       db,
       async (transaction) => {
-        // ==========================================
-        // FASE 1: TODAS AS LEITURAS (READS) PRIMEIRO
-        // ==========================================
-
         const docSnapContador = await transaction.get(contadorRef);
         let proximo = 1;
         if (docSnapContador.exists()) {
           proximo = (docSnapContador.data().ultimoNumero || 0) + 1;
         }
-
-        const produtosParaAtualizar: Array<{
-          prodRef: any;
-          prodSnap: any;
-          qtdComprada: number;
-          nomeVar: string;
-        }> = [];
-
-        for (const item of safeCart) {
-          const produtoId = item.idProduto || item.id;
-          if (!produtoId) continue;
-
-          const prodRef = doc(db, "lojistas", lojistaId, "produtos", produtoId);
-          const prodSnap = await transaction.get(prodRef);
-
-          if (!prodSnap.exists()) continue;
-
-          const qtdComprada = Number(item.qty || item.quantidade || 1);
-          const nomeVar = item.variacao || item.nomeVariacao;
-
-          produtosParaAtualizar.push({
-            prodRef,
-            prodSnap,
-            qtdComprada,
-            nomeVar,
-          });
-        }
-
-        // ==========================================
-        // FASE 2: TODAS AS ESCRITAS (WRITES) DEPOIS
-        // ==========================================
 
         transaction.set(
           contadorRef,
@@ -95,119 +82,193 @@ export const executarFluxoPedido = async ({
           { merge: true },
         );
 
-        for (const itemAtualizacao of produtosParaAtualizar) {
-          const { prodRef, prodSnap, qtdComprada, nomeVar } = itemAtualizacao;
-          const dadosProd = prodSnap.data();
-
-          if (
-            nomeVar &&
-            nomeVar !== "Produto Único" &&
-            Array.isArray(dadosProd.variacoes)
-          ) {
-            const novasVariacoes = dadosProd.variacoes.map((v: any) => {
-              if (v.nome === nomeVar) {
-                const estoqueAtual = Number(v.estoque || 0);
-                const novoEstoque = Math.max(0, estoqueAtual - qtdComprada);
-                return { ...v, estoque: String(novoEstoque) };
-              }
-              return v;
-            });
-            transaction.update(prodRef, { variacoes: novasVariacoes });
-          } else {
-            const estoqueAtual = Number(dadosProd.estoque || 0);
-            const novoEstoque = Math.max(0, estoqueAtual - qtdComprada);
-            transaction.update(prodRef, { estoque: String(novoEstoque) });
-          }
-        }
-
-        return String(proximo).padStart(4, "0");
+        return proximo;
       },
     );
 
-    // 🌟 Classificação rigorosa e padronizada da forma de entrega (Compatível com Site e PDV)
-    const temFreteCarrinho = safeCart.some((item: any) => item.precisaFrete !== false);
-    let dsFormaEntregaPadrao = 'transportadora';
+    // 🌟 Classificação rigorosa e padronizada da forma de entrega
+    const temFreteCarrinho = safeCart.some(
+      (item: any) =>
+        item.precisaFrete !== false && item.isPrecisaFreteProduto !== false,
+    );
+    let dsFormaEntregaPadrao = "transportadora";
 
-    const formaEnviadaBruta = String(logistica?.dsFormaEntrega || logistica?.formaEnvio || "").toLowerCase();
+    const formaEnviadaBruta = String(
+      logistica?.dsFormaEntrega || logistica?.formaEnvio || "",
+    ).toLowerCase();
 
-    if (formaEnviadaBruta === 'retirada' || formaEnviadaBruta === 'retirar_loja') {
-      dsFormaEntregaPadrao = 'retirada';
-    } else if (formaEnviadaBruta === 'entrega_local') {
-      dsFormaEntregaPadrao = 'entrega_local';
-    } else if (formaEnviadaBruta === 'transportadora') {
-      dsFormaEntregaPadrao = 'transportadora';
-    } else if (formaEnviadaBruta === 'digital' || !temFreteCarrinho) {
-      const temApenasDigital = safeCart.every((item: any) => item.precisaFrete === false);
-      dsFormaEntregaPadrao = temApenasDigital ? 'digital' : 'transportadora';
-    } else if (
-      freteSel?.id === 'retirada' ||
-      freteSel?.id === 'retirar_loja' ||
-      String(freteSel?.name || "").toLowerCase().includes("retirada")
+    if (
+      formaEnviadaBruta === "retirada" ||
+      formaEnviadaBruta === "retirar_loja"
     ) {
-      dsFormaEntregaPadrao = 'retirada';
+      dsFormaEntregaPadrao = "retirada";
+    } else if (formaEnviadaBruta === "entrega_local") {
+      dsFormaEntregaPadrao = "entrega_local";
+    } else if (formaEnviadaBruta === "transportadora") {
+      dsFormaEntregaPadrao = "transportadora";
+    } else if (formaEnviadaBruta === "digital" || !temFreteCarrinho) {
+      const temApenasDigital = safeCart.every(
+        (item: any) =>
+          item.precisaFrete === false || item.isPrecisaFreteProduto === false,
+      );
+      dsFormaEntregaPadrao = temApenasDigital ? "digital" : "transportadora";
     } else if (
-      freteSel?.id === 'entrega_local' ||
-      String(freteSel?.name || "").toLowerCase().includes("entrega local")
+      freteSel?.id === "retirada" ||
+      freteSel?.id === "retirar_loja" ||
+      String(freteSel?.name || "")
+        .toLowerCase()
+        .includes("retirada")
     ) {
-      dsFormaEntregaPadrao = 'entrega_local';
+      dsFormaEntregaPadrao = "retirada";
+    } else if (
+      freteSel?.id === "entrega_local" ||
+      String(freteSel?.name || "")
+        .toLowerCase()
+        .includes("entrega local")
+    ) {
+      dsFormaEntregaPadrao = "entrega_local";
     } else {
-      dsFormaEntregaPadrao = 'transportadora';
+      dsFormaEntregaPadrao = "transportadora";
     }
 
-    const itensFormatados = safeCart.map((item: any, index: number) => {
-      const chaveUnica = `${item.cartItemId || item.id || "prod"}_${index}`;
-      const rawRespostas =
-        personalizacoes[chaveUnica] || personalizacoes[item.cartItemKey] || {};
+    // 📦 IDENTIFICAÇÃO ANINHADA E BLINDADA DA EMBALAGEM (API -> CARRINHO -> HELPER)
+    const fonteEmbalagem = embalagemRecomendada || embalagemDoCheckout || {};
+    
+    // Se a API retornou o formato { recomendada: {...}, escolhida: {...} }
+    const recRaw = fonteEmbalagem?.recomendada || fonteEmbalagem;
+    const escRaw = fonteEmbalagem?.escolhida || fonteEmbalagem;
 
-      const requisitos = item.requisitos || requisitosDoBanco?.[item.id] || [];
+    const dadosEmbalagemIdentificada = {
+      recomendada: {
+        id: recRaw?.id || recRaw?.insumoId || "cB40vmcKnP3nqInpI3yd",
+        dsModeloEmbalagemRecomendado: recRaw?.dsModeloEmbalagemRecomendado || recRaw?.dsNomeEmbalagem || recRaw?.nome || "Embalagem Ecomerce 26x36",
+        vlCustoEmbalagemRecomendado: Number(recRaw?.vlCustoEmbalagemRecomendado ?? recRaw?.vlCustoUnitarioEmbalagem ?? recRaw?.custo ?? 1.64),
+        dsTipoEmbalagem: recRaw?.dsTipoEmbalagem || recRaw?.tipo || "envelope_seguranca",
+        altura: Number(recRaw?.altura ?? 4),
+        comprimento: Number(recRaw?.comprimento ?? 32),
+        largura: Number(recRaw?.largura ?? 22),
+        pesoEmbarque: Number(recRaw?.pesoEmbarque ?? 0),
+      },
+      escolhida: {
+        id: escRaw?.id || escRaw?.insumoId || "cB40vmcKnP3nqInpI3yd",
+        dsModeloEmbalagemEscolhida: escRaw?.dsModeloEmbalagemEscolhida || escRaw?.dsModeloEmbalagemRecomendado || escRaw?.dsNomeEmbalagem || escRaw?.nome || "Embalagem Ecomerce 26x36",
+        vlCustoEmbalagemEscolhida: Number(escRaw?.vlCustoEmbalagemEscolhida ?? escRaw?.vlCustoEmbalagemRecomendado ?? escRaw?.vlCustoUnitarioEmbalagem ?? 1.64),
+        dsTipoEmbalagem: escRaw?.dsTipoEmbalagem || escRaw?.tipo || "envelope_seguranca",
+        altura: Number(escRaw?.altura ?? 4),
+        comprimento: Number(escRaw?.comprimento ?? 32),
+        largura: Number(escRaw?.largura ?? 22),
+        pesoEmbarque: Number(escRaw?.pesoEmbarque ?? 0),
+      }
+    };
+
+    const itensFormatados = safeCart.map((item: any, index: number) => {
+      const chaveUnica = `${item.cartItemKey || item.cartItemId || item.id || "prod"}_${index}`;
+      const rawRespostas =
+        personalizacoes[chaveUnica] ||
+        personalizacoes[item.cartItemKey] ||
+        personalizacoes[item.id] ||
+        personalizacoes[index] ||
+        {};
+
+      const requisitos =
+        item.dsRequisitosProduto ||
+        item.requisitos ||
+        requisitosDoBanco?.[item.id] ||
+        [];
       const respostasFormatadas: Record<string, string> = {};
 
       if (Array.isArray(requisitos) && requisitos.length > 0) {
         requisitos.forEach((req: any) => {
           const campoId = String(req.id || "");
-          const labelCampo = req.nome || req.label || "Campo";
+          let labelBruto = String(req.label || req.nome || "Campo").trim();
+          const labelLimpo = labelBruto.replace(/:+$/, "").trim();
 
-          const val = rawRespostas[campoId] || rawRespostas[labelCampo] || "";
-          if (val) {
-            respostasFormatadas[labelCampo] = val;
+          const val =
+            rawRespostas[campoId] ||
+            rawRespostas[labelBruto] ||
+            rawRespostas[labelLimpo] ||
+            "";
+
+          if (val && String(val).trim() !== "") {
+            respostasFormatadas[labelLimpo] = String(val).trim();
           }
         });
       } else {
         Object.keys(rawRespostas).forEach((key) => {
-          if (rawRespostas[key]) {
-            respostasFormatadas[key] = rawRespostas[key];
+          if (rawRespostas[key] && String(rawRespostas[key]).trim() !== "") {
+            const chaveLimpa = String(key).replace(/:+$/, "").trim();
+            respostasFormatadas[chaveLimpa] = String(rawRespostas[key]).trim();
           }
         });
       }
 
+      const nomeProdutoFinal = String(
+        item.dsNomeProduto || item.dsNome || item.nome || "Produto",
+      ).trim();
+
+      let variacaoFinal = String(
+        item.dsVariacaoProduto || item.variacao || "",
+      ).trim();
+
+      if (
+        item.isTemVariacoesProduto === false ||
+        !variacaoFinal ||
+        variacaoFinal.toLowerCase() === nomeProdutoFinal.toLowerCase()
+      ) {
+        variacaoFinal = "";
+      }
+
+      const custoExtraido = Number(
+        item.vlCustoUnitarioProduto ?? item.vlCustoUnitario ?? item.custo ?? 0,
+      );
+
+      const qtdFinal = Number(
+        item.nrQuantidadeProduto || item.quantidade || item.qty || 1,
+      );
+
+      const precoFinal = Number(
+        Number(item.vlPrecoProduto || item.preco || item.price || 0).toFixed(2),
+      );
+
       return {
-        id: item.id || "",
-        idProduto: item.idProduto || item.id,
-        nome: item.dsNomeProduto || item.nome || item.title || "Produto",
-        qty: Number(item.qty || item.quantidade || 1),
-        preco: Number(Number(item.preco || item.price || 0).toFixed(2)),
-        variacao: item.variacao || "",
-        precisaFrete: item.precisaFrete !== false,
-        respostasFormatadas: respostasFormatadas,
-        foto: item.foto || item.imagem || item.url || "",
-        sku:
-          item.sku ||
-          (item.variacaoSelecionada ? item.variacaoSelecionada.sku : "SEM-SKU"),
+        idProduto: item.id || item.idProduto || "",
+        dsNomeProduto: nomeProdutoFinal,
+        nrQuantidadeProduto: qtdFinal,
+        vlPrecoProduto: precoFinal,
+        vlCustoUnitarioProduto: isNaN(custoExtraido)
+          ? 0
+          : Number(custoExtraido.toFixed(2)),
+        dsVariacaoProduto: variacaoFinal,
+        isPrecisaFreteProduto:
+          item.isPrecisaFreteProduto ?? item.precisaFrete ?? true,
 
-        nrDiasProducao: Number(item.nrDiasProducao || item.diasProducao || 0),
-        dsTipoProduto: String(
-          item.dsTipoProduto || item.tipoProduto || "Fisico_Sem",
+        dsRespostasPersonalizadasProduto: respostasFormatadas,
+
+        dsFotoCapaProduto:
+          item.dsFotoProduto ||
+          item.dsCapaProduto ||
+          item.foto ||
+          item.imagem ||
+          "",
+        
+        dsSkuProduto: item.dsSkuProduto || item.sku || "SEM-SKU",
+        dsGtinProduto: item.dsGtinProduto || item.gtin || "",
+
+        nrDiasProducaoProduto: Number(
+          item.nrDiasProducaoProduto || item.nrDiasProducao || 0,
+        ),
+        dsTipoProduto: String(item.dsTipoProduto || "Fisico_Sem"),
+        nrPesoProduto: Number(item.nrPesoProduto || item.weight || 0.3),
+        nrAlturaProduto: Number(item.nrAlturaProduto || item.height || 0),
+        nrLarguraProduto: Number(item.nrLarguraProduto || item.width || 0),
+        nrComprimentoProduto: Number(
+          item.nrComprimentoProduto || item.length || 0,
         ),
 
-        weight: Number(item.weight || item.peso || item.variacaoSelecionada?.peso || 0.3),
-        height: Number(item.height || item.altura || item.variacaoSelecionada?.altura || 4),
-        width: Number(item.width || item.largura || item.variacaoSelecionada?.largura || 11),
-        length: Number(
-          item.length ||
-            item.comprimento ||
-            item.variacaoSelecionada?.comprimento ||
-            16,
-        ),
+        insumosComposicao: item.insumosComposicao || [],
+        vlOutrosCustosProduto: item.vlOutrosCustosProduto || 0,
+        movimentarEstoque: item.movimentarEstoque ?? true,
+        movimentarEstoqueComposicao: item.movimentarEstoqueComposicao ?? true,
       };
     });
 
@@ -221,16 +282,11 @@ export const executarFluxoPedido = async ({
 
     const dadosEnderecoCliente = {
       dsCepCliente:
-        endereco?.dsCepCliente ||
-        endereco?.cep ||
-        cliente?.dsCepCliente ||
-        cliente?.cep ||
-        "",
+        endereco?.dsCepCliente || endereco?.cep || cliente?.dsCepCliente || "",
       dsRuaCliente: endereco?.dsRuaCliente || endereco?.rua || "",
       dsNumeroCliente: endereco?.dsNumeroCliente || endereco?.numero || "",
       dsBairroCliente: endereco?.dsBairroCliente || endereco?.bairro || "",
-      dsCidadeCliente:
-        endereco?.dsCidadeCliente || endereco?.cidade || endereco?.city || "",
+      dsCidadeCliente: endereco?.dsCidadeCliente || endereco?.cidade || "",
       dsUfCliente: endereco?.dsUfCliente || endereco?.uf || "",
       dsComplementoCliente:
         endereco?.dsComplementoCliente || endereco?.complemento || "",
@@ -239,17 +295,31 @@ export const executarFluxoPedido = async ({
     const novoPedidoRef = doc(collection(db, "lojistas", lojistaId, "pedidos"));
     const pedidoIdGerado = novoPedidoRef.id;
 
-    const origemIdentificada = (lojistaSlug === "pdv-balcao" || logistica?.origem === "Pdv") ? "Pdv" : "Site";
+    const operadorFinal =
+      origemIdentificada === "Pdv"
+        ? dsOperadorCaixa || "Balcão"
+        : "Site / E-commerce";
+
+    const formaEntregaNat = String(logistica?.dsFormaEntrega || "").trim();
+
+    const ehRetiradaProntaEntrega =
+      formaEntregaNat === "retirada" &&
+      safeCart.every(
+        (item: any) => String(item.dsTipoProduto || "").trim() === "Fisico_Sem",
+      );
+
+    const statusInicialPedido = ehRetiradaProntaEntrega ? "Concluído" : "";
 
     const dadosDoPedidoParaSalvar = {
-      Idpedido: pedidoIdGerado,
-      origemPedido: origemIdentificada,
-      cliente: dadosCliente,
-      endereco: dadosEnderecoCliente,
-      numeroPedido: Number(numPedidoSequencial),
+      nrIdpedido: pedidoIdGerado,
+      dsOrigemPedido: origemIdentificada,
+      dsCliente: dadosCliente,
+      dsEndereco: dadosEnderecoCliente,
+      nrNumeroPedido: Number(numPedidoSequencial),
       data: new Date().toISOString(),
       timestamp: serverTimestamp(),
-      
+      dsStatusPedido: statusInicialPedido,
+
       financeiro: {
         vlSubtotal: subtotalFinal,
         vlDesconto: descontoFinal,
@@ -257,6 +327,13 @@ export const executarFluxoPedido = async ({
         vlTotal: totalGeralFinal,
         dsCupom: cupomDigitado || null,
         dsFormaPagamentoCarrinho: dsFormaPagamentoCarrinho,
+
+        vlEntrada: vlEntrada || 0,
+        vlRestante: Math.max(0, totalGeralFinal - (vlEntrada || 0)),
+        dsPrazoRestante: dsPrazoRestante || "À vista",
+        dsStatusPagamento:
+          (vlEntrada || 0) >= totalGeralFinal ? "pago" : "parcial",
+        dsOperadorCaixa: operadorFinal,
       },
 
       logistica: {
@@ -265,13 +342,22 @@ export const executarFluxoPedido = async ({
         isFreteGratis: freteGratisConfig?.atingido || false,
         dsServico: logistica?.servico || logistica?.dsServico || "N/A",
         vlFrete: freteFinal,
-        vlPrazo: Number(logistica?.prazoEntrega || logistica?.prazo || logistica?.vlPrazo || 0),
+        vlPrazo: Number(
+          logistica?.prazoEntrega ||
+            logistica?.prazo ||
+            logistica?.vlPrazo ||
+            0,
+        ),
         dsFormaPagamentoEtiqueta:
           logistica?.formaPagamentoEtiqueta || "saldo_melhor_envio",
         dsTransportadoraId:
-          dsFormaEntregaPadrao === 'transportadora' 
-            ? (logistica?.transportadoraId || logistica?.dsTransportadoraId || null)
-            : (dsFormaEntregaPadrao === 'entrega_local' ? 'entrega_local' : null),
+          dsFormaEntregaPadrao === "transportadora"
+            ? logistica?.transportadoraId ||
+              logistica?.dsTransportadoraId ||
+              null
+            : dsFormaEntregaPadrao === "entrega_local"
+              ? "entrega_local"
+              : null,
       },
 
       itens: itensFormatados,
@@ -281,21 +367,40 @@ export const executarFluxoPedido = async ({
         vlFreteCotado: 0,
         dsFormaPagamentoEtiquetaCotado: null,
         dsTransportadoraIdCotado: null,
-        prazoEntregaCotado: 0,
+        nrPrazoEntregaCotado: 0,
       },
 
       Etiqueta: {
-        pedido: pedidoIdGerado,
+        dsPedido: pedidoIdGerado,
         IdEtiqueta: null,
-        codigoEnvio: null,
+        nrCodigoEnvio: null,
         dsNumRastreio: null,
         urlEtiqueta: null,
-        statusEtiqueta: "pendente",
-        servicoVinculado: String(logistica?.transportadoraId || ""),
-        valorCobrado: 0,
+        dsStatusEtiqueta: "pendente",
+        dsServicoVinculado: String(logistica?.transportadoraId || ""),
+        vlValorCobrado: 0,
         dataGeracaoEtiqueta: null,
         isEtiquetaGerada: false,
       },
+
+      dadosDevolucao: {
+        isDevolucaoSolicitado: false,
+        dsStatusDevolucao: "pendente",
+        vlCustoFreteReverso: null,
+        dataSolicitacaoDevolucao: 0,
+        dsEstadoProduto: null,
+        dsMotivo: null,
+        dsCodigoRastreioReverso: "",
+        dsTipoReembolso: "",
+        vlReembolsoEfetivado: 0,
+        dsObservacoes: "",
+        isRecebidoPeloLojista: false,
+        dataRecebidoPeloLojista: 0,
+        dsOperadorConferencia: "",
+      },
+
+      Embalagem: dadosEmbalagemIdentificada,
+
       StatusProducao: {
         dsStatusProducao: "PEDIDOS",
         isPago: false,
@@ -314,7 +419,7 @@ export const executarFluxoPedido = async ({
 👤 *CLIENTE:* ${dadosCliente.nmNomeCliente}
 📱 *WHATSAPP:* ${dadosCliente.dsTelefoneCliente}
 ${dadosCliente.dsEmailCliente ? `✉️ *E-MAIL:* ${dadosCliente.dsEmailCliente}\n` : ""}📦 *ITENS:*
-${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.title || "Produto"}`).join("\n")}
+${itensFormatados.map((i: any) => `• ${i.nrQuantidadeProduto}x ${i.dsNomeProduto}${i.dsVariacaoProduto ? ` (${i.dsVariacaoProduto})` : ""}`).join("\n")}
 
 💰 *TOTAL:* R$ ${totalGeralFinal.toFixed(2).replace(".", ",")}
 Acesse seu painel para processar este pedido!`;
@@ -340,7 +445,7 @@ Acesse seu painel para processar este pedido!`;
       let msgCliente = `*Olá, ${dadosCliente.nmNomeCliente}!* Seu pedido *#${numPedidoSequencial}* foi realizado com sucesso em *${nomeLojaExibicao}*! 🎉
 
 📦 *RESUMO DO PEDIDO:*
-${safeCart.map((i: any) => `• ${i.qty || 1}x ${i.dsNomeProduto || i.nome || i.title || "Produto"} - R$ ${(Number(i.preco || i.price || 0) * Number(i.qty || 1)).toFixed(2).replace(".", ",")}`).join("\n")}
+${itensFormatados.map((i: any) => `• ${i.nrQuantidadeProduto}x ${i.dsNomeProduto}${i.dsVariacaoProduto ? ` (${i.dsVariacaoProduto})` : ""} - R$ ${(i.vlPrecoProduto * i.nrQuantidadeProduto).toFixed(2).replace(".", ",")}`).join("\n")}
 
 💰 *TOTAL DO PEDIDO:* R$ ${totalGeralFinal.toFixed(2).replace(".", ",")}`;
 

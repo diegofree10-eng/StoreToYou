@@ -2,14 +2,13 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Pedido } from "@/types/pedido"; // Importe seu tipo Pedido se necessário
+import { Pedido } from "@/types/pedido";
 
 export interface TabVendasProps {
   pedidos: any[];
   formatarDataExibicao: (data: any) => string;
   formatarMoeda: (valor: any) => string;
-  // Alterado para receber a função que estorna/exclui ou faz a devolução com estorno
-  alternarDevolucao: (pedido: Pedido) => void; // Agora passa o objeto pedido inteiro
+  alternarDevolucao: (pedido: Pedido) => void;
   pedidoExpandido: string | null;
   setPedidoExpandido: React.Dispatch<React.SetStateAction<string | null>>;
   LinhaPedido: React.ComponentType<any>;
@@ -44,15 +43,31 @@ export const TabVendas = ({
 
   const [paginaAtual, setPaginaAtual] = useState(1);
 
+  // 🌟 Filtro flexível que valida o status "Concluído" e garante que o pedido seja mapeado com ID correto
+  const pedidosConcluidos = useMemo(() => {
+    if (!Array.isArray(pedidos)) return [];
+    
+    return pedidos
+      .map(p => ({
+        ...p,
+        // Normaliza o ID pegando p.id, p.dsPedido ou gerando fallback
+        id: p.id || p.dsPedido || p.nrIdpedido || Math.random().toString()
+      }))
+      .filter(p => {
+        const status = String(p.dsStatusPedido || p.statusPedido || "").trim().toLowerCase();
+        return status === "concluído" || status === "concluido" || status === "finalizado" || status === "entregue";
+      });
+  }, [pedidos]);
+
   useEffect(() => {
     setPaginaAtual(1);
-  }, [pedidos, itensPorPagina]);
+  }, [pedidosConcluidos, itensPorPagina]);
 
-  const totalPaginas = Math.ceil(pedidos.length / itensPorPagina);
+  const totalPaginas = Math.ceil(pedidosConcluidos.length / itensPorPagina);
   const pedidosPaginados = useMemo(() => {
     const inicio = (paginaAtual - 1) * itensPorPagina;
-    return pedidos.slice(inicio, inicio + itensPorPagina);
-  }, [pedidos, paginaAtual, itensPorPagina]);
+    return pedidosConcluidos.slice(inicio, inicio + itensPorPagina);
+  }, [pedidosConcluidos, paginaAtual, itensPorPagina]);
 
   return (
     <>
@@ -68,23 +83,27 @@ export const TabVendas = ({
         </thead>
         <tbody>
           {pedidosPaginados.length > 0 ? (
-            pedidosPaginados.map(p => (
-              <LinhaPedido
-                key={p.id}
-                pedido={p}
-                dataFormatada={formatarDataExibicao(p.data)}
-                expandido={pedidoExpandido === p.id}
-                onExpandir={(id: string) => setPedidoExpandido(pedidoExpandido === id ? null : id)}
-                // Passando o pedido inteiro para a função de devolução/estorno usar os itens
-                onDevolver={() => alternarDevolucao(p)}
-                theme={theme}
-                isModoNoturno={isModoNoturno}
-              />
-            ))
+            pedidosPaginados.map(p => {
+              // Pega a data priorizando timestamp, depois data, ou string atual
+              const dataBruta = p.timestamp || p.data || new Date().toISOString();
+              
+              return (
+                <LinhaPedido
+                  key={p.id}
+                  pedido={p}
+                  dataFormatada={formatarDataExibicao(dataBruta)}
+                  expandido={pedidoExpandido === p.id}
+                  onExpandir={(id: string) => setPedidoExpandido(pedidoExpandido === id ? null : id)}
+                  onDevolver={() => alternarDevolucao(p)}
+                  theme={theme}
+                  isModoNoturno={isModoNoturno}
+                />
+              );
+            })
           ) : (
             <tr>
               <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: theme.textSec }}>
-                Nenhum pedido encontrado com estes filtros.
+                Nenhum pedido concluído encontrado.
               </td>
             </tr>
           )}

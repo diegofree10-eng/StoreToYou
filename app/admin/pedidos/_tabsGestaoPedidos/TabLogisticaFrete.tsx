@@ -1,3 +1,4 @@
+// components/_tabsGestaoPedidos/TabLogisticaFrete.tsx
 'use client';
 import React, { useState, useMemo } from 'react';
 import { Pedido } from '@/types/pedido';
@@ -66,7 +67,7 @@ export default function TabLogisticaFrete({
 
     const gerarEtiquetasEmLote = async () => {
         const aptos = pedidos.filter(p => {
-            const idTransp = String(p.financeiro?.dsTransportadoraId || "");
+            const idTransp = String((p.financeiro as any)?.dsTransportadoraId || "");
             return selecionados.includes(p.id) && idTransp && idTransp !== "frete_gratis_ativado" && !p.etiquetaGerada;
         });
 
@@ -75,7 +76,7 @@ export default function TabLogisticaFrete({
         setModalProgresso({
             aberto: true,
             titulo: "Gerando etiquetas em lote...",
-            itens: aptos.map(p => ({ id: p.id, numero: String(p.numeroPedido || p.id.slice(-4)), status: 'processando' }))
+            itens: aptos.map(p => ({ id: p.id, numero: String((p as any).numeroPedido || p.numero || p.id.slice(-4)), status: 'processando' }))
         });
 
         setProcessandoMassa(true);
@@ -168,11 +169,18 @@ export default function TabLogisticaFrete({
 
                     {/* Lista de Pedidos em Linhas Estruturadas */}
                     {pedidosPendentes.map(p => {
-                        const idTransp = String(p.financeiro?.dsTransportadoraId || "");
+                        const idTransp = String((p.financeiro as any)?.dsTransportadoraId || "");
                         const cotado = idTransp.length > 0 && idTransp !== "frete_gratis_ativado";
-                        const nomeCliente = typeof p.cliente === 'object' ? (p.cliente?.nmNomeCliente || p.cliente?.nome || "Cliente") : (p.cliente || "Cliente");
-                        const numPedidoFormatado = String(p.numeroPedido || p.numero || p.id?.slice(-4) || "").padStart(5, '0');
-                        const enderecoFormatado = [p.endereco?.dsRuaCliente || p.endereco?.rua, p.endereco?.dsNumeroCliente || p.endereco?.numero, p.endereco?.dsCidadeCliente || p.endereco?.cidade].filter(Boolean).join(", ");
+                        const clienteObj = (p as any).dsCliente || (typeof p.cliente === 'object' && p.cliente !== null ? p.cliente : {});
+                        const nomeCliente = typeof clienteObj === 'object' ? ((clienteObj as any)?.nmNomeCliente || (clienteObj as any)?.nome || (clienteObj as any)?.dsNomeCliente || "Cliente") : (p.cliente || "Cliente");
+                        const numPedidoFormatado = String((p as any).numeroPedido || p.numero || p.id?.slice(-4) || "").padStart(5, '0');
+                        
+                        const enderecoObj = (p as any).dsEndereco || p.endereco || (p as any).cliente?.endereco || {};
+                        const enderecoFormatado = [
+                            (enderecoObj as any)?.dsRuaCliente || (enderecoObj as any)?.rua, 
+                            (enderecoObj as any)?.dsNumeroCliente || (enderecoObj as any)?.numero, 
+                            (enderecoObj as any)?.dsCidadeCliente || (enderecoObj as any)?.cidade
+                        ].filter(Boolean).join(", ");
 
                         return (
                             <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '40px 100px 1fr 1fr 150px 120px', gap: '15px', padding: '14px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
@@ -223,14 +231,14 @@ export default function TabLogisticaFrete({
                                 {/* Coluna 5: Status de Logística */}
                                 <div>
                                     <span style={{ fontSize: '11px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '6px', backgroundColor: cotado ? '#ecfdf5' : '#fffbeb', color: cotado ? '#059669' : '#d97706', border: `1px solid ${cotado ? '#a7f3d0' : '#fde68a'}`, display: 'inline-block' }}>
-                                        {cotado ? `Pronta: ${p.financeiro?.metodo}` : '⚠️ Sem cotação'}
+                                        {cotado ? `Pronta: ${(p.financeiro as any)?.metodo}` : '⚠️ Sem cotação'}
                                     </span>
                                 </div>
 
                                 {/* Coluna 6: Total e Data */}
                                 <div style={{ textAlign: 'right' }}>
                                     <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a' }}>
-                                        R$ {Number(p.financeiro?.vlTotal || 0).toFixed(2).replace('.', ',')}
+                                        R$ {Number((p.financeiro as any)?.vlTotal || (p.financeiro as any)?.total || (p as any).total || 0).toFixed(2).replace('.', ',')}
                                     </div>
                                     <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
                                         {formatarData(p.data || (typeof p.cliente === 'object' ? (p.cliente as any)?.data : ""))}
@@ -245,5 +253,3 @@ export default function TabLogisticaFrete({
         </div>
     );
 }
-
-// Focada em geração em massa de etiquetas e pagamento de etiquetas pendentes.

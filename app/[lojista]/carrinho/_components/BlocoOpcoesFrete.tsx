@@ -1,3 +1,4 @@
+// app/[lojista]/carrinho/_components/BlocoOpcoesFrete.tsx
 "use client";
 
 interface BlocoOpcoesFreteProps {
@@ -104,8 +105,9 @@ export default function BlocoOpcoesFrete({
                   }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden', paddingRight: '8px', flex: 1 }}>
+                    {/* ✨ Leitura unificada para o novo padrão de nomes do frete/serviço */}
                     <span style={{ fontSize: '13px', fontWeight: '700', color: estaSelecionado ? '#ffffff' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {f.name}
+                      {f.dsNomeServico || f.name || f.dsNome || ""}
                     </span>
                     {textoPrazo && (
                       <span style={{ fontSize: '11px', color: estaSelecionado ? 'rgba(255,255,255,0.85)' : '#64748b', marginTop: '3px', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

@@ -38,10 +38,17 @@ export default function CarrinhoIdentidadeVisual() {
     const lojistaSlug = (params?.lojista as string) || (params?.slug as string) || "";
     const safeCart = useMemo(() => Array.isArray(cart) ? cart : [], [cart]);
 
-    const isItemDigital = useCallback((item: any) =>
-        item.precisaFrete === false &&
-        item.envioTransportadora === false &&
-        item.permiteRetirada === false, []);
+    // 📦 Estado para armazenar a embalagem recomendada/escolhida com estrutura aninhada da API de frete
+    const [embalagemAPI, setEmbalagemAPI] = useState<any>(null);
+
+    // ✨ Atualizado para ler o novo padrão booleano isPrecisaFreteProduto
+    const isItemDigital = useCallback((item: any) => {
+        const precisaFrete = item.isPrecisaFreteProduto ?? true;
+        const envioTransp = item.isEnvioTransportadora ?? false;
+        const retirada = item.isPermiteRetirada ?? false;
+
+        return precisaFrete === false && envioTransp === false && retirada === false;
+    }, []);
 
     // Utilizando o Hook Customizado de Lógica
     const {
@@ -78,10 +85,11 @@ export default function CarrinhoIdentidadeVisual() {
         whatsapp: lojaObj?.nrWhatssapLoja || lojaObj?.whatsapp || ""
     }), [ap, lojaObj]);
 
+    // ✨ Atualizado para ler estritamente vlPrecoProduto ou vlPrecoBasicoProduto do novo padrão
     const valorSubtotalProdutos = useMemo(() => {
         if (!Array.isArray(safeCart) || safeCart.length === 0) return 0;
         return safeCart.reduce((acc, item) => {
-            const preco = Number(item.preco || item.price || 0);
+            const preco = Number(item.preco ?? item.vlPrecoProduto ?? item.vlPrecoBasicoProduto ?? 0);
             const qtd = Number(item.qty || 1);
             return acc + (preco * qtd);
         }, 0);
@@ -137,26 +145,48 @@ export default function CarrinhoIdentidadeVisual() {
 
     const podeFinalizar = useMemo(() => {
         if (!isLojaAberta) return false;
-        const validacaoEntrega = temFrete
-            ? (
-                cliente.dsCepCliente.replace(/\D/g, "").length === 8 &&
-                endereco.dsRuaCliente.trim().length > 0 &&
-                endereco.dsNumeroCliente.trim().length > 0 &&
-                freteSel !== null
-            )
-            : true;
+        if (!safeCart || safeCart.length === 0) return false;
 
-        const validacaoEmailDigital = temItemDigitalNoCarrinho ? (cliente.dsEmailCliente && cliente.dsEmailCliente.includes("@")) : true;
+        const nomeOk = cliente.nmNomeCliente && cliente.nmNomeCliente.trim().length > 3;
+        const cpfOk = cliente.dsCpfCliente && validarCPFReal(cliente.dsCpfCliente);
+        const telOk = cliente.dsTelefoneCliente && cliente.dsTelefoneCliente.replace(/\D/g, "").length >= 10;
+        const emailOk = temItemDigitalNoCarrinho ? (cliente.dsEmailCliente && cliente.dsEmailCliente.includes("@")) : true;
 
-        const resultado = cliente.nmNomeCliente.trim().length > 3 &&
-            validarCPFReal(cliente.dsCpfCliente) &&
-            cliente.dsTelefoneCliente.replace(/\D/g, "").length >= 10 &&
-            validacaoEntrega && // Corrigido erro de ReferenceError
-            validacaoEmailDigital &&
-            safeCart.length > 0;
+        if (!nomeOk || !cpfOk || !telOk || !emailOk) return false;
 
-        return !!resultado;
-    }, [cliente, endereco, freteSel, safeCart, isLojaAberta, temFrete, temItemDigitalNoCarrinho]);
+        if (temFrete) {
+            const cepOk = cliente.dsCepCliente && cliente.dsCepCliente.replace(/\D/g, "").length === 8;
+            const ruaOk = endereco.dsRuaCliente && endereco.dsRuaCliente.trim().length > 0;
+            const numOk = endereco.dsNumeroCliente && endereco.dsNumeroCliente.trim().length > 0;
+            const freteOk = freteSel !== null && freteSel !== undefined;
+
+            if (!cepOk || !ruaOk || !numOk || !freteOk) return false;
+        }
+
+        for (let i = 0; i < safeCart.length; i++) {
+            const item = safeCart[i];
+            const requisitosDoItem = item.dsRequisitosProduto || requisitosDoBanco[item.id] || [];
+
+            if (Array.isArray(requisitosDoItem) && requisitosDoItem.length > 0) {
+                const chaveUnica = `${item.cartItemKey || item.cartItemId || item.id || 'prod'}_${i}`;
+                const respostasItem = personalizacoes[chaveUnica] || personalizacoes[item.cartItemKey] || personalizacoes[item.id] || {};
+
+                for (const req of requisitosDoItem) {
+                    if (req.obrigatorio === true) {
+                        const campoId = String(req.id || "");
+                        const labelCampo = String(req.label || req.nome || "").trim();
+                        const valorPreenchido = respostasItem[campoId] || respostasItem[labelCampo] || "";
+
+                        if (!valorPreenchido || String(valorPreenchido).trim() === "") {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        return true;
+    }, [cliente, endereco, freteSel, safeCart, isLojaAberta, temFrete, temItemDigitalNoCarrinho, validarCPFReal, requisitosDoBanco, personalizacoes]);
 
     useEffect(() => {
         async function carregarDadosLojista() {
@@ -189,8 +219,8 @@ export default function CarrinhoIdentidadeVisual() {
                     if (item.id && !novosRequisitos[item.id]) {
                         const produtoRef = doc(db, "lojistas", lojistaId!, "produtos", item.id);
                         const snap = await getDoc(produtoRef);
-                        if (snap.exists() && snap.data().requisitos) {
-                            novosRequisitos[item.id] = snap.data().requisitos;
+                        if (snap.exists() && snap.data().dsRequisitosProduto) {
+                            novosRequisitos[item.id] = snap.data().dsRequisitosProduto;
                         }
                     }
                 }
@@ -271,43 +301,50 @@ export default function CarrinhoIdentidadeVisual() {
                 const rFrete = await fetch(`${window.location.origin}/api/frete/calcular`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ cepDestino: cepClienteLimpo, lojistaId, itensFiltrados: safeCart, pacote: { peso: 0.5, altura: 10, largura: 20, comprimento: 20 } })
+                    body: JSON.stringify({
+                        cepDestino: cepClienteLimpo,
+                        lojistaId,
+                        itensFiltrados: safeCart
+                    })
                 });
 
-                const listaBruta = await rFrete.json();
+                const respostaServidor = await rFrete.json();
+
+                // 📦 Captura correta da estrutura aninhada "Embalagem" enviada pela API de frete
+                if (respostaServidor?.Embalagem) {
+                    setEmbalagemAPI(respostaServidor.Embalagem);
+                }
+
+                const listaBruta = respostaServidor?.opcoesFrete || (Array.isArray(respostaServidor) ? respostaServidor : []);
                 let listaCalculada = Array.isArray(listaBruta) ? listaBruta.filter((f: any) => !f.error) : [];
 
-                if (freteGratisConfig.atingido) {
-                    // 🎯 REGRA LIMPA DE FRETE GRÁTIS: Converte tudo em no máximo 3 cards estruturados
-                    const novasOpcoes: any[] = [];
+                const novosOpcoes: any[] = [];
 
-                    // 1. Unifica as transportadoras em apenas 1 card de "Frete Grátis Promocional"
+                if (freteGratisConfig.atingido) {
                     const temTransportadora = listaCalculada.some(f => f.id !== "retirar_loja" && f.id !== "entrega_local");
                     if (temTransportadora || listaCalculada.length === 0) {
-                        novasOpcoes.push({
+                        novosOpcoes.push({
                             id: "frete_gratis_ativado",
                             name: "Frete Grátis Promocional",
                             price: 0
                         });
                     }
 
-                    // 2. Mantém o card de "Retirar na Loja" se ativo na API
                     const opRetirada = listaCalculada.find(f => f.id === "retirar_loja");
                     if (opRetirada) {
-                        novasOpcoes.push(opRetirada);
+                        novosOpcoes.push(opRetirada);
                     }
 
-                    // 3. Mantém o card de "Entrega Local (Frete Grátis)" se ativo na API
                     const opLocal = listaCalculada.find(f => f.id === "entrega_local");
                     if (opLocal) {
-                        novasOpcoes.push({
+                        novosOpcoes.push({
                             ...opLocal,
                             price: 0,
                             name: "Entrega Local (Frete Grátis)"
                         });
                     }
 
-                    setOpcoesFrete(novasOpcoes);
+                    setOpcoesFrete(novosOpcoes);
                 } else {
                     setOpcoesFrete(listaCalculada);
                 }
@@ -364,39 +401,9 @@ export default function CarrinhoIdentidadeVisual() {
         if (!config.whatsapp) { alert("O número do WhatsApp da loja não está configurado."); return; }
         if (!lojistaId) { alert("ID da loja não encontrado."); return; }
 
-        if (!cliente.nmNomeCliente || cliente.nmNomeCliente.trim().length <= 3) {
-            alert("Por favor, preencha o seu Nome completo (mínimo de 4 caracteres).");
+        if (!podeFinalizar) {
+            alert("⚠️ Atenção: Preencha todos os dados de cadastro, selecione o frete e informe os dados de personalização solicitados nos produtos do carrinho antes de finalizar.");
             return;
-        }
-        if (!cliente.dsCpfCliente || !validarCPFReal(cliente.dsCpfCliente)) {
-            alert("Por favor, preencha um CPF válido.");
-            return;
-        }
-        if (!cliente.dsTelefoneCliente || cliente.dsTelefoneCliente.replace(/\D/g, "").length < 10) {
-            alert("Por favor, preencha um WhatsApp/Telefone válido com DDD.");
-            return;
-        }
-        if (temItemDigitalNoCarrinho && (!cliente.dsEmailCliente || !cliente.dsEmailCliente.includes("@"))) {
-            alert("Por favor, preencha um E-mail válido para o recebimento do produto digital.");
-            return;
-        }
-        if (temFrete) {
-            if (cliente.dsCepCliente.replace(/\D/g, "").length !== 8) {
-                alert("Por favor, preencha um CEP de entrega válido com 8 dígitos.");
-                return;
-            }
-            if (!endereco.dsRuaCliente || endereco.dsRuaCliente.trim().length === 0) {
-                alert("Por favor, preencha a Rua do endereço de entrega.");
-                return;
-            }
-            if (!endereco.dsNumeroCliente || endereco.dsNumeroCliente.trim().length === 0) {
-                alert("Por favor, preencha o número do endereço de entrega.");
-                return;
-            }
-            if (!freteSel) {
-                alert("Por favor, selecione uma opção de frete/retirada antes de finalizar o pedido.");
-                return;
-            }
         }
 
         const confirmarEnvioComprovante = window.confirm(
@@ -438,12 +445,50 @@ export default function CarrinhoIdentidadeVisual() {
 
             const Cotacao = null;
 
-            const itensProcessados = safeCart.map(item => ({
-                ...item,
-                precisaFrete: !!item.precisaFrete,
-                foto: item.foto || item.imagem || item.url || "",
-                sku: item.sku || "SEM-SKU"
-            }));
+            const itensProcessados = safeCart.map((item, index) => {
+                const nomeLimpo = item.dsNomeProduto || item.nome || "Produto";
+                let variacaoLimpa = item.dsVariacaoProduto || item.variacao || "";
+
+                if (item.isTemVariacoesProduto === false || variacaoLimpa === nomeLimpo) {
+                    variacaoLimpa = "";
+                }
+
+                const chaveUnica = `${item.cartItemId || item.id || "prod"}_${index}`;
+                const respostasItem = personalizacoes[chaveUnica] || personalizacoes[item.cartItemKey] || item.dsRespostasPersonalizadasProduto || {};
+
+                return {
+                    ...item,
+                    nome: nomeLimpo,
+                    dsNomeProduto: nomeLimpo,
+                    dsVariacaoProduto: variacaoLimpa,
+                    dsCapaProduto: item.dsCapaProduto || item.dsFotoProduto || item.foto || "",
+                    dsFotoProduto: item.dsFotoProduto || item.dsCapaProduto || item.foto || "",
+                    dsImagensProduto: Array.isArray(item.dsImagensProduto) ? item.dsImagensProduto : [],
+                    dsCategoriaProduto: item.dsCategoriaProduto || "",
+                    dsSubcategoriaProduto: item.dsSubcategoriaProduto || "",
+                    dsDescricaoProduto: item.dsDescricaoProduto || "",
+                    idProduto: item.id || item.idProduto || "",
+                    dsSkuProduto: item.dsSkuProduto || item.sku || "SEM-SKU",
+                    dsGtinProduto: item.dsGtinProduto || item.gtin || "",
+                    dsTipoProduto: item.dsTipoProduto || "Fisico_Padrao",
+                    nrPesoProduto: Number(item.nrPesoProduto || 0.4),
+                    nrAlturaProduto: Number(item.nrAlturaProduto || 1),
+                    nrLarguraProduto: Number(item.nrLarguraProduto || 21),
+                    nrComprimentoProduto: Number(item.nrComprimentoProduto || 30),
+                    nrDiasProducaoProduto: Number(item.nrDiasProducaoProduto || 0),
+                    nrQuantidadeProduto: Number(item.qty || item.quantidade || 1),
+                    qty: Number(item.qty || item.quantidade || 1),
+                    vlPrecoProduto: Number(item.preco || item.vlPrecoProduto || 0),
+                    vlCustoUnitarioProduto: Number(item.vlCustoUnitarioProduto || 0),
+                    isPrecisaFreteProduto: !!(item.isPrecisaFreteProduto ?? true),
+                    dsRespostasPersonalizadasProduto: respostasItem,
+
+                    insumosComposicao: item.insumosComposicao || [],
+                    vlOutrosCustosProduto: item.vlOutrosCustosProduto || 0,
+                    movimentarEstoque: item.movimentarEstoque ?? true,
+                    movimentarEstoqueComposicao: item.movimentarEstoqueComposicao ?? true
+                };
+            });
 
             const lojaAtual = dadosLoja || dadosLojaContext;
             let numeroLimpo = config.whatsapp.replace(/\D/g, "");
@@ -470,7 +515,10 @@ export default function CarrinhoIdentidadeVisual() {
                 logistica,
                 Cotacao,
                 cupomDigitado,
-                payloadPixBruto
+                payloadPixBruto,
+                // 🌟 Repassando o objeto completo aninhado gerado pela API de frete
+                embalagemRecomendada: embalagemAPI,
+                embalagemDoCheckout: embalagemAPI
             });
 
         } catch (error) {
@@ -523,7 +571,6 @@ export default function CarrinhoIdentidadeVisual() {
     return (
         <div style={{ backgroundColor: config.corFundoSite, color: config.corTexto, minHeight: '100vh', fontFamily: 'sans-serif', boxSizing: 'border-box', paddingBottom: '0px' }}>
 
-            {/* COMPONENTE DE TOPO E STATUS DA LOJA */}
             <CarrinhoHeaderStatus isLojaAberta={isLojaAberta} nomeLoja={nomeLoja} logoUrl={logoUrl} slug={lojistaSlug} config={config} />
 
             <main style={{ padding: '20px 15px 10px', maxWidth: '1200px', margin: '0 auto', boxSizing: 'border-box' }}>
@@ -538,7 +585,6 @@ export default function CarrinhoIdentidadeVisual() {
 
                 <h2 style={{ color: config.corTexto, textAlign: 'center', marginBottom: 25, fontSize: '1.6rem', fontWeight: '900' }}>MEU CARRINHO</h2>
 
-                {/* GRID DOS BLOCOS DO CARRINHO */}
                 <CarrinhoLayoutGrid
                     temFrete={temFrete}
                     bloco1={
@@ -565,12 +611,11 @@ export default function CarrinhoIdentidadeVisual() {
                                 config={config}
                                 stylesInput={stylesInput}
                                 temItemDigital={safeCart.some((item: any) => {
-                                    const tipo = String(item.dsTipoProduto || item.tipoProduto || "").trim();
+                                    const tipo = String(item.dsTipoProduto || "").trim();
                                     return tipo === "digital_download" || tipo === "Digital_Personalizado";
                                 })}
                             />
 
-                            {/* 📱 BOTÃO MOBILE DE ESCOLHA DE FRETE */}
                             {temFrete && (
                                 <div className="botao-frete-mobile-container" style={{ display: 'none', width: '100%', marginTop: '15px' }}>
                                     <button
@@ -662,7 +707,6 @@ export default function CarrinhoIdentidadeVisual() {
                 />
             </main>
 
-            {/* COMPONENTE DO MODAL MOBILE DE FRETE */}
             <ModalFreteMobile
                 aberto={modalFreteMobileAberto}
                 fechar={() => setModalFreteMobileAberto(false)}
@@ -675,7 +719,7 @@ export default function CarrinhoIdentidadeVisual() {
                 isMesmaCidade={isMesmaCidade}
                 temFreteGratisCampanha={freteGratisConfig.ativo && freteGratisConfig.atingido}
             />
-            {/* RODAPÉ DA LOJA */}
+
             <footer style={{
                 backgroundColor: config.corSecundaria,
                 width: '100%',

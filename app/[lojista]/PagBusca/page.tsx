@@ -1,3 +1,4 @@
+// app/[lojista]/busca/page.tsx
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -43,18 +44,25 @@ export default function PagBusca() {
           setCategoriasState(catsSnap.docs.map(c => ({ id: c.id, ...c.data() })));
 
           const prodSnap = await getDocs(collection(db, "lojistas", docId, "produtos"));
-          const todosProdutos = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const todosProdutos = prodSnap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...data,
+              // ✨ Leitura rigorosa baseada estritamente no novo padrão de nomes do banco de dados
+              nome: data.dsNomeProduto || "",
+              capa: data.dsCapaProduto || (data.dsImagensProduto?.[0]) || "",
+              precoBasico: data.vlPrecoBasicoProduto ?? 0
+            };
+          });
 
           if (termoBusca) {
             const termoLimpo = termoBusca.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             const palavrasChave = termoLimpo.split(" ").filter(Boolean);
 
             const filtrados = todosProdutos.filter((p: any) => {
-              const nomeProd = (p.nome || p.dsNomeProduto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const nomeProd = (p.nome || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
               
-              // ✨ Nova lógica flexível: 
-              // O produto é retornado se o título contiver QUALQUER uma das palavras digitadas 
-              // (ou se contiver o termo completo digitado)
               const contemTermoCompleto = nomeProd.includes(termoLimpo);
               const contemAlgumaPalavra = palavrasChave.some(palavra => nomeProd.includes(palavra));
 
@@ -123,7 +131,7 @@ export default function PagBusca() {
                     <img src={prod.capa || "https://via.placeholder.com/400"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={prod.nome} />
                   </div>
                   <h4 style={{ fontSize: '11px', fontWeight: 'bold', color: config.corTextoCard, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nome}</h4>
-                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 6px' }}>R$ {prod.precoBasico || "0,00"}</p>
+                  <p style={{ fontSize: '13px', fontWeight: '900', color: config.corTextoCard, margin: '0 0 6px' }}>R$ {typeof prod.precoBasico === 'number' ? prod.precoBasico.toFixed(2).replace('.', ',') : (prod.precoBasico || "0,00")}</p>
                   <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corPrimaria : '#94a3b8', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
                     {isLojaAberta ? "Ver Detalhes" : "Apenas Vitrine"}
                   </button>
@@ -161,7 +169,7 @@ export default function PagBusca() {
                   <img src={prod.capa || "https://via.placeholder.com/400"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={prod.nome} />
                 </div>
                 <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: config.corTextoCard, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nome}</h4>
-                <p style={{ fontSize: '15px', fontWeight: '900', color: config.corPrimaria, margin: '0 0 10px' }}>R$ {prod.precoBasico || "0,00"}</p>
+                <p style={{ fontSize: '15px', fontWeight: '900', color: config.corPrimaria, margin: '0 0 10px' }}>R$ {typeof prod.precoBasico === 'number' ? prod.precoBasico.toFixed(2).replace('.', ',') : (prod.precoBasico || "0,00")}</p>
                 <button style={{ width: '100%', backgroundColor: isLojaAberta ? config.corPrimaria : '#94a3b8', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto' }}>
                   {isLojaAberta ? "Ver Detalhes" : "Apenas Vitrine"}
                 </button>

@@ -1,0 +1,102 @@
+// app/api/colaboradores/criar/route.ts
+import { NextResponse } from 'next/server';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+
+if (!getApps().length) {
+    let privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+    if (privateKey) {
+        privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+
+    initializeApp({
+        credential: cert({
+            projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+            privateKey: privateKey,
+        }),
+        databaseURL: `https://${process.env.FIREBASE_ADMIN_PROJECT_ID}-default-rtdb.firebaseio.com`
+    });
+}
+
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        
+        const lojistaId = body.lojistaId;
+        const email = body.email || body.emailFinal;
+        const senha = body.senha || body.nrSenhaColaborador;
+        const nome = body.nome || body.dsNomeColaborador;
+        const cargo = body.cargo || body.dsCargoColaborador;
+        const telefone = body.telefone || body.dsTelefoneColaborador;
+        const pin = body.pin || body.nrPinColaborador;
+        const permissoes = body.permissoes;
+
+        if (!lojistaId || !email || !senha || !nome) {
+            return NextResponse.json({ error: "Preencha todos os campos obrigatórios." }, { status: 400 });
+        }
+
+        const adminAuth = getAuth();
+        const adminDb = getFirestore();
+
+        let userRecord;
+        try {
+            userRecord = await adminAuth.createUser({
+                email,
+                password: senha,
+                displayName: nome,
+            });
+        } catch (authError: any) {
+            console.error("Erro no Auth Admin:", authError);
+            return NextResponse.json({ error: "Erro ao criar conta de Auth: " + authError.message }, { status: 400 });
+        }
+
+        const uid = userRecord.uid;
+
+        await adminDb.collection("usuarios").doc(uid).set({
+            email,
+            dsEmailColaborador: email,
+            dsLojaId: lojistaId,
+            lojaId: lojistaId,
+            role: "colaborador",
+            dsRole: "colaborador",
+            dsTipoConta: "colaborador",
+            dsNomeColaborador: nome,
+            dsCargoColaborador: cargo || "Caixa / Operador",
+            permissoes: permissoes || {},
+            createdAt: new Date(),
+            tsCriacaoColaborador: new Date()
+        });
+
+        const colabData = {
+            dsUidAuth: uid,
+            uid,
+            dsNomeColaborador: nome,
+            nome,
+            dsEmailColaborador: email,
+            email,
+            dsCargoColaborador: cargo || "Caixa / Operador",
+            cargo,
+            dsTelefoneColaborador: telefone || "",
+            telefone: telefone || "",
+            nrPinColaborador: pin || "0000",
+            pin: pin || "0000",
+            permissoes: permissoes || { dash: false, produtos: false, pedidos: true, pdv: true, estoque: false, config: false },
+            dsLojaId: lojistaId,
+            createdAt: new Date(),
+            tsCriacaoColaborador: new Date()
+        };
+
+        // ✨ LOG DE RASTREIO ADICIONADO AQUI
+        console.log("🔥 SALVANDO NA SUBCOLEÇÃO DA LOJA:", lojistaId, "-> Colaborador ID:", uid);
+
+        // Salva na subcoleção usando o próprio uid como ID do documento
+        await adminDb.collection("lojistas").doc(lojistaId).collection("colaboradores").doc(uid).set(colabData);
+
+        return NextResponse.json({ success: true, id: uid, uid }, { status: 200 });
+    } catch (error: any) {
+        console.error("Erro geral na API:", error);
+        return NextResponse.json({ error: error.message || "Erro interno no servidor." }, { status: 500 });
+    }
+}

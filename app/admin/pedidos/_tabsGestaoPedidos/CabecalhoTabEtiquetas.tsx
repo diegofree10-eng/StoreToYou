@@ -9,7 +9,7 @@ interface CabecalhoTabEtiquetasProps {
 export default function CabecalhoTabEtiquetas({ dadosLoja, isAutomacaoCompletaMelhorEnvio }: CabecalhoTabEtiquetasProps) {
     // Lê diretamente da memória (Zero leituras no Firebase)
     const automacaoAtiva = Boolean(
-        isAutomacaoCompletaMelhorEnvio ?? dadosLoja?.sistema?.isAutomacaoCompletaMelhorEnvio
+        isAutomacaoCompletaMelhorEnvio ?? dadosLoja?.sistema?.isAutomacaoCompletaMelhorEnvio ?? dadosLoja?.isAutomacaoCompletaMelhorEnvio
     );
 
     return (

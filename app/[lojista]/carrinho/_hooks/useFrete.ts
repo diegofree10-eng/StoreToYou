@@ -8,8 +8,8 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
     setLoading(true);
     setErro(null);
 
-    // Lendo dsCep (novo padrão) e mantendo os fallbacks antigos
-    const cep = pedido.endereco?.dsCep || pedido.endereco?.cep || pedido.cliente?.cep || "";
+    // ✨ Lendo estritamente o novo padrão dsCepCliente ou dsCep do endereço
+    const cep = pedido.endereco?.dsCepCliente || pedido.endereco?.dsCep || "";
     
     if (!cep || cep.replace(/\D/g, "").length < 8) {
       setLoading(false);
@@ -18,11 +18,25 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
 
     try {
       const cepLimpo = cep.replace(/\D/g, "");
+
+      // ✨ Calculando o peso real dos itens usando o novo padrão nrPesoProduto
+      const itensCarrinho = pedido.itens || pedido.safeCart || [];
+      const pesoTotalCarrinho = itensCarrinho.reduce((acc: number, item: any) => {
+        const pesoItem = Number(item.nrPesoProduto ?? 0.2);
+        const qtdItem = Number(item.qty ?? 1);
+        return acc + (pesoItem * qtdItem);
+      }, 0);
+
       const payload = {
         lojistaId,
         cepDestino: cepLimpo,
-        itensFiltrados: pedido.itens || [],
-        pacote: { largura: 20, altura: 10, comprimento: 20, peso: 0.5 }
+        itensFiltrados: itensCarrinho,
+        pacote: { 
+          largura: 20, 
+          altura: 10, 
+          comprimento: 20, 
+          peso: pesoTotalCarrinho > 0 ? pesoTotalCarrinho : 0.5 
+        }
       };
 
       const res = await fetch("/api/frete/calcular", {
@@ -37,13 +51,13 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
       let lista: any[] = Array.isArray(resposta) ? resposta : (resposta.fretes || []);
       lista = lista.filter((f: any) => !f.error);
 
-      // Flexibilizando a leitura da cidade e CEP da loja
+      // ✨ Lendo estritamente os campos novos da loja (dsCidadeLoja e dsCepLoja)
       const lojaObj = dadosLoja?.dadosLoja || dadosLoja || {};
-      const cidadeLojaBruta = lojaObj?.dsCidadeLoja || lojaObj?.cidade || "";
-      const cepLojaBruto = lojaObj?.dsCepLoja || lojaObj?.cep || "";
+      const cidadeLojaBruta = lojaObj?.dsCidadeLoja || "";
+      const cepLojaBruto = lojaObj?.dsCepLoja || "";
 
       const cidadeLojista = String(cidadeLojaBruta).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-      const cidadeCliente = String(pedido.endereco?.cidade || pedido.endereco?.city || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const cidadeCliente = String(pedido.endereco?.dsCidadeCliente || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       
       const cepLojaLimpo = String(cepLojaBruto).replace(/\D/g, "");
       const mesmoCepLoja = cepLojaLimpo.length === 8 && cepLimpo === cepLojaLimpo;
@@ -58,7 +72,6 @@ export const useFrete = (lojistaId: string, dadosLoja: any) => {
       return lista.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
     } catch (err: any) {
       setErro(err.message || "Erro desconhecido ao cotar frete.");
-      // Retorna vazio em vez de forçar retirada gratuita por erro
       return [];
     } finally {
       setLoading(false);

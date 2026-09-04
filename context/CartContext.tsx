@@ -1,3 +1,4 @@
+// context/CartContext.tsx
 "use client";
 
 import {
@@ -7,7 +8,6 @@ import {
   useEffect,
   useMemo,
   useReducer,
-  useRef,
   useState,
 } from "react";
 import { useParams } from "next/navigation";
@@ -23,23 +23,18 @@ interface CartContextType {
   totalItens: number;
 }
 
-// 2. Crie o contexto com a tipagem
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const CART_STORAGE_VERSION = 3;
 
-const CART_STORAGE_VERSION = 2;
-const VARIACAO_PADRAO = "Padrão";
-
-// --- FUNÇÕES AUXILIARES (Mantidas iguais) ---
 function normalizeParam(value: string | string[] | undefined): string | undefined { 
   return Array.isArray(value) ? value[0] : value; 
 }
-function normalizeVariacao(variacao: string | undefined): string { 
-  return variacao || VARIACAO_PADRAO; 
-}
+
 function normalizeText(value: string | any): string { 
   return typeof value === "string" ? value.trim() : ""; 
 }
+
 function parsePreco(preco: string | number): number {
   if (typeof preco === "number") return Number.isFinite(preco) ? preco : 0;
   if (typeof preco !== "string") return 0;
@@ -47,10 +42,12 @@ function parsePreco(preco: string | number): number {
   const number = Number(cleaned);
   return Number.isFinite(number) ? number : 0;
 }
+
 function safeNumber(value: any, fallback: number = 0): number {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
+
 function normalizeAdicionais(adicionais: any[]): any[] {
   if (!Array.isArray(adicionais)) return [];
   return adicionais.map((item) => ({
@@ -60,36 +57,54 @@ function normalizeAdicionais(adicionais: any[]): any[] {
     qty: Math.max(1, safeNumber(item?.qty, 1)),
   })).filter((item) => item.id !== "" || item.nome !== "").sort((a, b) => a.id.localeCompare(b.id));
 }
+
 function buildCartItemKey(item: any): string {
   const id = String(item?.id ?? "");
-  const variacao = normalizeVariacao(item?.variacao);
+  const variacao = item?.isTemVariacoesProduto === true ? (item?.variacao || item?.dsVariacaoProduto || "") : "";
   const ads = normalizeAdicionais(item?.adicionais).map((a: any) => `${a.id}|${a.qty}`).join(",");
   return `${id}::${variacao}::${ads}`;
 }
+
 function normalizeCartItem(item: any) {
-  const nomeLimpo = typeof item?.nome === "string" ? item.nome.split("_")[0] : "Produto sem nome";
+  const nomeBruto = item?.dsNomeProduto || item?.nome || "";
+  const nomeLimpo = typeof nomeBruto === "string" && nomeBruto.trim() !== "" ? nomeBruto : "Produto sem nome";
+  
+  const precoBruto = item?.vlPrecoProduto ?? item?.vlPrecoBasicoProduto ?? item?.preco ?? 0;
+  const capaBruta = item?.dsFotoProduto || item?.dsCapaProduto || item?.capa || (item?.dsImagensProduto?.[0]) || "";
+  const skuBruto = item?.dsSkuProduto || item?.sku || "SEM-SKU";
+  const diasProdBruto = item?.nrDiasProducaoProduto ?? item?.nrDiasProducao ?? 0;
+
+  // Regra rígida: Se o produto não tem variações, a variação é estritamente vazia (""). 
+  // Se tem variações, pega exatamente o valor informado na seleção do produto.
+  const temVariacoes = item?.isTemVariacoesProduto === true || item?.isTemVariacoes === true;
+  const variacaoFinal = temVariacoes ? (item?.variacao || item?.dsVariacaoProduto || "") : "";
+
   const normalized = {
     ...item,
-    id: String(item?.id || ""),
-    sku: item.sku || item.variacaoSelecionada?.sku || "SEM-SKU",
+    id: String(item?.id || item?.idProduto || ""),
+    sku: skuBruto,
     nome: nomeLimpo,
-    preco: item?.preco ?? 0,
-    variacao: normalizeVariacao(item?.variacao),
-    qty: Math.max(1, safeNumber(item?.qty, 1)),
+    dsNomeProduto: nomeLimpo,
+    capa: capaBruta,
+    preco: parsePreco(precoBruto),
+    isTemVariacoesProduto: temVariacoes,
+    variacao: variacaoFinal,
+    dsVariacaoProduto: variacaoFinal,
+    qty: Math.max(1, safeNumber(item?.qty ?? item?.quantidade, 1)),
     adicionais: normalizeAdicionais(item?.adicionais),
     observacao: normalizeText(item?.observacao),
-    precisaFrete: item?.precisaFrete !== false,
-    envioTransportadora: !!item?.envioTransportadora,
-    permiteRetirada: !!item?.permiteRetirada,
-    peso: item?.peso ?? item?.weight ?? 0.2,
-    // ✨ Garantindo que o prazo de produção do Firebase venha integrado no item do carrinho
-    nrDiasProducao: safeNumber(item?.nrDiasProducao ?? item?.diasProducao ?? item?.dsDiasProducao, 0),
+    precisaFrete: item?.isPrecisaFreteProduto ?? item?.precisaFrete ?? true,
+    envioTransportadora: !!(item?.isEnvioTransportadora ?? item?.envioTransportadora),
+    permiteRetirada: !!(item?.isPermiteRetirada ?? item?.permiteRetirada),
+    peso: item?.nrPesoProduto ?? item?.peso ?? 0.2,
+    nrDiasProducao: safeNumber(diasProdBruto, 0),
   };
   return { ...normalized, cartItemKey: item.cartItemKey || buildCartItemKey(normalized) };
 }
+
 function validateAndMergeCart(items: any[]) { 
   if (!Array.isArray(items)) return [];
-  const map = new Map<string, any>(); // Adicionamos tipos ao Map também
+  const map = new Map<string, any>();
   for (const rawItem of items) {
     if (!rawItem) continue;
     const item = normalizeCartItem(rawItem);
@@ -104,7 +119,6 @@ function validateAndMergeCart(items: any[]) {
   return Array.from(map.values());
 }
 
-// --- REDUCER ---
 function cartReducer(state: any, action: any) {
   switch (action.type) {
     case "LOAD_CART": return { ...state, cart: validateAndMergeCart(action.payload) };
@@ -127,17 +141,17 @@ function cartReducer(state: any, action: any) {
     default: return state;
   }
 }
-// --- PROVIDER ---
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const [state, dispatch] = useReducer(cartReducer, { cart: [] });
-  const [isMounted, setIsMounted] = useState(false); // Flag para garantir que o cliente carregou
+  const [isMounted, setIsMounted] = useState(false);
 
   const lojistaSlug = normalizeParam(params?.lojista) || normalizeParam(params?.slug);
   const storageKey = `carrinho_${lojistaSlug || "geral"}`;
 
   useEffect(() => {
-    setIsMounted(true); // O componente montou no navegador
+    setIsMounted(true);
     const raw = localStorage.getItem(storageKey);
     if (raw) {
       try {
@@ -149,7 +163,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [storageKey]);
 
   useEffect(() => {
-    if (!isMounted) return; // Não salvar no localStorage antes de montar
+    if (!isMounted) return;
     localStorage.setItem(storageKey, JSON.stringify({
       version: CART_STORAGE_VERSION,
       items: state.cart,
@@ -158,23 +172,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [state.cart, storageKey, isMounted]);
 
   const addToCart = useCallback((product: any) => dispatch({ type: "ADD_ITEM", payload: product }), []);
-  
   const removeFromCart = useCallback((cartItemKey: string) => dispatch({ type: "REMOVE_ITEM", payload: { cartItemKey } }), []);
-  
   const setItemQty = useCallback((cartItemKey: string, qty: number) => dispatch({ type: "SET_ITEM_QTY", payload: { cartItemKey, qty } }), []);
-  
   const clearCart = useCallback(() => dispatch({ type: "CLEAR_CART" }), []);
 
   const value = useMemo(() => ({
-  cart: state.cart,
-  addToCart,
-  removeFromCart,
-  setItemQty,
-  clearCart,
-  // Tipamos o acumulador 's' como number e o item 'i' como any
-  subtotal: state.cart.reduce((s: number, i: any) => s + (parsePreco(i.preco) * i.qty), 0),
-  totalItens: state.cart.reduce((s: number, i: any) => s + i.qty, 0)
-}), [state.cart, addToCart, removeFromCart, setItemQty, clearCart]);
+    cart: state.cart,
+    addToCart,
+    removeFromCart,
+    setItemQty,
+    clearCart,
+    subtotal: state.cart.reduce((s: number, i: any) => s + (parsePreco(i.preco) * i.qty), 0),
+    totalItens: state.cart.reduce((s: number, i: any) => s + i.qty, 0)
+  }), [state.cart, addToCart, removeFromCart, setItemQty, clearCart]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

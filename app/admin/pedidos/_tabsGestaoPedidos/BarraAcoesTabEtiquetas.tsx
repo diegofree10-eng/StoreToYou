@@ -26,6 +26,11 @@ interface BarraAcoesProps {
     onConcluirEntregaLocal?: () => void;
     onConcluirDigital?: () => void;
     onConfirmarRecebimento?: () => void;
+    // 📦 Novas props para gerenciar as embalagens na aba de Produção
+    listaEmbalagens?: any[];
+    embalagemEscolhida?: string;
+    setEmbalagemEscolhida?: (id: string) => void;
+    onSalvarEmbalagemProducao?: () => void;
 }
 
 export default function BarraAcoesTabEtiquetas({
@@ -45,7 +50,11 @@ export default function BarraAcoesTabEtiquetas({
     onConcluirRetirada,
     onConcluirEntregaLocal,
     onConcluirDigital,
-    onConfirmarRecebimento
+    onConfirmarRecebimento,
+    listaEmbalagens = [],
+    embalagemEscolhida = "",
+    setEmbalagemEscolhida,
+    onSalvarEmbalagemProducao
 }: BarraAcoesProps) {
     // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
     const { theme } = useTheme();
@@ -59,6 +68,10 @@ export default function BarraAcoesTabEtiquetas({
 
     // Estado para controlar o modal central de erro do Melhor Envio
     const [erroModalMelhorEnvio, setErroModalMelhorEnvio] = useState<string | null>(null);
+
+    // 🌟 Estados para o Modal de Quitação Detalhado
+    const [modalQuitacaoAberto, setModalQuitacaoAberto] = useState(false);
+    const [formaPgtoRestante, setFormaPgtoRestante] = useState<string>("PIX");
 
     // 🛡️ Se estiver na aba de concluídos, bloqueia completamente seleções e ações em massa
     const isAbaConcluidos = abaAtiva === 'concluidos';
@@ -74,6 +87,26 @@ export default function BarraAcoesTabEtiquetas({
     const pedidosSelecionadosObj = selecionadosNestaAba
         .map(id => localPedidos.find(p => p.id === id))
         .filter(Boolean);
+
+    // 🧮 Cálculos financeiros consolidados para o modal de quitação
+    const resumoFinanceiroSelecionados = pedidosSelecionadosObj.reduce((acc, p) => {
+        const fin = p?.financeiro || {};
+        const subtotal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
+        const frete = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
+        const desconto = Number(fin.vlDesconto ?? fin.desconto ?? 0);
+        const total = Number(fin.vlTotal ?? fin.total ?? (subtotal + frete - desconto));
+        const entrada = Number(fin.vlEntrada ?? 0);
+        const restante = Number(fin.vlRestante ?? Math.max(0, total - entrada));
+
+        acc.totalGeral += total;
+        acc.entradaGeral += entrada;
+        acc.restanteGeral += restante;
+        return acc;
+    }, { totalGeral: 0, entradaGeral: 0, restanteGeral: 0 });
+
+    const infoPedidoModal = selecionadosCount === 1 && pedidosSelecionadosObj.length === 1
+        ? `Pedido #${pedidosSelecionadosObj[0]?.numeroPedido || pedidosSelecionadosObj[0]?.id.slice(-4)} de ${pedidosSelecionadosObj[0]?.cliente?.nome || pedidosSelecionadosObj[0]?.nomeCliente || 'Cliente'}`
+        : `${selecionadosCount} pedidos selecionados`;
 
     const pedidosPendentesDeEtiqueta = pedidosSelecionadosObj.filter(p => {
         const idEtq = p?.Etiqueta?.IdEtiqueta;
@@ -96,12 +129,79 @@ export default function BarraAcoesTabEtiquetas({
     });
     const qtdComErro = pedidosComErroPagamento.length;
 
+    // 🔍 Verifica se há saldo pendente nos selecionados para exibir o modal de quitação
+    const possuiSaldoPendenteSelecionados = pedidosSelecionadosObj.some(p => {
+        const vlRestante = Number(p?.financeiro?.vlRestante || 0);
+        const statusPgto = p?.financeiro?.statusPagamento;
+        return vlRestante > 0 && statusPgto !== 'pago';
+    });
+
     const toggleSelecionarTodos = () => {
         if (isAbaConcluidos) return;
         if (todosVisiveisSelecionados) {
             setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
         } else {
             setSelecionados(prev => Array.from(new Set([...prev, ...idsVisiveisDaAba])));
+        }
+    };
+
+    // 🌟 Executar Quitação e Conclusão via Barra de Ações (Atualizando dsStatusPedido para "Concluído")
+    const executarQuitacaoEmMassa = async () => {
+        if (selecionadosCount === 0) return;
+        if (!db || !lojistaIdApp) return;
+
+        setCarregandoAcao(true);
+        try {
+            for (const pedidoId of selecionadosNestaAba) {
+                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
+                const pedidoObj = localPedidos.find(p => p.id === pedidoId);
+                const fin = pedidoObj?.financeiro || {};
+                const subtotalVal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
+                const freteVal = Number(fin.vlFrete ?? fin.valorFrete ?? 0);
+                const descontoVal = Number(fin.vlDesconto ?? fin.desconto ?? 0);
+                const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
+
+                await updateDoc(pedidoRef, {
+                    dsStatusPedido: "Concluído", // 🌟 Atualizando a variável existente
+                    enviado: true,
+                    "StatusProducao.dsStatusProducao": "Concluído",
+                    "StatusProducao.isPago": true,
+                    "financeiro.vlEntrada": totalVal,
+                    "financeiro.vlRestante": 0,
+                    "financeiro.statusPagamento": "pago",
+                    "financeiro.formaPagamentoQuitacao": formaPgtoRestante,
+                    pago: true
+                });
+            }
+
+            setLocalPedidos(prev => prev.map(p => {
+                if (selecionadosNestaAba.includes(p.id)) {
+                    const fin = p.financeiro || {};
+                    const totalVal = Number(fin.vlTotal ?? fin.total ?? 0);
+                    return {
+                        ...p,
+                        dsStatusPedido: "Concluído", // 🌟 Atualizado localmente
+                        enviado: true,
+                        pago: true,
+                        financeiro: {
+                            ...fin,
+                            vlEntrada: totalVal,
+                            vlRestante: 0,
+                            statusPagamento: 'pago',
+                            formaPagamentoQuitacao: formaPgtoRestante
+                        }
+                    };
+                }
+                return p;
+            }));
+
+            setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
+            setModalQuitacaoAberto(false);
+            alert("✅ Pedidos quitados e concluídos com sucesso!");
+        } catch (e: any) {
+            alert("Erro ao quitar pedidos: " + e.message);
+        } finally {
+            setCarregandoAcao(false);
         }
     };
 
@@ -540,7 +640,7 @@ export default function BarraAcoesTabEtiquetas({
                     });
                 }
                 setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
-                
+
                 // 🌟 Redireciona automaticamente para a aba correspondente ao novo status
                 const abaDestino = valorAcao.toLowerCase() === 'produção' ? 'producao' : valorAcao.toLowerCase();
                 setAbaAtiva(abaDestino);
@@ -620,20 +720,96 @@ export default function BarraAcoesTabEtiquetas({
                         </button>
                     )}
 
+                    {/* 📦 SELECT E BOTÃO DE EMBALAGEM EXCLUSIVOS DA ABA PRODUÇÃO */}
+                    {abaAtiva === 'producao' && temSelecionados && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            {(() => {
+                                // Pega a recomendação do primeiro pedido selecionado apenas para exibição informativa na barra
+                                const primeiroPedidoSel = pedidosSelecionadosObj[0];
+                                const embDoc = primeiroPedidoSel?.Embalagem || {};
+                                const nomeRecomendado = embDoc.recomendada?.dsModeloEmbalagemRecomendado || embDoc.dsModeloEmbalagemRecomendado || "Não calculada";
+
+                                return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', background: theme.inputBg, padding: '6px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                                        <span>📦 Sugestão:</span>
+                                        <strong style={{ color: theme.primary }}>{nomeRecomendado}</strong>
+                                    </div>
+                                );
+                            })()}
+
+                            <select
+                                value={embalagemEscolhida}
+                                onChange={(e) => setEmbalagemEscolhida && setEmbalagemEscolhida(e.target.value)}
+                                style={{
+                                    padding: '7px 12px',
+                                    borderRadius: '6px',
+                                    border: `1px solid ${theme.border}`,
+                                    fontSize: '13px',
+                                    backgroundColor: theme.inputBg,
+                                    color: theme.textMain,
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                <option value="">⚙️ Alterar Embalagem (Opcional)...</option>
+                                {listaEmbalagens.map((emb) => (
+                                    <option key={emb.id} value={emb.id}>
+                                        {emb.nome} ({emb.comprimento}x{emb.largura}x{emb.altura}cm - R$ {Number(emb.custo || 0).toFixed(2)})
+                                    </option>
+                                ))}
+                            </select>
+
+                            <button
+                                disabled={carregandoAcao || !embalagemEscolhida}
+                                onClick={onSalvarEmbalagemProducao}
+                                style={{
+                                    backgroundColor: (!embalagemEscolhida) ? '#9ca3af' : '#2563eb',
+                                    color: '#fff',
+                                    border: 'none',
+                                    padding: '7px 14px',
+                                    borderRadius: '6px',
+                                    fontWeight: 'bold',
+                                    fontSize: '13px',
+                                    cursor: (!embalagemEscolhida) ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                💾 Salvar Escolha ({selecionadosCount})
+                            </button>
+                        </div>
+                    )}
+
+                    {/* 🌟 Confirmar Retirada: Abre Modal de Quitação se houver saldo pendente */}
                     {abaAtiva === 'retirada' && temSelecionados && onConcluirRetirada && (
                         <button
                             disabled={carregandoAcao}
-                            onClick={onConcluirRetirada}
+                            onClick={() => {
+                                if (possuiSaldoPendenteSelecionados) {
+                                    setModalQuitacaoAberto(true);
+                                } else {
+                                    onConcluirRetirada();
+                                }
+                            }}
                             style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
                             ✅ Confirmar Retirada ({selecionadosCount})
                         </button>
                     )}
 
+                    {/* 🌟 Confirmar Entrega Local: Abre Modal de Quitação se houver saldo pendente */}
                     {abaAtiva === 'entregalocal' && temSelecionados && onConcluirEntregaLocal && (
                         <button
                             disabled={carregandoAcao}
-                            onClick={onConcluirEntregaLocal}
+                            onClick={() => {
+                                if (possuiSaldoPendenteSelecionados) {
+                                    setModalQuitacaoAberto(true);
+                                } else {
+                                    onConcluirEntregaLocal();
+                                }
+                            }}
                             style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
                             ✅ Confirmar Entrega Local ({selecionadosCount})
@@ -713,6 +889,65 @@ export default function BarraAcoesTabEtiquetas({
                     )}
                 </div>
             </div>
+
+            {/* 🌟 Modal de Quitação de Saldo Restante Detalhado */}
+            {modalQuitacaoAberto && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
+                    <div style={{ background: theme.bgCard, color: theme.textMain, padding: '22px', borderRadius: '12px', width: '420px', maxWidth: '90%', border: `1px solid ${theme.border}`, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                        <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', color: theme.textMain, fontWeight: 'bold' }}>Quitar Saldo Restante</h3>
+                        <p style={{ fontSize: '12px', color: theme.textSec, margin: '0 0 16px 0' }}>
+                            {infoPedidoModal}
+                        </p>
+
+                        <div style={{ background: theme.inputBg, padding: '12px 14px', borderRadius: '8px', marginBottom: '16px', border: `1px solid ${theme.border}` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: theme.textMain }}>
+                                <span>Total do Pedido:</span>
+                                <span style={{ fontWeight: 'bold' }}>R$ {resumoFinanceiroSelecionados.totalGeral.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: '#10b981' }}>
+                                <span>Já Pago (Entrada):</span>
+                                <span style={{ fontWeight: 'bold' }}>R$ {resumoFinanceiroSelecionados.entradaGeral.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold', borderTop: `1px solid ${theme.border}`, paddingTop: '8px', marginTop: '4px', color: '#ef4444' }}>
+                                <span>Valor Restante:</span>
+                                <span>R$ {resumoFinanceiroSelecionados.restanteGeral.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '6px' }}>Forma de Recebimento do Restante:</label>
+                            <select
+                                value={formaPgtoRestante}
+                                onChange={(e) => setFormaPgtoRestante(e.target.value)}
+                                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}`, fontSize: '13px', outline: 'none', fontWeight: '600', cursor: 'pointer' }}
+                            >
+                                <option value="PIX">PIX</option>
+                                <option value="DINHEIRO">Dinheiro</option>
+                                <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                                <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                            </select>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                type="button"
+                                onClick={() => setModalQuitacaoAberto(false)}
+                                style={{ flex: 1, padding: '10px', background: theme.border, border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', color: theme.textMain, fontSize: '13px' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={carregandoAcao}
+                                onClick={executarQuitacaoEmMassa}
+                                style={{ flex: 1, padding: '10px', background: '#10b981', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px' }}
+                            >
+                                {carregandoAcao ? "Processando..." : "Confirmar e Concluir"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <ModalProcessamento
                 aberto={modalProgresso.aberto}
