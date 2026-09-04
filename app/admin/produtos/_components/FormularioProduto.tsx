@@ -17,8 +17,8 @@ interface FormularioProdutoProps {
     setNome: (v: string) => void;
     sku: string;
     setSku: (v: string) => void;
-    ean?: string; // ✨ Prop para o código de barras
-    setEan?: (v: string) => void; // ✨ Setter para o código de barras
+    ean?: string;
+    setEan?: (v: string) => void;
     setIsModalSKUOpen: (v: boolean) => void;
     categoria: string;
     setCategoria: (v: string) => void;
@@ -32,6 +32,8 @@ interface FormularioProdutoProps {
     setPrecoBasico: (v: string) => void;
     custoUnitario: string;
     setCustoUnitario: (v: string) => void;
+    outrosCustos?: string; // ✨ Prop para outros custos
+    setOutrosCustos?: (v: string) => void; // ✨ Setter para outros custos
     estoque: string;
     setEstoque: (v: string) => void;
     estoqueMinimo?: string;
@@ -75,7 +77,7 @@ interface FormularioProdutoProps {
 export default function FormularioProduto({
     nome, setNome,
     sku, setSku,
-    ean = "", setEan = () => { }, // ✨ Recebendo estado e setter do EAN/GTIN
+    ean = "", setEan = () => { },
     setIsModalSKUOpen,
     categoria, setCategoria,
     subcategoria, setSubcategoria,
@@ -84,6 +86,8 @@ export default function FormularioProduto({
     descricao, setShowDescModal,
     precoBasico, setPrecoBasico,
     custoUnitario, setCustoUnitario,
+    outrosCustos = "", // ✨ Recebendo corretamente do componente pai
+    setOutrosCustos = () => { }, // ✨ Recebendo setter corretamente do componente pai
     estoque, setEstoque,
     estoqueMinimo = "", setEstoqueMinimo = () => { },
     temVariaveisComPreco,
@@ -120,7 +124,6 @@ export default function FormularioProduto({
     const [isModalInsumosOpen, setIsModalInsumosOpen] = useState(false);
 
     const totalImagensCount = imagens.length + files.length;
-    // ✨ Se tem variações com preço, os insumos pertencem à grade de variações e não devem ser exibidos/gerenciados no escopo global
     const bloqueadoPorGradeDeInsumos = temVariaveisComPreco;
 
     const removerImagemUnificada = (indexGlobal: number) => {
@@ -367,7 +370,7 @@ export default function FormularioProduto({
                 <h3 style={{ ...styles.sideTitle, color: theme.textMain }}>📦 Informações Básicas do Produto</h3>
 
                 <input
-                    id="input-nome-produto" // ✨ ID essencial para o salto automático do foco após bipar
+                    id="input-nome-produto"
                     style={{ ...styles.input, marginBottom: '10px', background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                     value={nome}
                     onChange={e => setNome(e.target.value)}
@@ -465,7 +468,7 @@ export default function FormularioProduto({
                 </div>
             </div>
 
-            {/* SEÇÃO DE INSUMOS DE COMPOSIÇÃO (APENAS SE NÃO HOUVER GRADE DE VARIAÇÕES) */}
+            {/* SEÇÃO DE INSUMOS DE COMPOSIÇÃO */}
             {!temVariaveisComPreco && (
                 <div style={{ background: theme.bgCard, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}`, marginBottom: '15px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -515,6 +518,10 @@ export default function FormularioProduto({
                 listaInsumos={listaInsumos}
                 insumosComposicao={insumosComposicao}
                 setInsumosComposicao={setInsumosComposicao}
+                setCustoUnitario={setCustoUnitario}
+                outrosCustos={outrosCustos}           // ✨ Repassando corretamente
+                setOutrosCustos={setOutrosCustos}     // ✨ Repassando corretamente
+                formatInput={formatInput}
             />
 
             {/* 3. TIPO DE PRODUTO E PRAZO DE PRODUÇÃO */}
@@ -559,7 +566,6 @@ export default function FormularioProduto({
                     />
                 </div>
 
-                {/* ✨ CHECKBOXES DE MOVIMENTAÇÃO DE ESTOQUE (isMovimentarEstoque e isMovimentarEstoqueComposicao) */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: `1px solid ${theme.border}`, paddingTop: '10px', marginTop: '5px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 'bold', color: theme.textMain, cursor: 'pointer' }}>
                         <input
@@ -753,8 +759,7 @@ export default function FormularioProduto({
                     </div>
                 </div>
 
-                {/* ✨ Campo profissional para Código de Barras otimizado para Pistola/Leitor */}
-               <div style={{ opacity: temVariaveisComPreco ? 0.6 : 1 }}>
+                <div style={{ opacity: temVariaveisComPreco ? 0.6 : 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec }}>
                             Código de Barras do Fabricante (EAN / GTIN) {temVariaveisComPreco && "— Gerenciado na Grade"}
@@ -780,18 +785,16 @@ export default function FormularioProduto({
                                 const valorAtual = e.currentTarget.value.trim();
                                 if (!valorAtual) return;
 
-                                // 🛡️ Validação opcional de tamanho padrão GS1 (Caso queira ignorar alertas de tamanho, basta comentar este bloco do if)
                                 const tamanhosValidos = [8, 12, 13, 14];
                                 if (!tamanhosValidos.includes(valorAtual.length)) {
                                     const confirmar = window.confirm(`⚠️ O código digitado/bipado "${valorAtual}" possui ${valorAtual.length} dígitos (padrão comum é 8, 12, 13 ou 14). Deseja prosseguir mesmo assim?`);
                                     if (!confirmar) return;
                                 }
 
-                                // 🚀 Salto automático imediato para o input de Nome do Produto
                                 const inputNome = document.getElementById('input-nome-produto');
                                 if (inputNome) {
                                     (inputNome as HTMLInputElement).focus();
-                                    (inputNome as HTMLInputElement).select(); // Seleciona o texto se já houver algo escrito
+                                    (inputNome as HTMLInputElement).select();
                                 }
                             }
                         }}

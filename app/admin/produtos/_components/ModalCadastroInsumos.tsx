@@ -1,7 +1,7 @@
 // app/admin/produtos/_components/ModalCadastroInsumos.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { FiX, FiSearch, FiTrash2 } from "react-icons/fi";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -14,6 +14,7 @@ interface ModalCadastroInsumosProps {
     outrosCustos?: string;
     setOutrosCustos?: (v: string) => void;
     formatInput?: (value: string, setter: (v: string) => void) => void;
+    setCustoUnitario?: (v: string) => void;
 }
 
 export default function ModalCadastroInsumos({
@@ -24,7 +25,8 @@ export default function ModalCadastroInsumos({
     setInsumosComposicao,
     outrosCustos = "",
     setOutrosCustos = () => { },
-    formatInput
+    formatInput,
+    setCustoUnitario
 }: ModalCadastroInsumosProps) {
     const { theme } = useTheme();
 
@@ -43,6 +45,37 @@ export default function ModalCadastroInsumos({
             return nome.includes(termo) || marca.includes(termo);
         });
     }, [buscaInsumo, listaInsumos]);
+
+    const custoInsumosGeral = insumosComposicao.reduce((acc, item) => {
+        const custoUnit = Number(item.vlCustoUnitarioInsumo || 0);
+        const qtd = Number(item.nrQuantidadeConsumida || 0);
+        return acc + (custoUnit * qtd);
+    }, 0);
+
+    // ✨ Conversão segura e precisa do valor monetário digitado (suporta "10,00", "1.000,50", etc)
+    const valorOutrosNum = useMemo(() => {
+        if (!outrosCustos) return 0;
+        const limpo = outrosCustos.toString().replace(/\./g, "").replace(",", ".");
+        const num = parseFloat(limpo);
+        return isNaN(num) ? 0 : num;
+    }, [outrosCustos]);
+
+    const custoTotalComposicaoGeral = custoInsumosGeral + valorOutrosNum;
+
+    // ✨ Função auxiliar para atualizar o custo unitário no formulário principal (Insumos + Outros Custos)
+    const aplicarCustoNoFormularioPrincipal = () => {
+        if (setCustoUnitario) {
+            const custoFormatado = custoTotalComposicaoGeral.toFixed(2).replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+            setCustoUnitario(custoFormatado);
+        }
+    };
+
+    // ✨ Atualiza o formulário principal ao abrir, ao alterar os insumos ou ao alterar os outros custos em tempo real
+    useEffect(() => {
+        if (isOpen) {
+            aplicarCustoNoFormularioPrincipal();
+        }
+    }, [isOpen, insumosComposicao, outrosCustos]);
 
     if (!isOpen) return null;
 
@@ -70,13 +103,14 @@ export default function ModalCadastroInsumos({
         };
 
         const jaExisteIndex = insumosComposicao.findIndex((item: any) => item.id === insumoSelecionado.id);
+        let novaLista;
         if (jaExisteIndex >= 0) {
-            const copia = [...insumosComposicao];
-            copia[jaExisteIndex] = novoItem;
-            setInsumosComposicao(copia);
+            novaLista = [...insumosComposicao];
+            novaLista[jaExisteIndex] = novoItem;
         } else {
-            setInsumosComposicao([...insumosComposicao, novoItem]);
+            novaLista = [...insumosComposicao, novoItem];
         }
+        setInsumosComposicao(novaLista);
 
         setInsumoSelecionado(null);
         setQtdConsumidaTemp("");
@@ -88,15 +122,6 @@ export default function ModalCadastroInsumos({
         setInsumosComposicao(novaLista);
     };
 
-    const custoInsumosGeral = insumosComposicao.reduce((acc, item) => {
-        const custoUnit = Number(item.vlCustoUnitarioInsumo || 0);
-        const qtd = Number(item.nrQuantidadeConsumida || 0);
-        return acc + (custoUnit * qtd);
-    }, 0);
-
-    const valorOutrosNum = parseFloat(outrosCustos.toString().replace(/\./g, "").replace(",", ".")) || 0;
-    const custoTotalComposicaoGeral = custoInsumosGeral + valorOutrosNum;
-
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 6000, padding: '15px' }}>
             <div style={{ background: theme.bgCard, padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '600px', border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -105,7 +130,7 @@ export default function ModalCadastroInsumos({
                     <h3 style={{ fontSize: '16px', margin: 0, fontWeight: 800, color: theme.textMain }}>
                         📦 Gerenciar Insumos de Composição
                     </h3>
-                    <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: theme.textSec, cursor: 'pointer' }}>
+                    <button onClick={() => { aplicarCustoNoFormularioPrincipal(); onClose(); }} style={{ background: 'transparent', border: 'none', color: theme.textSec, cursor: 'pointer' }}>
                         <FiX size={20} />
                     </button>
                 </div>
@@ -245,11 +270,15 @@ export default function ModalCadastroInsumos({
                         type="text"
                         inputMode="numeric"
                         placeholder="0,00"
-                        value={outrosCustos}
+                        value={outrosCustos ?? ""}
                         onChange={(e) => {
                             const valorDigitado = e.target.value;
                             if (!valorDigitado) {
                                 setOutrosCustos("");
+                                return;
+                            }
+                            if (formatInput) {
+                                formatInput(valorDigitado, setOutrosCustos);
                                 return;
                             }
                             const apenasDigitos = valorDigitado.replace(/\D/g, "");
@@ -261,6 +290,7 @@ export default function ModalCadastroInsumos({
                             const formatado = numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
                             setOutrosCustos(formatado);
                         }}
+                        onBlur={() => aplicarCustoNoFormularioPrincipal()}
                         style={{ padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: '13px', outline: 'none' }}
                     />
                 </div>
@@ -274,7 +304,14 @@ export default function ModalCadastroInsumos({
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px', borderTop: `1px solid ${theme.border}`, paddingTop: '12px' }}>
-                    <button type="button" onClick={onClose} style={{ background: theme.primary, color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    <button 
+                        type="button" 
+                        onClick={() => { 
+                            aplicarCustoNoFormularioPrincipal(); 
+                            onClose(); 
+                        }} 
+                        style={{ background: theme.primary, color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
                         Concluir e Fechar
                     </button>
                 </div>

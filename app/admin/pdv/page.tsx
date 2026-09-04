@@ -129,7 +129,6 @@ export default function PaginaPDV() {
 
             const listaProdutos = snapshot.docs.map(d => {
               const data = d.data();
-              // Lendo estritamente o novo padrão com sufixo Produto
               const precoBruto = data.vlPrecoBasicoProduto ?? 0;
               const precoFormatado = typeof precoBruto === 'string'
                 ? Number(precoBruto.replace(',', '.'))
@@ -491,12 +490,12 @@ export default function PaginaPDV() {
 
   return (
     <div style={{
-      minHeight: "calc(98vh - 40px)",
+      width: "100%",
       display: "flex",
       flexDirection: "column",
       fontFamily: "sans-serif",
       boxSizing: "border-box",
-      padding: "0px 10px",
+      padding: "0px 10px 20px 10px",
       background: theme.bgApp,
       color: theme.textMain,
       transition: "background 0.3s, color 0.3s"

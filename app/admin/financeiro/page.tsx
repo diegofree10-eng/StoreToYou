@@ -13,12 +13,14 @@ import { FiShoppingCart, FiCreditCard } from "react-icons/fi";
 export default function GestaoFinanceiroPage() {
     const { theme } = useTheme();
     const [uid, setUid] = useState<string | null>(null);
+    const [carregandoAuth, setCarregandoAuth] = useState(true);
     const [abaAtiva, setAbaAtiva] = useState<"compras" | "pagamentos">("compras");
 
     useEffect(() => {
         const unsubAuth = onAuthStateChanged(auth, async (user) => {
             if (!user) {
                 setUid(null);
+                setCarregandoAuth(false);
                 return;
             }
             try {
@@ -32,15 +34,25 @@ export default function GestaoFinanceiroPage() {
             } catch (error) {
                 console.error("Erro ao autenticar usuário:", error);
                 setUid(user.uid);
+            } finally {
+                setCarregandoAuth(false);
             }
         });
         return () => unsubAuth();
     }, []);
 
-    if (!uid) {
+    if (carregandoAuth) {
         return (
             <div style={{ padding: '40px', textAlign: 'center', color: theme.textSec, background: theme.bgApp, minHeight: '100vh' }}>
                 Carregando dados financeiros...
+            </div>
+        );
+    }
+
+    if (!uid) {
+        return (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444', background: theme.bgApp, minHeight: '100vh' }}>
+                Acesso negado ou usuário não autenticado.
             </div>
         );
     }

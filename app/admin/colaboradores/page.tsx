@@ -157,9 +157,15 @@ export default function PaginaColaboradores() {
                 })
             });
 
+            // Tratamento amigável caso o servidor retorne um erro HTTP ou HTML (500)
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error("Ocorreu um erro interno no servidor ao tentar cadastrar. Tente novamente mais tarde.");
+            }
+
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || "Erro ao cadastrar colaborador.");
+                throw new Error(data.error || "Não foi possível cadastrar o colaborador.");
             }
 
             alert(`✅ Colaborador cadastrado com sucesso!\nLogin: ${emailFinal}`);
@@ -174,7 +180,7 @@ export default function PaginaColaboradores() {
 
             await carregarColaboradores(lojistaId);
         } catch (error: any) {
-            alert("Erro ao cadastrar: " + error.message);
+            alert(`❌ Atenção:\n${error.message || "Erro desconhecido ao tentar cadastrar."}`);
         } finally {
             setCarregandoAcao(false);
         }
@@ -204,6 +210,11 @@ export default function PaginaColaboradores() {
                 })
             });
 
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error("Ocorreu um erro interno no servidor ao tentar atualizar.");
+            }
+
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.error || "Erro ao atualizar dados.");
@@ -214,7 +225,7 @@ export default function PaginaColaboradores() {
             setEditNovaSenha('');
             await carregarColaboradores(lojistaId);
         } catch (error: any) {
-            alert("Erro ao atualizar: " + error.message);
+            alert(`❌ Atenção:\n${error.message || "Erro ao atualizar."}`);
         } finally {
             setCarregandoAcao(false);
         }
@@ -232,7 +243,7 @@ export default function PaginaColaboradores() {
             setColaboradores(prev => prev.filter(col => col.id !== id));
             alert("✅ Colaborador removido com sucesso!");
         } catch (error: any) {
-            alert("Erro ao excluir: " + error.message);
+            alert(`❌ Erro ao excluir:\n${error.message}`);
         }
     };
 

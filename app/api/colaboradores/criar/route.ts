@@ -26,16 +26,19 @@ export async function POST(req: Request) {
         
         const lojistaId = body.lojistaId;
         const email = body.email || body.emailFinal;
-        const senha = body.senha || body.nrSenhaColaborador;
+        const senhaBruta = body.senha || body.nrSenhaColaborador || "123456";
         const nome = body.nome || body.dsNomeColaborador;
         const cargo = body.cargo || body.dsCargoColaborador;
         const telefone = body.telefone || body.dsTelefoneColaborador;
         const pin = body.pin || body.nrPinColaborador;
         const permissoes = body.permissoes;
 
-        if (!lojistaId || !email || !senha || !nome) {
+        if (!lojistaId || !email || !nome) {
             return NextResponse.json({ error: "Preencha todos os campos obrigatórios." }, { status: 400 });
         }
+
+        // ✨ Garante que a senha atenda à exigência mínima do Firebase Auth (mínimo de 6 caracteres)
+        const senhaValida = senhaBruta.length < 6 ? senhaBruta.padEnd(6, '0') : senhaBruta;
 
         const adminAuth = getAuth();
         const adminDb = getFirestore();
@@ -44,7 +47,7 @@ export async function POST(req: Request) {
         try {
             userRecord = await adminAuth.createUser({
                 email,
-                password: senha,
+                password: senhaValida,
                 displayName: nome,
             });
         } catch (authError: any) {
@@ -88,10 +91,8 @@ export async function POST(req: Request) {
             tsCriacaoColaborador: new Date()
         };
 
-        // ✨ LOG DE RASTREIO ADICIONADO AQUI
         console.log("🔥 SALVANDO NA SUBCOLEÇÃO DA LOJA:", lojistaId, "-> Colaborador ID:", uid);
 
-        // Salva na subcoleção usando o próprio uid como ID do documento
         await adminDb.collection("lojistas").doc(lojistaId).collection("colaboradores").doc(uid).set(colabData);
 
         return NextResponse.json({ success: true, id: uid, uid }, { status: 200 });

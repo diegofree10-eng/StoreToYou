@@ -212,16 +212,28 @@ export function TabCompras({ uid }: { uid: string }) {
             });
 
             const numeroPedidoFormatado = String(proximoNumero).padStart(4, '0');
+            const nomeFornecedor = fornecedor.trim() || "Fornecedor Geral";
 
             const novoPedidoRef = doc(collection(db, "lojistas", uid, "compras_pedidos"));
             await setDoc(novoPedidoRef, {
                 numeroPedido: numeroPedidoFormatado,
-                fornecedor: fornecedor.trim() || "Fornecedor Geral",
+                fornecedor: nomeFornecedor,
                 observacao: observacao.trim(),
                 valorTotalGeral: valorTotalGeral,
                 quantidadeItens: itensCompra.length,
                 itens: itensCompra,
                 dataCompra: dataCompraIso
+            });
+
+            // 💡 INTEGRAÇÃO AUTOMÁTICA COM PAGAMENTOS (Contas a Pagar)
+            const novoPagamentoRef = doc(collection(db, "lojistas", uid, "pagamentos_financeiro"));
+            await setDoc(novoPagamentoRef, {
+                descricao: `Compra: ${nomeFornecedor} (Ped #${numeroPedidoFormatado})`,
+                valor: valorTotalGeral,
+                vencimento: dataCompraIso.split('T')[0],
+                status: "pendente",
+                pedidoId: novoPedidoRef.id,
+                createdAt: dataCompraIso
             });
 
             for (const item of itensCompra) {
@@ -234,7 +246,7 @@ export function TabCompras({ uid }: { uid: string }) {
                     pedidoId: novoPedidoRef.id,
                     numeroPedido: numeroPedidoFormatado,
                     insumoId: item.insumoId,
-                    fornecedor: fornecedor.trim() || "Fornecedor Geral",
+                    fornecedor: nomeFornecedor,
                     observacao: observacao.trim(),
                     qtdComprada: item.qtdComprada,
                     unidadeComprada: item.unidadeComprada,
@@ -268,7 +280,7 @@ export function TabCompras({ uid }: { uid: string }) {
             }
 
             limparFormulario();
-            alert(`Pedido #${numeroPedidoFormatado} finalizado, estoque fracionado e custos atualizados por Custo Médio Ponderado com sucesso!`);
+            alert(`Pedido #${numeroPedidoFormatado} finalizado, estoque fracionado, custos atualizados por Custo Médio Ponderado e conta a pagar gerada com sucesso!`);
         } catch (error: any) {
             alert("Erro ao finalizar compra: " + error.message);
         }

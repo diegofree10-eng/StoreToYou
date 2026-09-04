@@ -72,6 +72,7 @@ export default function CadastroProdutos() {
     const [subcategoria, setSubcategoria] = useState("");
     const [precoBasico, setPrecoBasico] = useState("");
     const [custoUnitario, setCustoUnitario] = useState("");
+    const [outrosCustos, setOutrosCustos] = useState("");
     const [estoque, setEstoque] = useState("");
     const [estoqueMinimo, setEstoqueMinimo] = useState("");
     const [ativo, setAtivo] = useState(true);
@@ -456,6 +457,7 @@ export default function CadastroProdutos() {
 
                 vlPrecoBasicoProduto: converterParaNumeroBanco(precoFinalCalculado),
                 vlCustoUnitarioProduto: custoUnitarioFinal,
+                vlOutrosCustosProduto: converterParaNumeroBanco(outrosCustos),
 
                 nrEstoqueProduto: converterParaNumeroBanco(estoque),
                 nrEstoqueMinimoProduto: estoqueMinimo ? Number(estoqueMinimo) : 3,
@@ -561,6 +563,7 @@ export default function CadastroProdutos() {
 
     const limparForm = () => {
         setNome(""); setSku(""); setEan(""); setDescricao(""); setCategoria(""); setSubcategoria(""); setPrecoBasico(""); setCustoUnitario("");
+        setOutrosCustos("");
         setEstoque(""); setEstoqueMinimo("");
         setDsTipoProduto("Fisico_Sem"); setNrDiasProducao("");
         setMovimentarEstoque(true);
@@ -590,6 +593,9 @@ export default function CadastroProdutos() {
         const custoVal = p.vlCustoUnitarioProduto ?? p.vlCustoUnitario ?? p.custoUnitario;
         setCustoUnitario(custoVal !== undefined && custoVal !== null && !isNaN(Number(custoVal)) ? Number(custoVal).toFixed(2).replace('.', ',') : "");
 
+        const outrosCustosVal = p.vlOutrosCustosProduto ?? p.vlOutrosCustos ?? p.outrosCustos;
+        setOutrosCustos(outrosCustosVal !== undefined && outrosCustosVal !== null && !isNaN(Number(outrosCustosVal)) ? Number(outrosCustosVal).toFixed(2).replace('.', ',') : ""); // ✨ Carrega outros custos
+        
         const estoqueVal = p.nrEstoqueProduto ?? p.nrEstoque ?? p.estoque;
         setEstoque(estoqueVal !== undefined && estoqueVal !== null ? String(estoqueVal) : "");
 
@@ -891,6 +897,7 @@ export default function CadastroProdutos() {
                         descricao={descricao} setShowDescModal={setShowDescModal}
                         precoBasico={precoBasico} setPrecoBasico={setPrecoBasico}
                         custoUnitario={custoUnitario} setCustoUnitario={setCustoUnitario}
+                        outrosCustos={outrosCustos} setOutrosCustos={setOutrosCustos}
                         estoque={estoque} setEstoque={setEstoque}
                         estoqueMinimo={estoqueMinimo} setEstoqueMinimo={setEstoqueMinimo}
                         temVariaveisComPreco={temVariaveisComPreco}
