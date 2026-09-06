@@ -9,8 +9,8 @@ interface ModalCadastroInsumosProps {
     isOpen: boolean;
     onClose: () => void;
     listaInsumos: any[];
-    insumosComposicao: any[];
-    setInsumosComposicao: (insumos: any[]) => void;
+    insumosComposicaoProduto: any[];
+    setInsumosComposicaoProduto: (insumos: any[]) => void;
     outrosCustos?: string;
     setOutrosCustos?: (v: string) => void;
     formatInput?: (value: string, setter: (v: string) => void) => void;
@@ -21,8 +21,8 @@ export default function ModalCadastroInsumos({
     isOpen,
     onClose,
     listaInsumos = [],
-    insumosComposicao = [],
-    setInsumosComposicao,
+    insumosComposicaoProduto = [],
+    setInsumosComposicaoProduto,
     outrosCustos = "",
     setOutrosCustos = () => { },
     formatInput,
@@ -46,7 +46,7 @@ export default function ModalCadastroInsumos({
         });
     }, [buscaInsumo, listaInsumos]);
 
-    const custoInsumosGeral = insumosComposicao.reduce((acc, item) => {
+    const custoInsumosGeral = insumosComposicaoProduto.reduce((acc, item) => {
         const custoUnit = Number(item.vlCustoUnitarioInsumo || 0);
         const qtd = Number(item.nrQuantidadeConsumida || 0);
         return acc + (custoUnit * qtd);
@@ -75,7 +75,7 @@ export default function ModalCadastroInsumos({
         if (isOpen) {
             aplicarCustoNoFormularioPrincipal();
         }
-    }, [isOpen, insumosComposicao, outrosCustos]);
+    }, [isOpen, insumosComposicaoProduto, outrosCustos]);
 
     if (!isOpen) return null;
 
@@ -102,15 +102,15 @@ export default function ModalCadastroInsumos({
             vlCustoTotalItem: custoTotalItemAtual
         };
 
-        const jaExisteIndex = insumosComposicao.findIndex((item: any) => item.id === insumoSelecionado.id);
+        const jaExisteIndex = insumosComposicaoProduto.findIndex((item: any) => item.id === insumoSelecionado.id);
         let novaLista;
         if (jaExisteIndex >= 0) {
-            novaLista = [...insumosComposicao];
+            novaLista = [...insumosComposicaoProduto];
             novaLista[jaExisteIndex] = novoItem;
         } else {
-            novaLista = [...insumosComposicao, novoItem];
+            novaLista = [...insumosComposicaoProduto, novoItem];
         }
-        setInsumosComposicao(novaLista);
+        setInsumosComposicaoProduto(novaLista);
 
         setInsumoSelecionado(null);
         setQtdConsumidaTemp("");
@@ -118,8 +118,8 @@ export default function ModalCadastroInsumos({
     };
 
     const removerItemComposicao = (index: number) => {
-        const novaLista = insumosComposicao.filter((_, i) => i !== index);
-        setInsumosComposicao(novaLista);
+        const novaLista = insumosComposicaoProduto.filter((_, i) => i !== index);
+        setInsumosComposicaoProduto(novaLista);
     };
 
     return (
@@ -223,16 +223,16 @@ export default function ModalCadastroInsumos({
                 {/* Lista de Insumos Vinculados */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, textTransform: 'uppercase' }}>
-                        3. Insumos Vinculados ({insumosComposicao.length})
+                        3. Insumos Vinculados ({insumosComposicaoProduto.length})
                     </label>
 
-                    {insumosComposicao.length === 0 ? (
+                    {insumosComposicaoProduto.length === 0 ? (
                         <div style={{ padding: '12px', textAlign: 'center', background: theme.inputBg, borderRadius: '8px', border: `1px dashed ${theme.border}`, color: theme.textSec, fontSize: '12px' }}>
                             Nenhum insumo adicionado na composição ainda.
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto' }}>
-                            {insumosComposicao.map((item, index) => {
+                            {insumosComposicaoProduto.map((item, index) => {
                                 const custoTotItem = Number(item.vlCustoUnitarioInsumo || 0) * Number(item.nrQuantidadeConsumida || 0);
                                 return (
                                     <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: theme.inputBg, padding: '8px 12px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>

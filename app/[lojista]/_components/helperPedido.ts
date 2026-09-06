@@ -131,12 +131,25 @@ export const executarFluxoPedido = async ({
       dsFormaEntregaPadrao = "transportadora";
     }
 
-    // 📦 IDENTIFICAÇÃO ANINHADA E BLINDADA DA EMBALAGEM (API -> CARRINHO -> HELPER)
+    // 📦 IDENTIFICAÇÃO ANINHADA E BLINDADA DA EMBALAGEM E SEUS INSUMOS
     const fonteEmbalagem = embalagemRecomendada || embalagemDoCheckout || {};
     
-    // Se a API retornou o formato { recomendada: {...}, escolhida: {...} }
     const recRaw = fonteEmbalagem?.recomendada || fonteEmbalagem;
     const escRaw = fonteEmbalagem?.escolhida || fonteEmbalagem;
+
+    // Extração segura dos insumos da embalagem recomendada
+    const insumosEmbalagemRecomendada = Array.isArray(recRaw?.insumosComposicaoEmbalagem)
+      ? recRaw.insumosComposicaoEmbalagem
+      : Array.isArray(recRaw?.itensComposicao)
+      ? recRaw.itensComposicao
+      : [];
+
+    // Extração segura dos insumos da embalagem escolhida (se houver)
+    const insumosEmbalagemEscolhida = Array.isArray(escRaw?.insumosComposicaoEmbalagem)
+      ? escRaw.insumosComposicaoEmbalagem
+      : Array.isArray(escRaw?.itensComposicao)
+      ? escRaw.itensComposicao
+      : [];
 
     const dadosEmbalagemIdentificada = {
       recomendada: {
@@ -148,16 +161,19 @@ export const executarFluxoPedido = async ({
         comprimento: Number(recRaw?.comprimento ?? 32),
         largura: Number(recRaw?.largura ?? 22),
         pesoEmbarque: Number(recRaw?.pesoEmbarque ?? 0),
+        // 🌟 Salva a lista completa dos 6 insumos no pedido
+        insumosComposicaoEmbalagem: insumosEmbalagemRecomendada,
       },
       escolhida: {
-        id: escRaw?.id || escRaw?.insumoId || "cB40vmcKnP3nqInpI3yd",
-        dsModeloEmbalagemEscolhida: escRaw?.dsModeloEmbalagemEscolhida || escRaw?.dsModeloEmbalagemRecomendado || escRaw?.dsNomeEmbalagem || escRaw?.nome || "Embalagem Ecomerce 26x36",
-        vlCustoEmbalagemEscolhida: Number(escRaw?.vlCustoEmbalagemEscolhida ?? escRaw?.vlCustoEmbalagemRecomendado ?? escRaw?.vlCustoUnitarioEmbalagem ?? 1.64),
-        dsTipoEmbalagem: escRaw?.dsTipoEmbalagem || escRaw?.tipo || "envelope_seguranca",
-        altura: Number(escRaw?.altura ?? 4),
-        comprimento: Number(escRaw?.comprimento ?? 32),
-        largura: Number(escRaw?.largura ?? 22),
+        id: escRaw?.id || escRaw?.insumoId || "",
+        dsModeloEmbalagemEscolhida: escRaw?.dsModeloEmbalagemEscolhida || escRaw?.dsModeloEmbalagemRecomendado || escRaw?.dsNomeEmbalagem || escRaw?.nome || "",
+        vlCustoEmbalagemEscolhida: Number(escRaw?.vlCustoEmbalagemEscolhida ?? escRaw?.vlCustoEmbalagemRecomendado ?? escRaw?.vlCustoUnitarioEmbalagem ?? 0),
+        dsTipoEmbalagem: escRaw?.dsTipoEmbalagem || escRaw?.tipo || "",
+        altura: Number(escRaw?.altura ?? 0),
+        comprimento: Number(escRaw?.comprimento ?? 0),
+        largura: Number(escRaw?.largura ?? 0),
         pesoEmbarque: Number(escRaw?.pesoEmbarque ?? 0),
+        insumosComposicaoEmbalagem: insumosEmbalagemEscolhida,
       }
     };
 
@@ -265,7 +281,7 @@ export const executarFluxoPedido = async ({
           item.nrComprimentoProduto || item.length || 0,
         ),
 
-        insumosComposicao: item.insumosComposicao || [],
+        insumosComposicaoProduto: item.insumosComposicaoProduto || [],
         vlOutrosCustosProduto: item.vlOutrosCustosProduto || 0,
         movimentarEstoque: item.movimentarEstoque ?? true,
         movimentarEstoqueComposicao: item.movimentarEstoqueComposicao ?? true,

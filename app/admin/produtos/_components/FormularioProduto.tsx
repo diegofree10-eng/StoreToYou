@@ -65,8 +65,8 @@ interface FormularioProdutoProps {
     pesosDiferentesPorVariacao?: boolean;
     setPesosDiferentesPorVariacao?: (v: boolean) => void;
     listaInsumos?: any[];
-    insumosComposicao?: any[];
-    setInsumosComposicao?: (v: any[]) => void;
+    insumosComposicaoProduto?: any[];
+    setInsumosComposicaoProduto?: (v: any[]) => void;
     temInsumosNaGrade?: boolean;
     movimentarEstoque?: boolean;
     setMovimentarEstoque?: (v: boolean) => void;
@@ -109,8 +109,8 @@ export default function FormularioProduto({
     pesosDiferentesPorVariacao = false,
     setPesosDiferentesPorVariacao = () => { },
     listaInsumos = [],
-    insumosComposicao = [],
-    setInsumosComposicao = () => { },
+    insumosComposicaoProduto = [],
+    setInsumosComposicaoProduto = () => { },
     temInsumosNaGrade = false,
     movimentarEstoque = true,
     setMovimentarEstoque = () => { },
@@ -484,11 +484,11 @@ export default function FormularioProduto({
                         </button>
                     </div>
 
-                    {insumosComposicao.length === 0 ? (
+                    {insumosComposicaoProduto.length === 0 ? (
                         <p style={{ fontSize: '12px', color: theme.textSec, margin: 0, fontStyle: 'italic' }}>Nenhum insumo adicionado a este produto.</p>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {insumosComposicao.map((item, index) => (
+                            {insumosComposicaoProduto.map((item, index) => (
                                 <div key={item.id || index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: theme.inputBg, padding: '8px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>{item.dsNomeInsumo}</span>
@@ -497,8 +497,8 @@ export default function FormularioProduto({
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            const novaLista = insumosComposicao.filter((_, i) => i !== index);
-                                            setInsumosComposicao(novaLista);
+                                            const novaLista = insumosComposicaoProduto.filter((_, i) => i !== index);
+                                            setInsumosComposicaoProduto(novaLista);
                                         }}
                                         style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
                                     >
@@ -516,11 +516,11 @@ export default function FormularioProduto({
                 isOpen={isModalInsumosOpen}
                 onClose={() => setIsModalInsumosOpen(false)}
                 listaInsumos={listaInsumos}
-                insumosComposicao={insumosComposicao}
-                setInsumosComposicao={setInsumosComposicao}
+                insumosComposicaoProduto={insumosComposicaoProduto}
+                setInsumosComposicaoProduto={setInsumosComposicaoProduto}
                 setCustoUnitario={setCustoUnitario}
-                outrosCustos={outrosCustos}           // ✨ Repassando corretamente
-                setOutrosCustos={setOutrosCustos}     // ✨ Repassando corretamente
+                outrosCustos={outrosCustos}          // ✨ Repassando corretamente
+                setOutrosCustos={setOutrosCustos}    // ✨ Repassando corretamente
                 formatInput={formatInput}
             />
 

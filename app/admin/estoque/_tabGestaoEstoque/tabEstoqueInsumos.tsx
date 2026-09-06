@@ -28,9 +28,16 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
         const unsub = onSnapshot(q, (snap) => {
             setInsumos(snap.docs.map(d => {
                 const data = d.data();
-                const estoqueAtual = Number(data.nrEstoqueAtualInsumo ?? data.nrEstoqueAtual ?? data.estoqueAtual ?? 0);
-                const custoUnitario = Number(data.vlCustoUnitarioInsumo ?? data.vlCustoUnitario ?? data.custoUnitario ?? 0);
-                const estoqueMinimo = Number(data.nrEstoqueMinimoInsumo ?? data.nrEstoqueMinimo ?? data.estoqueMinimo ?? 10);
+
+                // Tratamento seguro para evitar NaN caso o campo venha vazio, string vazia ou undefined
+                const rawEstoque = data.nrEstoqueAtualInsumo ?? data.nrEstoqueAtual ?? data.estoqueAtual ?? 0;
+                const estoqueAtual = !isNaN(Number(rawEstoque)) ? Number(rawEstoque) : 0;
+
+                const rawCusto = data.vlCustoUnitarioInsumo ?? data.vlCustoUnitario ?? data.custoUnitario ?? 0;
+                const custoUnitario = !isNaN(Number(rawCusto)) ? Number(rawCusto) : 0;
+
+                const rawMinimo = data.nrEstoqueMinimoInsumo ?? data.nrEstoqueMinimo ?? data.estoqueMinimo ?? 10;
+                const estoqueMinimo = !isNaN(Number(rawMinimo)) ? Number(rawMinimo) : 10;
 
                 return {
                     id: d.id,

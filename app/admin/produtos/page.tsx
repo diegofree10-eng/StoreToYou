@@ -122,7 +122,7 @@ export default function CadastroProdutos() {
 
     // ✨ Estados para Insumos Globais e Listagem de Insumos da Composição
     const [listaInsumos, setListaInsumos] = useState<any[]>([]);
-    const [insumosComposicao, setInsumosComposicao] = useState<any[]>([]);
+    const [insumosComposicaoProduto, setInsumosComposicaoProduto] = useState<any[]>([]);
 
     const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
     const [tipoCropAtual, setTipoCropAtual] = useState<"principal" | "variacao">("principal");
@@ -250,7 +250,7 @@ export default function CadastroProdutos() {
 
     // ✨ Verifica se existe insumos na grade de variações
     const temInsumosNaGrade = Object.values(tabelaPrecos).some((v: any) => {
-        return Array.isArray(v?.insumosComposicao) && v.insumosComposicao.length > 0;
+        return Array.isArray(v?.insumosComposicaoProduto) && v.insumosComposicaoProduto.length > 0;
     });
 
     const formatInput = (value: string, setter: (v: string) => void) => {
@@ -402,7 +402,7 @@ export default function CadastroProdutos() {
                 if (v2Limpo) nomeVariacaoCalculado += ` / ${v2Limpo}`;
 
                 // ✨ Calcula o custo somando todos os insumos vinculados a esta variação específica
-                const insumosDestaVariacao = Array.isArray(itemVar.insumosComposicao) ? itemVar.insumosComposicao : [];
+                const insumosDestaVariacao = Array.isArray(itemVar.insumosComposicaoProduto) ? itemVar.insumosComposicaoProduto : [];
                 const custoInsumosCalculado = insumosDestaVariacao.reduce((acc: number, ins: any) => {
                     const custoU = Number(ins.vlCustoUnitarioInsumo || 0);
                     const qtdC = Number(ins.nrQuantidadeConsumida || 0);
@@ -431,12 +431,12 @@ export default function CadastroProdutos() {
                     nrComprimentoProduto: pesosDiferentesPorVariacao ? converterParaNumeroBanco(itemVar.nrComprimentoProduto ?? itemVar.nrComprimento ?? itemVar.comprimento) : null,
                     nrLarguraProduto: pesosDiferentesPorVariacao ? converterParaNumeroBanco(itemVar.nrLarguraProduto ?? itemVar.nrLargura ?? itemVar.largura) : null,
                     nrAlturaProduto: pesosDiferentesPorVariacao ? converterParaNumeroBanco(itemVar.nrAlturaProduto ?? itemVar.nrAltura ?? itemVar.altura) : null,
-                    insumosComposicao: insumosDestaVariacao
+                    insumosComposicaoProduto: insumosDestaVariacao
                 };
             }) : [];
 
             // ✨ Calcula o custo do produto base somando os insumos globais caso não tenha variação
-            const custoInsumosGlobais = insumosComposicao.reduce((acc: number, ins: any) => {
+            const custoInsumosGlobais = insumosComposicaoProduto.reduce((acc: number, ins: any) => {
                 const custoU = Number(ins.vlCustoUnitarioInsumo || 0);
                 const qtdC = Number(ins.nrQuantidadeConsumida || 0);
                 return acc + (custoU * qtdC);
@@ -483,7 +483,7 @@ export default function CadastroProdutos() {
                 dsNomeVar2Produto: nomeVar2,
                 dsRequisitosProduto: requisitos,
                 variacoes: variacoesArrayFinal,
-                insumosComposicao: temInsumosNaGrade ? [] : insumosComposicao,
+                insumosComposicaoProduto: temInsumosNaGrade ? [] : insumosComposicaoProduto,
 
                 nrUpdatedAt: Date.now()
             };
@@ -571,7 +571,7 @@ export default function CadastroProdutos() {
         setPesosDiferentesPorVariacao(false);
         setPeso(""); setComprimento(""); setLargura(""); setAltura(""); setImagens([]); setEditId(null); setFiles([]);
         setOpcoesVar1([]); setOpcoesVar2([]); setNomeVar1(""); setNomeVar2(""); setTabelaPrecos({});
-        setInsumosComposicao([]);
+        setInsumosComposicaoProduto([]);
         setRequisitos({ pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
         setProdutoIdAtual(null);
     };
@@ -636,7 +636,7 @@ export default function CadastroProdutos() {
 
         setRequisitos(p.dsRequisitosProduto || p.dsRequisitos || p.requisitos || { pedeNome: false, pedeIdade: false, pedeData: false, pedeObs: false });
 
-        setInsumosComposicao(p.insumosComposicao || []);
+        setInsumosComposicaoProduto(p.insumosComposicaoProduto || p.insumosComposicao || []);
 
         setNomeVar1(p.dsNomeVar1Produto || "");
         setNomeVar2(p.dsNomeVar2Produto || "");
@@ -668,7 +668,7 @@ export default function CadastroProdutos() {
                     nrComprimentoProduto: vComp !== undefined && vComp !== null && !isNaN(Number(vComp)) ? Number(vComp).toFixed(2).replace('.', ',') : "",
                     nrLarguraProduto: vLarg !== undefined && vLarg !== null && !isNaN(Number(vLarg)) ? Number(vLarg).toFixed(2).replace('.', ',') : "",
                     nrAlturaProduto: vAlt !== undefined && vAlt !== null && !isNaN(Number(vAlt)) ? Number(vAlt).toFixed(2).replace('.', ',') : "",
-                    insumosComposicao: v.insumosComposicao || []
+                    insumosComposicaoProduto: v.insumosComposicaoProduto || v.insumosComposicao || []
                 };
             });
             setTabelaPrecos(tab);
@@ -705,7 +705,7 @@ export default function CadastroProdutos() {
         setMovimentarEstoque(p.isMovimentarEstoque ?? p.movimentarEstoque ?? true);
         setMovimentarEstoqueComposicao(p.isMovimentarEstoqueComposicao ?? p.movimentarEstoqueComposicao ?? true);
         setPesosDiferentesPorVariacao(p.pesosDiferentesPorVariacao ?? false);
-        setInsumosComposicao(p.insumosComposicao || []);
+        setInsumosComposicaoProduto(p.insumosComposicaoProduto || p.insumosComposicao || []);
         setIsPainelAberto(true);
     };
 
@@ -919,8 +919,8 @@ export default function CadastroProdutos() {
                         pesosDiferentesPorVariacao={pesosDiferentesPorVariacao}
                         setPesosDiferentesPorVariacao={setPesosDiferentesPorVariacao}
                         listaInsumos={listaInsumos}
-                        insumosComposicao={insumosComposicao}
-                        setInsumosComposicao={setInsumosComposicao}
+                        insumosComposicaoProduto={insumosComposicaoProduto}
+                        setInsumosComposicaoProduto={setInsumosComposicaoProduto}
                         temInsumosNaGrade={temInsumosNaGrade}
                         movimentarEstoque={movimentarEstoque}
                         setMovimentarEstoque={setMovimentarEstoque}

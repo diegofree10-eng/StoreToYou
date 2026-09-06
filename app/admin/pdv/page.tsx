@@ -28,6 +28,10 @@ export default function PaginaPDV() {
   const [dadosLoja, setDadosLoja] = useState<any>({});
   const [tipoEntrega, setTipoEntrega] = useState<"retirada" | "entrega_local">("retirada");
 
+  // 📦 Estados para o controle de Embalagens no PDV
+  const [listaEmbalagens, setListaEmbalagens] = useState<any[]>([]);
+  const [embalagemSelecionadaId, setEmbalagemSelecionadaId] = useState("");
+
   // Estados para o controle de Operador por PIN
   const [operadorLogado, setOperadorLogado] = useState<any>(null);
   const [pinDigitado, setPinDigitado] = useState("");
@@ -123,6 +127,12 @@ export default function PaginaPDV() {
             if (lojaSnap.exists()) {
               setDadosLoja(lojaSnap.data());
             }
+
+            // 📦 Carregar embalagens cadastradas na subcoleção do lojista
+            const embalagensRef = collection(db, "lojistas", idLoja, "embalagem");
+            const snapEmbalagens = await getDocs(embalagensRef);
+            const listaEmb = snapEmbalagens.docs.map(d => ({ id: d.id, ...d.data() }));
+            setListaEmbalagens(listaEmb);
 
             const produtosRef = collection(db, "lojistas", idLoja, "produtos");
             const snapshot = await getDocs(produtosRef);
@@ -422,6 +432,18 @@ export default function PaginaPDV() {
         ? "Master"
         : `${operadorLogado?.nome || operadorLogado?.dsNomeColaborador || "Balcão"} (${operadorLogado?.cargo || operadorLogado?.dsCargoColaborador || "Caixa"})`;
 
+      // 📦 Localizar a embalagem selecionada pelo operador para passar ao helper
+      const embalagemEscolhidaObj = listaEmbalagens.find(e => e.id === embalagemSelecionadaId);
+      const embalagemDoCheckoutPayload = embalagemSelecionadaId ? {
+        escolhida: {
+          id: embalagemEscolhidaObj?.id || embalagemSelecionadaId,
+          dsModeloEmbalagemEscolhida: embalagemEscolhidaObj?.dsNomeEmbalagem || embalagemEscolhidaObj?.nome || "Embalagem",
+          vlCustoEmbalagemEscolhida: embalagemEscolhidaObj?.vlCustoUnitarioEmbalagem || embalagemEscolhidaObj?.custo || 0,
+          dsTipoEmbalagem: embalagemEscolhidaObj?.dsTipoEmbalagem || "Caixa",
+          insumosComposicaoEmbalagem: embalagemEscolhidaObj?.insumos_composicao || embalagemEscolhidaObj?.insumosComposicaoEmbalagem || []
+        }
+      } : null;
+
       const sucesso = await executarFluxoPedido({
         lojistaId,
         lojistaSlug: "pdv-balcao",
@@ -444,7 +466,9 @@ export default function PaginaPDV() {
         vlEntrada: vlEntrada,
         vlRestante: Math.max(0, totalGeral - vlEntrada),
         dsPrazoRestante: dsPrazoRestante,
-        dsOperadorCaixa: nomeOperadorFormatado
+        dsOperadorCaixa: nomeOperadorFormatado,
+        // 📦 Repassando a embalagem escolhida para o helper baixar do estoque
+        embalagemDoCheckout: embalagemDoCheckoutPayload
       });
 
       if (sucesso) {
@@ -471,6 +495,7 @@ export default function PaginaPDV() {
         setTipoEntrega("retirada");
         setVlEntrada(0);
         setDsPrazoRestante("");
+        setEmbalagemSelecionadaId(""); // Limpa a seleção da embalagem
       } else {
         throw new Error("Erro ao executar fluxo do pedido.");
       }
@@ -485,7 +510,7 @@ export default function PaginaPDV() {
   const itemAtualEditando = carrinho.find(i => i.cartItemId === itemEditandoCartId);
 
   if (loading) {
-    return <div style={{ padding: "30px", textAlign: "center", color: theme.textSec, fontWeight: "600" }}>Carregando PDV...</div>;
+   return <div style={{ padding: "30px", textAlign: "center", color: theme.textSec, fontWeight: "600", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>Carregando PDV...</div>;
   }
 
   return (
@@ -646,6 +671,10 @@ export default function PaginaPDV() {
         theme={theme}
         styles={styles}
         onAbrirModalProdutos={() => setModalProdutosAberto(true)}
+        // 📦 Repassando as propriedades de embalagem para o componente PagamentoPdv
+        listaEmbalagens={listaEmbalagens}
+        embalagemSelecionadaId={embalagemSelecionadaId}
+        setEmbalagemSelecionadaId={setEmbalagemSelecionadaId}
       />
 
       <ProdutosModalPdv
@@ -792,11 +821,11 @@ export default function PaginaPDV() {
                 Confirmar
               </button>
             </div>
-          </div>
         </div>
-      )}
+      </div>
+    )}
 
-      <style jsx global>{`
+    <style jsx global>{`
         ::-webkit-scrollbar {
           width: 6px;
           height: 6px;
@@ -818,7 +847,7 @@ export default function PaginaPDV() {
           }
         }
       `}</style>
-    </div>
+  </div>
   );
 }
 

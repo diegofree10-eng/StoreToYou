@@ -107,7 +107,7 @@ export function ModalCriarEmbalagens({
                     setVlOutrosCustosEmbalagem("");
                 }
 
-                setItensComposicao(embalagemParaEditar.itensComposicao || embalagemParaEditar.insumos || []);
+                setItensComposicao(embalagemParaEditar.insumosComposicaoEmbalagem || embalagemParaEditar.itensComposicao || embalagemParaEditar.insumos || []);
             } else {
                 // Modo Criação: Limpa todos os campos
                 setDsNomeEmbalagem("");
@@ -231,7 +231,7 @@ export function ModalCriarEmbalagens({
                 nrEstoqueAtualEmbalagem: estoqueNum,
                 nrEstoqueMinimoEmbalagem: minNum,
                 isComposicaoEmbalagem,
-                itensComposicao,
+                insumosComposicaoEmbalagem: itensComposicao,
                 updatedAt: new Date().toISOString()
             };
 
@@ -528,185 +528,185 @@ export function ModalCriarEmbalagens({
                                                 <FiTrash2 size={14} />
                                             </button>
                                         </div>
-                                    </div>
-                                ))
+                                </div>
+                              ))
                             )}
                         </div>
 
                         {/* CAMPO DE OUTROS CUSTOS USANDO A APLICARMASCARA ('dinheiro') */}
                         <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: theme.bgApp, padding: '8px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <FiDollarSign size={15} color={theme.primary} />
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain }}>Outros Custos / Gastos Avulsos</span>
-                                    <span style={{ fontSize: '9px', color: theme.textSec }}>Ex: Pedaço de durex, etiqueta extra, impressão...</span>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <input 
-                                    type="text"
-                                    placeholder="0,00"
-                                    value={vlOutrosCustosEmbalagem}
-                                    onChange={(e) => setVlOutrosCustosEmbalagem(aplicarMascara(e.target.value, "dinheiro"))}
-                                    style={{ width: '100px', padding: '5px 8px', borderRadius: '4px', border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: '12px', fontWeight: 'bold', outline: 'none', textAlign: 'right' }}
-                                />
-                            </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <FiDollarSign size={15} color={theme.primary} />
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain }}>Outros Custos / Gastos Avulsos</span>
+                                      <span style={{ fontSize: '9px', color: theme.textSec }}>Ex: Pedaço de durex, etiqueta extra, impressão...</span>
+                                  </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <input 
+                                  type="text"
+                                  placeholder="0,00"
+                                  value={vlOutrosCustosEmbalagem}
+                                  onChange={(e) => setVlOutrosCustosEmbalagem(aplicarMascara(e.target.value, "dinheiro"))}
+                                  style={{ width: '100px', padding: '5px 8px', borderRadius: '4px', border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: '12px', fontWeight: 'bold', outline: 'none', textAlign: 'right' }}
+                            />
                         </div>
+                      </div>
 
                         {/* EXIBIÇÃO DO CUSTO UNITÁRIO CALCULADO */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', background: theme.bgApp, padding: '10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec }}>CUSTO UNITÁRIO TOTAL CALCULADO:</span>
-                            <span style={{ fontSize: '16px', fontWeight: '800', color: theme.primary }}>
-                                R$ {custoUnitarioCalculado.toFixed(2).replace('.', ',')}
-                            </span>
-                        </div>
-                    </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', background: theme.bgApp, padding: '10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                          <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec }}>CUSTO UNITÁRIO TOTAL CALCULADO:</span>
+                          <span style={{ fontSize: '16px', fontWeight: '800', color: theme.primary }}>
+                              R$ {custoUnitarioCalculado.toFixed(2).replace('.', ',')}
+                          </span>
+                  </div>
+                </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
-                        <button type="button" onClick={onClose} style={{ background: theme.border, color: theme.textMain, border: 'none', padding: '9px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Cancelar</button>
-                        <button type="submit" style={{ background: theme.primary, color: '#fff', border: 'none', padding: '9px 18px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Salvar Embalagem</button>
-                    </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+                    <button type="button" onClick={onClose} style={{ background: theme.border, color: theme.textMain, border: 'none', padding: '9px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Cancelar</button>
+                    <button type="submit" style={{ background: theme.primary, color: '#fff', border: 'none', padding: '9px 18px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Salvar Embalagem</button>
+              </div>
 
-                </form>
+              </form>
             </div>
 
-            {/* 🏷️ MINI MODAL PARA ADICIONAR NOVO TIPO DE EMBALAGEM */}
-            {modalNovoTipoAberto && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1250 }}>
-                    <div style={{ background: theme.bgCard, padding: '16px', borderRadius: '8px', width: '320px', border: `1px solid ${theme.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: theme.textMain, fontWeight: 'bold' }}>Novo Tipo de Embalagem</h4>
-                        <p style={{ fontSize: '11px', color: theme.textSec, margin: '0 0 10px 0' }}>Digite o nome do novo formato (ex: Sacola, Caixa Kraft, etc.):</p>
-                        <input
-                            type="text"
-                            placeholder="Ex: Sacola Ecológica"
-                            value={novoTipoInput}
-                            onChange={(e) => setNovoTipoInput(e.target.value)}
-                            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: '12px', outline: 'none', marginBottom: '12px', boxSizing: 'border-box' }}
-                        />
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                            <button
-                                type="button"
-                                onClick={() => setModalNovoTipoAberto(false)}
-                                style={{ background: theme.border, color: theme.textMain, border: 'none', padding: '6px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (!novoTipoInput.trim()) return alert("Digite um nome válido.");
-                                    const slug = novoTipoInput.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w-]/g, '');
-                                    
-                                    if (!tiposEmbalagemPersonalizados.includes(slug)) {
-                                        setTiposEmbalagemPersonalizados([...tiposEmbalagemPersonalizados, slug]);
-                                    }
-                                    setDsTipoEmbalagem(slug);
-                                    setNovoTipoInput("");
-                                    setModalNovoTipoAberto(false);
-                                }}
-                                style={{ background: theme.primary, color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
-                            >
-                                Adicionar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+          {/* 🏷️ MINI MODAL PARA ADICIONAR NOVO TIPO DE EMBALAGEM */}
+          {modalNovoTipoAberto && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1250 }}>
+                  <div style={{ background: theme.bgCard, padding: '16px', borderRadius: '8px', width: '320px', border: `1px solid ${theme.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: theme.textMain, fontWeight: 'bold' }}>Novo Tipo de Embalagem</h4>
+                      <p style={{ fontSize: '11px', color: theme.textSec, margin: '0 0 10px 0' }}>Digite o nome do novo formato (ex: Sacola, Caixa Kraft, etc.):</p>
+                      <input
+                          type="text"
+                          placeholder="Ex: Sacola Ecológica"
+                          value={novoTipoInput}
+                          onChange={(e) => setNovoTipoInput(e.target.value)}
+                          style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: '12px', outline: 'none', marginBottom: '12px', boxSizing: 'border-box' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                          <button
+                              type="button"
+                              onClick={() => setModalNovoTipoAberto(false)}
+                              style={{ background: theme.border, color: theme.textMain, border: 'none', padding: '6px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                          >
+                              Cancelar
+                          </button>
+                          <button
+                              type="button"
+                              onClick={() => {
+                                  if (!novoTipoInput.trim()) return alert("Digite um nome válido.");
+                                  const slug = novoTipoInput.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w-]/g, '');
+                                  
+                                  if (!tiposEmbalagemPersonalizados.includes(slug)) {
+                                      setTiposEmbalagemPersonalizados([...tiposEmbalagemPersonalizados, slug]);
+                                  }
+                                  setDsTipoEmbalagem(slug);
+                                  setNovoTipoInput("");
+                                  setModalNovoTipoAberto(false);
+                              }}
+                              style={{ background: theme.primary, color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                          >
+                              Adicionar
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          )}
 
-            {/* ⚙️ MODAL PARA GERENCIAR (EDITAR OU EXCLUIR) TIPOS DE EMBALAGEM */}
-            {modalGerenciarTiposAberto && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1250 }}>
-                    <div style={{ background: theme.bgCard, padding: '18px', borderRadius: '10px', width: '380px', maxHeight: '80vh', overflowY: 'auto', border: `1px solid ${theme.border}`, boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <h4 style={{ margin: 0, fontSize: '14px', color: theme.textMain, fontWeight: 'bold' }}>Gerenciar Tipos de Embalagem</h4>
-                            <button onClick={() => { setModalGerenciarTiposAberto(false); setTipoSendoEditado(null); }} style={{ background: 'transparent', border: 'none', color: theme.textSec, cursor: 'pointer' }}><FiX size={18} /></button>
-                        </div>
-                        <p style={{ fontSize: '11px', color: theme.textSec, margin: '0 0 12px 0' }}>Edite o nome ou exclua tipos cadastrados:</p>
+          {/* ⚙️ MODAL PARA GERENCIAR (EDITAR OU EXCLUIR) TIPOS DE EMBALAGEM */}
+          {modalGerenciarTiposAberto && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1250 }}>
+                  <div style={{ background: theme.bgCard, padding: '18px', borderRadius: '10px', width: '380px', maxHeight: '80vh', overflowY: 'auto', border: `1px solid ${theme.border}`, boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <h4 style={{ margin: 0, fontSize: '14px', color: theme.textMain, fontWeight: 'bold' }}>Gerenciar Tipos de Embalagem</h4>
+                          <button onClick={() => { setModalGerenciarTiposAberto(false); setTipoSendoEditado(null); }} style={{ background: 'transparent', border: 'none', color: theme.textSec, cursor: 'pointer' }}><FiX size={18} /></button>
+                      </div>
+                      <p style={{ fontSize: '11px', color: theme.textSec, margin: '0 0 12px 0' }}>Edite o nome ou exclua tipos cadastrados:</p>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', marginBottom: '14px' }}>
-                            {tiposEmbalagemPersonalizados.map((tipo) => {
-                                const formatado = tipo.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                                const isEditando = tipoSendoEditado === tipo;
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', marginBottom: '14px' }}>
+                          {tiposEmbalagemPersonalizados.map((tipo) => {
+                              const formatado = tipo.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                              const isEditando = tipoSendoEditado === tipo;
 
-                                return (
-                                    <div key={tipo} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: theme.inputBg, borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-                                        {isEditando ? (
-                                            <input
-                                                type="text"
-                                                value={valorEdicaoTipo}
-                                                onChange={(e) => setValorEdicaoTipo(e.target.value)}
-                                                style={{ flex: 1, padding: '4px 6px', fontSize: '12px', background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.primary}`, borderRadius: '4px', outline: 'none', marginRight: '6px' }}
-                                            />
-                                        ) : (
-                                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>{formatado}</span>
-                                        )}
+                              return (
+                                  <div key={tipo} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: theme.inputBg, borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                                      {isEditando ? (
+                                          <input
+                                              type="text"
+                                              value={valorEdicaoTipo}
+                                              onChange={(e) => setValorEdicaoTipo(e.target.value)}
+                                              style={{ flex: 1, padding: '4px 6px', fontSize: '12px', background: theme.bgCard, color: theme.textMain, border: `1px solid ${theme.primary}`, borderRadius: '4px', outline: 'none', marginRight: '6px' }}
+                                          />
+                                      ) : (
+                                          <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>{formatado}</span>
+                                      )}
 
-                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                            {isEditando ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (!valorEdicaoTipo.trim()) return alert("Digite um nome válido.");
-                                                        const novoSlug = valorEdicaoTipo.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w-]/g, '');
-                                                        
-                                                        setTiposEmbalagemPersonalizados(prev => prev.map(t => t === tipo ? novoSlug : t));
-                                                        if (dsTipoEmbalagem === tipo) setDsTipoEmbalagem(novoSlug);
-                                                        setTipoSendoEditado(null);
-                                                    }}
-                                                    style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
-                                                >
-                                                    Salvar
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setTipoSendoEditado(tipo);
-                                                        setValorEdicaoTipo(formatado);
-                                                    }}
-                                                    style={{ background: 'transparent', border: 'none', color: theme.primary, cursor: 'pointer', padding: '2px' }}
-                                                    title="Editar nome"
-                                                >
-                                                    <FiEdit2 size={14} />
-                                                </button>
-                                            )}
+                                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                          {isEditando ? (
+                                              <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                      if (!valorEdicaoTipo.trim()) return alert("Digite um nome válido.");
+                                                      const novoSlug = valorEdicaoTipo.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w-]/g, '');
+                                                      
+                                                      setTiposEmbalagemPersonalizados(prev => prev.map(t => t === tipo ? novoSlug : t));
+                                                      if (dsTipoEmbalagem === tipo) setDsTipoEmbalagem(novoSlug);
+                                                      setTipoSendoEditado(null);
+                                                  }}
+                                                  style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
+                                              >
+                                                  Salvar
+                                              </button>
+                                          ) : (
+                                              <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                      setTipoSendoEditado(tipo);
+                                                      setValorEdicaoTipo(formatado);
+                                                  }}
+                                                  style={{ background: 'transparent', border: 'none', color: theme.primary, cursor: 'pointer', padding: '2px' }}
+                                                  title="Editar nome"
+                                              >
+                                                  <FiEdit2 size={14} />
+                                              </button>
+                                          )}
 
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (tiposEmbalagemPersonalizados.length <= 1) {
-                                                        return alert("Você precisa manter pelo menos um tipo de embalagem.");
-                                                    }
-                                                    if (confirm(`Deseja realmente excluir o tipo "${formatado}"?`)) {
-                                                        setTiposEmbalagemPersonalizados(prev => prev.filter(t => t !== tipo));
-                                                        if (dsTipoEmbalagem === tipo) {
-                                                            setDsTipoEmbalagem(tiposEmbalagemPersonalizados.find(t => t !== tipo) || "");
-                                                        }
-                                                    }
-                                                }}
-                                                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
-                                                title="Excluir tipo"
-                                            >
-                                                <FiTrash2 size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                          <button
+                                              type="button"
+                                              onClick={() => {
+                                                  if (tiposEmbalagemPersonalizados.length <= 1) {
+                                                      return alert("Você precisa manter pelo menos um tipo de embalagem.");
+                                                  }
+                                                  if (confirm(`Deseja realmente excluir o tipo "${formatado}"?`)) {
+                                                      setTiposEmbalagemPersonalizados(prev => prev.filter(t => t !== tipo));
+                                                      if (dsTipoEmbalagem === tipo) {
+                                                          setDsTipoEmbalagem(tiposEmbalagemPersonalizados.find(t => t !== tipo) || "");
+                                                      }
+                                                  }
+                                              }}
+                                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                                              title="Excluir tipo"
+                                          >
+                                              <FiTrash2 size={14} />
+                                          </button>
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button
-                                type="button"
-                                onClick={() => { setModalGerenciarTiposAberto(false); setTipoSendoEditado(null); }}
-                                style={{ background: theme.primary, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
-                            >
-                                Concluir
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                              type="button"
+                              onClick={() => { setModalGerenciarTiposAberto(false); setTipoSendoEditado(null); }}
+                              style={{ background: theme.primary, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                          >
+                              Concluir
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          )}
+    </div>
     );
 }

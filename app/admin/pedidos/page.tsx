@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useFrete } from "@/hooks/useFrete";
 import { useGerenciarPedido } from "@/hooks/useGerenciarPedido";
-import BarraDeAcoes from './_tabsGestaoPedidos/BarraAcoesTabEtiquetas';
 
 import { Pedido } from '@/types/pedido';
 import { descobrirAbaDoPedido } from '@/utils/classificarPedido';
@@ -14,6 +13,10 @@ import { buscarEmbalagensLoja, EmbalagemLoja } from "@/utils/buscarEmbalagens";
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
+
+// 🌟 Importando as barras de ações isoladas
+import BarraAcoesStatusProducao from './_tabsGestaoPedidos/BarraAcoesStatusProducao';
+import BarraDeAcoes from './_tabsGestaoPedidos/BarraAcoesTabEtiquetas';
 
 import TabTodosPedidos from './_tabsGestaoPedidos/TabTodosPedidos';
 import TabCotarFrete from './_tabsGestaoPedidos/TabCotarFrete';
@@ -158,7 +161,7 @@ export default function GestaoPedidos({
         if (!p) return 'pedidos';
         const statusGeral = String(p.status || '').trim().toLowerCase();
         const dsStatusPedido = String((p as any).dsStatusPedido || '').trim().toLowerCase();
-        const statusProd = String((p as any).StatusProducao?.dsStatusProdução || '').trim().toLowerCase();
+        const statusProd = String((p as any).StatusProducao?.dsStatusProdução || (p as any).StatusProducao?.dsStatusProducao || '').trim().toLowerCase();
         const isConcluidoFlag = (p as any).enviado === true && statusGeral === 'concluído';
 
         if (statusGeral === 'concluído' || statusGeral === 'concluido' || dsStatusPedido === 'concluído' || dsStatusPedido === 'concluido' || statusProd === 'concluído' || statusProd === 'concluido' || isConcluidoFlag) {
@@ -304,9 +307,142 @@ export default function GestaoPedidos({
         });
     }, [pedidosFiltradosParaGestao, termoBuscaAtivo, debouncedBusca, filtroLogistica, ordenacao, abaAtiva, verificarMatchBusca, obterAbaDoPedidoEfetiva]);
 
-    // 📦 Função otimizada com writeBatch para salvar a embalagem em lote na aba de Produção
-    // No arquivo components/GestaoPedidos.tsx (dentro de lidarComSalvarEmbalagemEAvancar)
+    // 📦 Ações em lote ajustadas para a aba Pedidos
+    const lidarComMarcarPagoEmLote = async () => {
+        if (selecionados.length === 0) return;
+        if (!confirm(`Deseja marcar ${selecionados.length} pedido(s) como pago(s) e enviar para pendente?`)) return;
+        try {
+            const batch = writeBatch(db);
+            selecionados.forEach(id => {
+                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", id);
+                batch.update(pedidoRef, {
+                    "status": "pendente",
+                    "StatusProducao.dsStatusProducao": "Pendente",
+                    "StatusProducao.isPago": true
+                });
+            });
+            await batch.commit();
 
+            setLocalPedidos(prev =>
+                prev.map(p => {
+                    if (selecionados.includes(p.id)) {
+                        return {
+                            ...p,
+                            status: "pendente",
+                            StatusProducao: {
+                                ...(p.StatusProducao || {}),
+                                dsStatusProducao: "Pendente",
+                                isPago: true
+                            }
+                        };
+                    }
+                    return p;
+                })
+            );
+
+            setSelecionados([]);
+            setAbaAtiva('pendente');
+        } catch (error) {
+            console.error("Erro ao marcar como pago:", error);
+            alert("Erro ao atualizar os pedidos.");
+        }
+    };
+
+    const lidarComMarcarNaoPagoEmLote = async () => {
+        if (selecionados.length === 0) return;
+        if (!confirm(`Deseja marcar ${selecionados.length} pedido(s) como não pago(s)?`)) return;
+        try {
+            const batch = writeBatch(db);
+            selecionados.forEach(id => {
+                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", id);
+                batch.update(pedidoRef, {
+                    "status": "pedidos",
+                    "StatusProducao.dsStatusProducao": "PEDIDOS",
+                    "StatusProducao.isPago": false
+                });
+            });
+            await batch.commit();
+
+            setLocalPedidos(prev =>
+                prev.map(p => {
+                    if (selecionados.includes(p.id)) {
+                        return {
+                            ...p,
+                            status: "pedidos",
+                            StatusProducao: {
+                                ...(p.StatusProducao || {}),
+                                dsStatusProducao: "PEDIDOS",
+                                isPago: false
+                            }
+                        };
+                    }
+                    return p;
+                })
+            );
+
+            setSelecionados([]);
+            setAbaAtiva('pedidos');
+        } catch (error) {
+            console.error("Erro ao marcar como não pago:", error);
+            alert("Erro ao atualizar os pedidos.");
+        }
+    };
+
+    const lidarComEnviarParaProducaoEmLote = async () => {
+        if (selecionados.length === 0) return;
+        if (!confirm(`Deseja enviar ${selecionados.length} pedido(s) para a Produção?`)) return;
+        try {
+            const batch = writeBatch(db);
+            selecionados.forEach(id => {
+                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", id);
+                batch.update(pedidoRef, {
+                    "status": "producao",
+                    "StatusProducao.dsStatusProducao": "Produção"
+                });
+            });
+            await batch.commit();
+
+            setLocalPedidos(prev =>
+                prev.map(p => {
+                    if (selecionados.includes(p.id)) {
+                        return {
+                            ...p,
+                            status: "producao",
+                            StatusProducao: {
+                                ...(p.StatusProducao || {}),
+                                dsStatusProducao: "Produção"
+                            }
+                        };
+                    }
+                    return p;
+                })
+            );
+
+            setSelecionados([]);
+            setAbaAtiva('producao');
+        } catch (error) {
+            console.error("Erro ao enviar para produção:", error);
+            alert("Erro ao atualizar os pedidos.");
+        }
+    };
+
+    const lidarComExcluirEmLote = async () => {
+        if (selecionados.length === 0) return;
+        if (!confirm(`⚠️ ATENÇÃO: Deseja realmente excluir os ${selecionados.length} pedidos selecionados com estorno?`)) return;
+        try {
+            const pedidosParaExcluir = pedidosFiltradosParaGestao.filter(p => selecionados.includes(p.id));
+            for (const p of pedidosParaExcluir) {
+                await excluirPedidoComEstorno(p);
+            }
+            setSelecionados([]);
+            alert("Pedidos excluídos e estoque estornado!");
+        } catch (error) {
+            console.error("Erro ao excluir lote:", error);
+            alert("Erro ao excluir pedidos.");
+        }
+    };
+
+    // 📦 Função otimizada com writeBatch para salvar a embalagem E marcar como Pronto na aba de Produção
     const lidarComSalvarEmbalagemEAvancar = async () => {
         const selecionadosNaAba = pedidosFiltradosGlobais.filter(p => selecionados.includes(p.id));
         if (selecionadosNaAba.length === 0) {
@@ -321,8 +457,25 @@ export default function GestaoPedidos({
             return alert("Embalagem selecionada inválida.");
         }
 
-        if (!confirm(`Deseja definir a embalagem "${dadosEmbalagemObj.nome}" para os ${selecionadosNaAba.length} pedido(s) selecionado(s)?`)) {
-            return;
+        const temDiferenca = selecionadosNaAba.some(pedido => {
+            const rec = pedido.Embalagem?.recomendada;
+            if (!rec) return false;
+
+            if (rec.id && dadosEmbalagemObj.id) {
+                return rec.id !== dadosEmbalagemObj.id;
+            }
+            const recNome = String(rec.dsModeloEmbalagemRecomendado || rec.nome || "").trim().toLowerCase();
+            const escolhidoNome = String(dadosEmbalagemObj.nome || "").trim().toLowerCase();
+            return recNome && escolhidoNome && recNome !== escolhidoNome;
+        });
+
+        if (temDiferenca) {
+            const querMudar = confirm(`⚠️ Atenção: A embalagem escolhida ("${dadosEmbalagemObj.nome}") é diferente da recomendada pelo sistema para um ou mais pedidos.\n\nTem certeza que quer mudar a embalagem desse pedido?`);
+            if (!querMudar) return;
+        } else {
+            if (!confirm(`Deseja definir a embalagem "${dadosEmbalagemObj.nome}" e marcar ${selecionadosNaAba.length} pedido(s) como Pronto(s)?`)) {
+                return;
+            }
         }
 
         try {
@@ -330,11 +483,10 @@ export default function GestaoPedidos({
 
             selecionadosNaAba.forEach(pedido => {
                 const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedido.id);
-
-                // 🛡️ Obtém a recomendação atual salva no pedido com segurança
                 const recomendacaoExistente = pedido.Embalagem?.recomendada || pedido.Embalagem || {};
 
                 batch.update(pedidoRef, {
+                    "StatusProducao.dsStatusProducao": "Pronto",
                     "Embalagem": {
                         recomendada: {
                             id: recomendacaoExistente.id || "",
@@ -347,14 +499,15 @@ export default function GestaoPedidos({
                             pesoEmbarque: Number(recomendacaoExistente.pesoEmbarque ?? 0),
                         },
                         escolhida: {
-                            id: dadosEmbalagemObj.id,
-                            dsModeloEmbalagemEscolhida: dadosEmbalagemObj.nome,
+                            id: dadosEmbalagemObj.id || "",
+                            dsModeloEmbalagemEscolhida: dadosEmbalagemObj.nome || "",
                             dsTipoEmbalagem: (dadosEmbalagemObj as any).tipo || "envelope_seguranca",
                             vlCustoEmbalagemEscolhida: Number(dadosEmbalagemObj.custo || 0),
-                            altura: Number(dadosEmbalagemObj.altura ?? 4),
-                            comprimento: Number(dadosEmbalagemObj.comprimento ?? 32),
-                            largura: Number(dadosEmbalagemObj.largura ?? 22),
-                            pesoEmbarque: Number(dadosEmbalagemObj.peso ?? 0), // 👈 Padronizado idêntico ao helper
+                            altura: Number(dadosEmbalagemObj.altura || 0),
+                            comprimento: Number(dadosEmbalagemObj.comprimento || 0),
+                            largura: Number(dadosEmbalagemObj.largura || 0),
+                            pesoEmbarque: Number((dadosEmbalagemObj as any).peso || (dadosEmbalagemObj as any).pesoEmbarque || 0),
+                            insumosComposicaoEmbalagem: (dadosEmbalagemObj as any).insumosComposicaoEmbalagem || []
                         }
                     }
                 });
@@ -362,12 +515,27 @@ export default function GestaoPedidos({
 
             await batch.commit();
 
+            setLocalPedidos(prev =>
+                prev.map(p => {
+                    if (selecionados.includes(p.id)) {
+                        return {
+                            ...p,
+                            StatusProducao: {
+                                ...(p.StatusProducao || {}),
+                                dsStatusProducao: "Pronto"
+                            }
+                        };
+                    }
+                    return p;
+                })
+            );
+
             setSelecionados([]);
             setEmbalagemEscolhidaParaLote("");
-            alert("Embalagem recomendada vs escolhida salva com sucesso! ✅");
+            alert("Embalagem definida e pedido(s) marcado(s) como Pronto(s) com sucesso! ✅");
         } catch (error) {
-            console.error("Erro ao salvar embalagem nos pedidos:", error);
-            alert("Ocorreu um erro ao salvar a embalagem.");
+            console.error("Erro ao salvar embalagem e marcar pronto:", error);
+            alert("Ocorreu um erro ao atualizar os pedidos.");
         }
     };
 
@@ -497,6 +665,7 @@ export default function GestaoPedidos({
                     </div>
                 </div>
 
+                {/* 🌟 BARRA DE ABAS PADRÃO (SEMPRE VISÍVEL) */}
                 <div style={{ ...styles.tabContainer, borderColor: theme.border }}>
                     <button onClick={lidarComCliqueAbaPedidos} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'pedidos' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
                         PEDIDOS
@@ -509,7 +678,7 @@ export default function GestaoPedidos({
                     </button>
 
                     <button onClick={() => { setAbaAtiva('producao'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'producao' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        PRODUÇÃO <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['producao'] || 0})</span>
+                        produção <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['producao'] || 0})</span>
                     </button>
 
                     <button onClick={() => { setAbaAtiva('cotar'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'cotar' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
@@ -541,29 +710,47 @@ export default function GestaoPedidos({
                     </button>
                 </div>
 
-                <BarraDeAcoes
-                    selecionados={selecionados || []}
-                    idsVisiveisDaAba={pedidosFiltradosGlobais.map(p => p.id)}
-                    localPedidos={pedidosFiltradosParaGestao}
-                    lojistaIdApp={lojistaIdApp}
-                    db={db}
-                    isAutomacaoAtiva={isAutomacaoHabilitada}
-                    abaAtiva={abaAtiva}
-                    setSelecionados={setSelecionados}
-                    alterarStatusPedido={alterarStatusPedido}
-                    setLocalPedidos={setLocalPedidos}
-                    setAbaAtiva={setAbaAtiva}
-                    cotarFrete={cotarFrete}
-                    listaEmbalagens={listaEmbalagensLoja}
-                    embalagemEscolhida={embalagemEscolhidaParaLote}
-                    setEmbalagemEscolhida={setEmbalagemEscolhidaParaLote}
-                    onCotarSelecionados={() => funcaoCotarRef.current()}
-                    onConcluirRetirada={() => funcaoConcluirRetiradaRef.current()}
-                    onConcluirEntregaLocal={() => funcaoConcluirEntregaLocalRef.current()}
-                    onConcluirDigital={() => funcaoConcluirDigitalRef.current()}
-                    onConfirmarRecebimento={() => funcaoConfirmarRecebimentoRef.current()}
-                    onSalvarEmbalagemProducao={() => funcaoSalvarEmbalagemProducaoRef.current()}
-                />
+                {/* 🌟 RENDERIZAÇÃO CONDICIONAL DA BARRA DE AÇÕES POR ABA */}
+                {['pedidos', 'pendente', 'producao'].includes(abaAtiva) ? (
+                    <BarraAcoesStatusProducao
+                        abaAtiva={abaAtiva}
+                        selecionados={selecionados}
+                        idsVisiveisDaAba={pedidosFiltradosGlobais.map(p => p.id)}
+                        setSelecionados={setSelecionados}
+                        onMarcarPago={lidarComMarcarPagoEmLote}
+                        onMarcarNaoPago={lidarComMarcarNaoPagoEmLote}
+                        onEnviarProducao={lidarComEnviarParaProducaoEmLote}
+                        onExcluirLote={lidarComExcluirEmLote}
+                        listaEmbalagens={listaEmbalagensLoja}
+                        embalagemEscolhida={embalagemEscolhidaParaLote}
+                        setEmbalagemEscolhida={setEmbalagemEscolhidaParaLote}
+                        onSalvarEmbalagemProducao={() => funcaoSalvarEmbalagemProducaoRef.current()}
+                    />
+                ) : (
+                    <BarraDeAcoes
+                        selecionados={selecionados || []}
+                        idsVisiveisDaAba={pedidosFiltradosGlobais.map(p => p.id)}
+                        localPedidos={pedidosFiltradosParaGestao}
+                        lojistaIdApp={lojistaIdApp}
+                        db={db}
+                        isAutomacaoAtiva={isAutomacaoHabilitada}
+                        abaAtiva={abaAtiva}
+                        setSelecionados={setSelecionados}
+                        alterarStatusPedido={alterarStatusPedido}
+                        setLocalPedidos={setLocalPedidos}
+                        setAbaAtiva={setAbaAtiva}
+                        cotarFrete={cotarFrete}
+                        listaEmbalagens={listaEmbalagensLoja}
+                        embalagemEscolhida={embalagemEscolhidaParaLote}
+                        setEmbalagemEscolhida={setEmbalagemEscolhidaParaLote}
+                        onCotarSelecionados={() => funcaoCotarRef.current()}
+                        onConcluirRetirada={() => funcaoConcluirRetiradaRef.current()}
+                        onConcluirEntregaLocal={() => funcaoConcluirEntregaLocalRef.current()}
+                        onConcluirDigital={() => funcaoConcluirDigitalRef.current()}
+                        onConfirmarRecebimento={() => funcaoConfirmarRecebimentoRef.current()}
+                        onSalvarEmbalagemProducao={() => funcaoSalvarEmbalagemProducaoRef.current()}
+                    />
+                )}
             </div>
 
             <div style={styles.conteudoDinamicoArea}>
@@ -768,9 +955,6 @@ const styles: { [key: string]: React.CSSProperties } = {
         marginBottom: '-1px'
     },
     tabAtiva: {
-        fontWeight: 'bold'
-    },
-    tabAtivaEnviados: {
         fontWeight: 'bold'
     },
     tabAtivaConcluidos: {

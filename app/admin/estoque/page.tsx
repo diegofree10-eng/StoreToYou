@@ -6,19 +6,19 @@ import { db, auth } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useTheme } from "@/context/ThemeContext";
-import { FiBox, FiLayers, FiPackage, FiSearch, FiAlertTriangle, FiXCircle, FiDollarSign } from "react-icons/fi";
+import { FiBox, FiLayers, FiPackage, FiSearch, FiAlertTriangle, FiXCircle, FiDollarSign, FiClock } from "react-icons/fi";
 
 import { TabEstoqueProdutos } from "./_tabGestaoEstoque/tabEstoqueProdutos";
 import { TabEstoqueInsumos } from "./_tabGestaoEstoque/tabEstoqueInsumos";
 import { TabEmbalagens } from "./_tabGestaoEstoque/tabEmbalagens";
+import { tabHistoricoMovimentacoes as TabHistoricoMovimentacoes } from "./_tabGestaoEstoque/tabHistoricoMovimentacoes";
 
 export default function PaginaEstoqueContainer() {
     const { theme } = useTheme();
     const [uid, setUid] = useState<string | null>(null);
-    const [abaAtiva, setAbaAtiva] = useState<"produtos" | "insumos" | "embalagens">("produtos");
+    const [abaAtiva, setAbaAtiva] = useState<"produtos" | "insumos" | "embalagens" | "historico">("produtos");
     const [loadingAuth, setLoadingAuth] = useState(true);
 
-    // Estados globais para alimentar os cards de topo e o filtro de busca unificado
     const [produtos, setProdutos] = useState<any[]>([]);
     const [insumos, setInsumos] = useState<any[]>([]);
     const [embalagens, setEmbalagens] = useState<any[]>([]);
@@ -66,7 +66,6 @@ export default function PaginaEstoqueContainer() {
         return () => unsubAuth();
     }, []);
 
-    // Escuta em tempo real as coleções para alimentar as métricas globais do topo
     useEffect(() => {
         if (!uid) return;
 
@@ -78,7 +77,6 @@ export default function PaginaEstoqueContainer() {
             setInsumos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        // CORRIGIDO: Agora aponta para a coleção correta "embalagem"
         const unsubEmb = onSnapshot(query(collection(db, "lojistas", uid, "embalagem"), orderBy("dsNomeEmbalagem", "asc")), (snap) => {
             setEmbalagens(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
@@ -90,7 +88,6 @@ export default function PaginaEstoqueContainer() {
         };
     }, [uid]);
 
-    // Cálculo unificado de métricas com base na aba ativa atual
     const metricas = useMemo(() => {
         if (abaAtiva === "produtos") {
             let totalItens = 0;
@@ -137,8 +134,7 @@ export default function PaginaEstoqueContainer() {
                 valorTotalEstoque += qtd * custo;
             });
             return { totalItens, estoqueBaixo, zerados, valorTotalEstoque, labelValor: "VALOR TOTAL EM CUSTO" };
-        } else {
-            // Embalagens
+        } else if (abaAtiva === "embalagens") {
             let totalItens = embalagens.length;
             let estoqueBaixo = 0;
             let zerados = 0;
@@ -154,6 +150,8 @@ export default function PaginaEstoqueContainer() {
                 valorTotalEstoque += qtd * custo;
             });
             return { totalItens, estoqueBaixo, zerados, valorTotalEstoque, labelValor: "VALOR TOTAL EM CUSTO" };
+        } else {
+            return { totalItens: 0, estoqueBaixo: 0, zerados: 0, valorTotalEstoque: 0, labelValor: "MODO AUDITORIA" };
         }
     }, [abaAtiva, produtos, insumos, embalagens]);
 
@@ -168,7 +166,6 @@ export default function PaginaEstoqueContainer() {
     return (
         <div style={{ padding: '15px', fontFamily: 'system-ui, sans-serif', backgroundColor: theme.bgApp, color: theme.textMain, minHeight: '100vh', boxSizing: 'border-box' }}>
             
-            {/* TÍTULO E SUBTÍTULO */}
             <div style={{ marginBottom: '15px' }}>
                 <h2 style={{ fontSize: '20px', color: theme.textMain, margin: 0, fontWeight: 800 }}>📦 Central de Estoque</h2>
                 <p style={{ fontSize: '13px', color: theme.textSec, margin: '4px 0 0 0' }}>
@@ -176,7 +173,6 @@ export default function PaginaEstoqueContainer() {
                 </p>
             </div>
 
-            {/* NAVEGAÇÃO DE ABAS */}
             <div style={{ display: "flex", gap: "10px", marginBottom: "15px", borderBottom: `1px solid ${theme.border}`, paddingBottom: "10px", overflowX: "auto" }}>
                 <button
                     onClick={() => { setAbaAtiva("produtos"); setFiltroRapido("todos"); setBusca(""); }}
@@ -216,77 +212,92 @@ export default function PaginaEstoqueContainer() {
                 >
                     <FiPackage size={16} /> Embalagens
                 </button>
+
+                <button
+                    onClick={() => { setAbaAtiva("historico"); setFiltroRapido("todos"); setBusca(""); }}
+                    style={{
+                        padding: "10px 18px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", fontSize: "13px",
+                        border: abaAtiva === "historico" ? "none" : `1px solid ${theme.border}`,
+                        backgroundColor: abaAtiva === "historico" ? theme.primary : theme.bgCard,
+                        color: abaAtiva === "historico" ? "#ffffff" : theme.textMain,
+                        whiteSpace: "nowrap"
+                    }}
+                >
+                    <FiClock size={16} /> Histórico / Extrato
+                </button>
             </div>
 
-            {/* CARDS DE TOPO PADRONIZADOS */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '15px' }}>
-                <div onClick={() => setFiltroRapido("todos")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: `4px solid ${theme.primary}`, cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>TOTAL CADASTRADO</span>
-                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.totalItens}</h3>
+            {abaAtiva !== "historico" && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '15px' }}>
+                    <div onClick={() => setFiltroRapido("todos")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: `4px solid ${theme.primary}`, cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>TOTAL CADASTRADO</span>
+                                <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.totalItens}</h3>
+                            </div>
+                            <FiPackage size={24} color={theme.primary} />
                         </div>
-                        <FiPackage size={24} color={theme.primary} />
+                    </div>
+
+                    <div onClick={() => setFiltroRapido("baixo")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: '4px solid #f59e0b', cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>ESTOQUE BAIXO</span>
+                                <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.estoqueBaixo}</h3>
+                            </div>
+                            <FiAlertTriangle size={24} color="#f59e0b" />
+                        </div>
+                    </div>
+
+                    <div onClick={() => setFiltroRapido("zerado")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: '4px solid #ef4444', cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>ESGOTADOS (ZERADOS)</span>
+                                <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.zerados}</h3>
+                            </div>
+                            <FiXCircle size={24} color="#ef4444" />
+                        </div>
+                    </div>
+
+                    <div style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: '4px solid #10b981' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>{metricas.labelValor}</span>
+                                <h3 style={{ fontSize: '18px', margin: '4px 0 0 0', color: theme.textMain }}>
+                                    R$ {metricas.valorTotalEstoque.toFixed(2).replace('.', ',')}
+                                </h3>
+                            </div>
+                            <FiDollarSign size={24} color="#10b981" />
+                        </div>
                     </div>
                 </div>
+            )}
 
-                <div onClick={() => setFiltroRapido("baixo")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: '4px solid #f59e0b', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>ESTOQUE BAIXO</span>
-                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.estoqueBaixo}</h3>
-                        </div>
-                        <FiAlertTriangle size={24} color="#f59e0b" />
-                    </div>
-                </div>
-
-                <div onClick={() => setFiltroRapido("zerado")} style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: '4px solid #ef4444', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>ESGOTADOS (ZERADOS)</span>
-                            <h3 style={{ fontSize: '20px', margin: '4px 0 0 0', color: theme.textMain }}>{metricas.zerados}</h3>
-                        </div>
-                        <FiXCircle size={24} color="#ef4444" />
-                    </div>
-                </div>
-
-                <div style={{ backgroundColor: theme.bgCard, padding: '12px 14px', borderRadius: '8px', border: `1px solid ${theme.border}`, borderLeft: '4px solid #10b981' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: theme.textSec }}>{metricas.labelValor}</span>
-                            <h3 style={{ fontSize: '18px', margin: '4px 0 0 0', color: theme.textMain }}>
-                                R$ {metricas.valorTotalEstoque.toFixed(2).replace('.', ',')}
-                            </h3>
-                        </div>
-                        <FiDollarSign size={24} color="#10b981" />
-                    </div>
-                </div>
-            </div>
-
-            {/* BARRA DE BUSCA E FILTROS RÁPIDOS UNIFICADA */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap', background: theme.bgCard, padding: '12px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px', background: theme.inputBg, padding: '8px 12px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
                     <FiSearch color={theme.textSec} />
                     <input 
                         type="text" 
-                        placeholder="Buscar por nome, variação ou SKU..." 
+                        placeholder={abaAtiva === "historico" ? "Filtrar histórico por nome, origem..." : "Buscar por nome, variação ou SKU..."} 
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
                         style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '13px', color: theme.textMain }}
                     />
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px', width: '100%', justifyContent: 'space-between' }}>
-                    <button onClick={() => setFiltroRapido("todos")} style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'todos' ? theme.primary : theme.bgCard, color: filtroRapido === 'todos' ? '#fff' : theme.textSec }}>Todos</button>
-                    <button onClick={() => setFiltroRapido("baixo")} style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'baixo' ? '#f59e0b' : theme.bgCard, color: filtroRapido === 'baixo' ? '#fff' : theme.textSec }}>Estoque Baixo</button>
-                    <button onClick={() => setFiltroRapido("zerado")} style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'zerado' ? '#ef4444' : theme.bgCard, color: filtroRapido === 'zerado' ? '#fff' : theme.textSec }}>Zerados</button>
-                </div>
+                {abaAtiva !== "historico" && (
+                    <div style={{ display: 'flex', gap: '6px', width: '100%', justifyContent: 'space-between' }}>
+                        <button onClick={() => setFiltroRapido("todos")} style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'todos' ? theme.primary : theme.bgCard, color: filtroRapido === 'todos' ? '#fff' : theme.textSec }}>Todos</button>
+                        <button onClick={() => setFiltroRapido("baixo")} style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'baixo' ? '#f59e0b' : theme.bgCard, color: filtroRapido === 'baixo' ? '#fff' : theme.textSec }}>Estoque Baixo</button>
+                        <button onClick={() => setFiltroRapido("zerado")} style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: `1px solid ${theme.border}`, background: filtroRapido === 'zerado' ? '#ef4444' : theme.bgCard, color: filtroRapido === 'zerado' ? '#fff' : theme.textSec }}>Zerados</button>
+                    </div>
+                )}
             </div>
 
-            {/* CONTEÚDO DAS ABAS */}
             {abaAtiva === "produtos" && <TabEstoqueProdutos uid={uid} buscaExterna={busca} filtroRapidoExterno={filtroRapido} />}
             {abaAtiva === "insumos" && <TabEstoqueInsumos uid={uid} buscaExterna={busca} filtroRapidoExterno={filtroRapido} />}
             {abaAtiva === "embalagens" && <TabEmbalagens uid={uid} buscaExterna={busca} filtroRapidoExterno={filtroRapido} />}
+           {abaAtiva === "historico" && <TabHistoricoMovimentacoes uid={uid} theme={theme} buscaExterna={busca} />}
 
         </div>
     );

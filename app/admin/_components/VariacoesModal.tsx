@@ -134,7 +134,8 @@ export default function VariacoesModal({
             const largItem = item.nrLarguraProduto ?? item.nrLargura ?? item.largura ?? "";
             const altItem = item.nrAlturaProduto ?? item.nrAltura ?? item.altura ?? "";
 
-            const insumosVar = item.insumosComposicao || [];
+            // 🌟 Padronizado para insumosComposicaoProduto
+            const insumosVar = item.insumosComposicaoProduto || item.insumosComposicao || [];
             const outrosCustosVar = item.vlOutrosCustosProduto !== undefined && item.vlOutrosCustosProduto !== null
               ? converterDoPadraoParaCaixa(item.vlOutrosCustosProduto)
               : (item.outrosCustos || "");
@@ -153,7 +154,7 @@ export default function VariacoesModal({
               nrComprimentoProduto: compItem !== null && compItem !== undefined ? String(compItem) : "",
               nrLarguraProduto: largItem !== null && largItem !== undefined ? String(largItem) : "",
               nrAlturaProduto: altItem !== null && altItem !== undefined ? String(altItem) : "",
-              insumosComposicao: insumosVar,
+              insumosComposicaoProduto: insumosVar, // 🌟 Chave padronizada
               vlOutrosCustosProduto: outrosCustosVar
             };
           });
@@ -182,7 +183,8 @@ export default function VariacoesModal({
             const largItem = item.nrLarguraProduto ?? item.nrLargura ?? item.largura ?? "";
             const altItem = item.nrAlturaProduto ?? item.nrAltura ?? item.altura ?? "";
 
-            const insumosVar = item.insumosComposicao || [];
+            // 🌟 Padronizado para insumosComposicaoProduto
+            const insumosVar = item.insumosComposicaoProduto || item.insumosComposicao || [];
             const outrosCustosVar = item.vlOutrosCustosProduto !== undefined && item.vlOutrosCustosProduto !== null
               ? converterDoPadraoParaCaixa(item.vlOutrosCustosProduto)
               : ((item.vlOutrosCustos ?? item.outrosCustos) || "");
@@ -201,7 +203,7 @@ export default function VariacoesModal({
               nrComprimentoProduto: compItem !== null && compItem !== undefined && String(compItem).trim() !== "" ? String(compItem) : "",
               nrLarguraProduto: largItem !== null && largItem !== undefined && String(largItem).trim() !== "" ? String(largItem) : "",
               nrAlturaProduto: altItem !== null && altItem !== undefined && String(altItem).trim() !== "" ? String(altItem) : "",
-              insumosComposicao: insumosVar,
+              insumosComposicaoProduto: insumosVar, // 🌟 Chave padronizada
               vlOutrosCustosProduto: outrosCustosVar
             };
           });
@@ -254,7 +256,7 @@ export default function VariacoesModal({
         nrComprimentoProduto: itemDraft.nrComprimentoProduto || itemDraft.nrComprimento || itemDraft.comprimento || "",
         nrLarguraProduto: itemDraft.nrLarguraProduto || itemDraft.nrLargura || itemDraft.largura || "",
         nrAlturaProduto: itemDraft.nrAlturaProduto || itemDraft.nrAltura || itemDraft.altura || "",
-        insumosComposicao: itemDraft.insumosComposicao || [],
+        insumosComposicaoProduto: itemDraft.insumosComposicaoProduto || [], // 🌟 Salvo com a chave exata solicitada
         vlOutrosCustosProduto: itemDraft.vlOutrosCustosProduto || itemDraft.vlOutrosCustos || itemDraft.outrosCustos || ""
       };
     });
@@ -450,7 +452,7 @@ export default function VariacoesModal({
                     const valorLargura = draftTabela[c.key]?.nrLarguraProduto || "";
                     const valorAltura = draftTabela[c.key]?.nrAlturaProduto || "";
 
-                    const insumosItem = draftTabela[c.key]?.insumosComposicao || [];
+                    const insumosItem = draftTabela[c.key]?.insumosComposicaoProduto || []; // 🌟 Lendo com a chave correta
                     const custoInsumosTot = insumosItem.reduce((acc: number, item: any) => acc + (Number(item.vlCustoUnitarioInsumo || 0) * Number(item.nrQuantidadeConsumida || 0)), 0);
                     const outrosCustosItem = parseFloat(String(draftTabela[c.key]?.vlOutrosCustosProduto || "0").replace(/\./g, "").replace(",", ".")) || 0;
                     const custoCalculadoTotal = custoInsumosTot + outrosCustosItem;
@@ -511,12 +513,6 @@ export default function VariacoesModal({
                                 style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border, width: '100%', boxSizing: 'border-box' }}
                                 value={valorGtin}
                                 onChange={e => handleDraftInput(c.key, "dsGtinProduto", e.target.value.replace(/\D/g, ""))}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    // Se bipado com leitor, pode focar no preço ou próximo campo se desejar
-                                  }
-                                }}
                                 placeholder="EAN / Código de Barras"
                               />
                             </div>
@@ -656,7 +652,7 @@ export default function VariacoesModal({
                       const valorLargura = draftTabela[c.key]?.nrLarguraProduto || "";
                       const valorAltura = draftTabela[c.key]?.nrAlturaProduto || "";
 
-                      const insumosItem = draftTabela[c.key]?.insumosComposicao || [];
+                      const insumosItem = draftTabela[c.key]?.insumosComposicaoProduto || []; // 🌟 Lendo com a chave correta
                       const custoInsumosTot = insumosItem.reduce((acc: number, item: any) => acc + (Number(item.vlCustoUnitarioInsumo || 0) * Number(item.nrQuantidadeConsumida || 0)), 0);
                       const outrosCustosItem = parseFloat(String(draftTabela[c.key]?.vlOutrosCustosProduto || "0").replace(/\./g, "").replace(",", ".")) || 0;
                       const custoCalculadoTotal = custoInsumosTot + outrosCustosItem;
@@ -713,7 +709,7 @@ export default function VariacoesModal({
                           )}
 
                           {showVar2 && (<td style={{ ...shopeeStyles.td, textAlign: 'center', verticalAlign: 'middle', width: '90px', color: theme.textMain }}> {c.v2 || "-"}</td>)}
-                          
+
                           <td style={shopeeStyles.td}>
                             <input
                               style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
@@ -728,11 +724,6 @@ export default function VariacoesModal({
                               style={{ ...shopeeStyles.tableInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                               value={valorGtin}
                               onChange={e => handleDraftInput(c.key, "dsGtinProduto", e.target.value.replace(/\D/g, ""))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                }
-                              }}
                               placeholder="EAN / Código"
                             />
                           </td>
@@ -849,13 +840,13 @@ export default function VariacoesModal({
           isOpen={true}
           onClose={() => setModalInsumosKeyAtiva(null)}
           listaInsumos={listaInsumos}
-          insumosComposicao={draftTabela[modalInsumosKeyAtiva]?.insumosComposicao || []}
-          setInsumosComposicao={(novosInsumos) => {
+          insumosComposicaoProduto={draftTabela[modalInsumosKeyAtiva]?.insumosComposicaoProduto || []} 
+          setInsumosComposicaoProduto={(novosInsumos) => {                            
             setDraftTabela((prev: any) => ({
               ...prev,
               [modalInsumosKeyAtiva]: {
                 ...prev[modalInsumosKeyAtiva],
-                insumosComposicao: novosInsumos
+                insumosComposicaoProduto: novosInsumos // 🌟 Atualizado mantendo o padrão exato
               }
             }));
           }}

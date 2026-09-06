@@ -6,6 +6,8 @@ import { doc, updateDoc } from 'firebase/firestore';
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
+import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import BlocoEmbalagemPedido from './BlocoEmbalagemPedido';
 
 interface TabRetirarLocalProps {
     pedidos: Pedido[];
@@ -243,16 +245,16 @@ export default function TabRetirarLocal({
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: theme.textSec }}>Gerencie os pedidos pagos destinados à entrega local.</p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: theme.textSec, fontWeight: 'bold', marginLeft: 'auto' }}>
-                    <span>Mostrar:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: theme.inputBg, padding: '5px 10px', borderRadius: '6px', border: `1px solid ${theme.border}`, marginLeft: 'auto' }}>
+                    <span style={{ fontSize: '11px', color: theme.textSec }}>Exibir:</span>
                     <select
                         value={itensPorPagina}
                         onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
-                        style={{ padding: '6px 10px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '11px', color: theme.textMain, cursor: 'pointer', fontWeight: 'bold' }}
                     >
-                        <option value={20}>20</option>
-                        <option value={40}>40</option>
-                        <option value={60}>60</option>
+                        <option value={20} style={{ background: theme.bgCard }}>20</option>
+                        <option value={40} style={{ background: theme.bgCard }}>40</option>
+                        <option value={60} style={{ background: theme.bgCard }}>60</option>
                     </select>
                 </div>
             </div>
@@ -317,7 +319,7 @@ export default function TabRetirarLocal({
                                                 onChange={() => setSelecionados(prev => prev.includes(pedido.id) ? prev.filter(item => item !== pedido.id) : [...prev, pedido.id])}
                                                 style={{ transform: 'scale(1.2)', cursor: 'pointer', flexShrink: 0 }}
                                             />
-                                            <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', width: '50px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
+                                            <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
 
                                             {/* 🌟 Badge de Origem PC */}
                                             <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: ((pedido as any).dsOrigemPedido || (pedido as any).origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
@@ -388,44 +390,13 @@ export default function TabRetirarLocal({
                                 </div>
 
                                 {expandido && (() => {
-                                    const embalagemData = (pedido as any).Embalagem || (pedido as any).embalagemRecomendada || {};
-
-                                    // Mapeamento seguro para suportar a estrutura aninhada (recomendada / escolhida) e modelos antigos planos
-                                    const recomendada = embalagemData.recomendada || embalagemData;
-                                    const escolhida = embalagemData.escolhida || null;
-
-                                    const modeloRecomendado = recomendada.dsModeloEmbalagemRecomendado || recomendada.nomeInsumo || recomendada.nome || "Não calculada";
-                                    const tipoRecomendado = recomendada.dsTipoEmbalagem || recomendada.tipo || "-";
-                                    const custoRecomendado = Number(recomendada.vlCustoEmbalagemRecomendado || recomendada.custo || 0);
-
-                                    const modeloEscolhido = escolhida?.dsModeloEmbalagemEscolhida || escolhida?.dsModeloEmbalagemRecomendado || escolhida?.nome || "";
-                                    const tipoEscolhido = escolhida?.dsTipoEmbalagem || escolhida?.tipo || "";
-                                    const custoEscolhido = Number(escolhida?.vlCustoEmbalagemEscolhida || escolhida?.vlCustoEmbalagemRecomendado || escolhida?.custo || 0);
-
                                     return (
                                         <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
-                                            {/* 📦 Embalagens (Recomendada vs Escolhida) abaixo dos itens e acima dos 5 cards */}
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                    <span style={{ fontSize: '15px' }}>📦</span>
-                                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>Embalagem Recomendada:</span>
-                                                    <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary, backgroundColor: theme.inputBg, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border}` }}>
-                                                        {modeloRecomendado} ({String(tipoRecomendado).replace('_', ' ')})
-                                                    </span>
 
-                                                    {modeloEscolhido && modeloEscolhido !== modeloRecomendado && (
-                                                        <>
-                                                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, marginLeft: '8px' }}>| Escolhida:</span>
-                                                            <span style={{ fontSize: '12px', fontWeight: '600', color: '#16a34a', backgroundColor: '#e6f4ea', padding: '2px 8px', borderRadius: '4px', border: '1px solid #34a853' }}>
-                                                                {modeloEscolhido} ({String(tipoEscolhido).replace('_', ' ')})
-                                                            </span>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
+                                            {/* 🌟 BARRA DE EMBALAGEM PADRONIZADA */}
+                                            <BlocoEmbalagemPedido pedido={pedido} />
+
                                             <div className="grid-expandido" style={localStyles.gridExpandido}>
-
-                                                {/* BLOCO 1: PERSONALIZAÇÃO */}
                                                 <div style={{ ...localStyles.caixaPersonalizacao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                     <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '12px' }}>
                                                         ✨ Personalização:
@@ -455,49 +426,37 @@ export default function TabRetirarLocal({
                                                     )}
                                                 </div>
 
-                                                {/* BLOCO 2: ENDEREÇO */}
                                                 <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço</div>
+                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de Entrega Local</div>
                                                     <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-                                                        {isRetirada ? (
-                                                            <strong>Retirada na Loja física</strong>
-                                                        ) : (
-                                                            <>
-                                                                <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
-                                                                <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
-                                                                <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
-                                                                <strong>Cidade:</strong> {endereco.dsCidadeCliente || endereco.cidade || '-'}&nbsp;&nbsp;<strong>UF:</strong> {endereco.dsUfCliente || endereco.uf || '-'}<br />
-                                                                <strong>CEP:</strong> {endereco.dsCepCliente || endereco.cep || '-'}
-                                                            </>
-                                                        )}
+                                                        <>
+                                                            <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
+                                                            <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
+                                                            <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
+                                                            <strong>Cidade:</strong> {endereco.dsCidadeCliente || endereco.cidade || '-'}&nbsp;&nbsp;<strong>UF:</strong> {endereco.dsUfCliente || endereco.uf || '-'}<br />
+                                                            <strong>CEP:</strong> {endereco.dsCepCliente || endereco.cep || '-'}
+                                                        </>
                                                     </div>
                                                 </div>
 
-                                                {/* BLOCO 3: LOGÍSTICA */}
                                                 <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                     <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
                                                     <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
                                                         <div><strong>Forma:</strong> Entrega Local</div>
-                                                        <div><strong>Método de Pagamento:</strong> {fin.dsMetodoPagamento || fin.metodo || 'PIX'}</div>
-                                                        <div><strong>Transportadora ID:</strong> {fin.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || '-'}</div>
-                                                        <div><strong>Serviço:</strong> {pedidoLogistica.servico || "Entrega Local (Taxa Fixa)"}</div>
+                                                        <div><strong>Taxa Fixa / Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
                                                     </div>
                                                 </div>
 
-                                                {/* BLOCO 4: ETIQUETA */}
                                                 <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                     <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🏷️ Etiqueta</div>
                                                     <div style={{ fontSize: '11px', color: theme.textSec, fontStyle: 'italic', padding: '4px 0' }}>
-                                                        Entrega local, não possui etiqueta de envio.
+                                                        Entrega local, não utiliza etiqueta de postagem tradicional.
                                                     </div>
                                                 </div>
 
-                                                {/* BLOCO 5: PAGAMENTO */}
                                                 <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                     <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                     <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-
-                                                        {/* 🌟 Forma de Pagamento */}
                                                         <div>
                                                             <strong>Forma:</strong> {
                                                                 fin.dsFormaPagamentoCarrinho
@@ -505,22 +464,6 @@ export default function TabRetirarLocal({
                                                                     : 'PIX'
                                                             }
                                                         </div>
-
-                                                        {/* 🌟 Status / Condição de Pagamento (À vista ou Encomenda/Parcelado) */}
-                                                        {fin.vlEntrada > 0 ? (
-                                                            <div style={{ marginTop: '4px', background: theme.inputBg, padding: '6px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-                                                                <div style={{ color: theme.primary, fontWeight: 'bold', marginBottom: '2px' }}>📦 Venda Parcelada / Encomenda</div>
-                                                                <div><strong>Entrada Paga:</strong> R$ {Number(fin.vlEntrada).toFixed(2).replace('.', ',')}</div>
-                                                                <div><strong>Restante:</strong> R$ {Number(fin.vlRestante || (totalVal - fin.vlEntrada)).toFixed(2).replace('.', ',')}</div>
-                                                                <div><strong>Quitação / Retirada:</strong> {fin.dsPrazoRestante || 'Não informada'}</div>
-                                                                <div><strong>Status Parcial:</strong> <span style={{ color: fin.statusPagamento === 'pago' ? '#16a34a' : '#d97706', fontWeight: 'bold' }}>{fin.statusPagamento?.toUpperCase() || 'PARCIAL'}</span></div>
-                                                            </div>
-                                                        ) : (
-                                                            <div style={{ marginTop: '3px' }}>
-                                                                <strong>Condição:</strong> Pagamento Total (À Vista)
-                                                            </div>
-                                                        )}
-
                                                         <div style={{ marginTop: '6px', borderTop: `1px solid ${theme.border}`, paddingTop: '4px' }}>
                                                             <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}
                                                         </div>
@@ -529,13 +472,11 @@ export default function TabRetirarLocal({
                                                             <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
                                                         </div>
                                                         <div><strong>Cupom:</strong> {cupomStr}</div>
-
                                                         <div style={{ marginTop: '4px', borderTop: `1px solid ${theme.border}`, paddingTop: '4px' }}>
                                                             <strong>Total:</strong> <span style={{ color: theme.primary, fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                         </div>
                                                     </div>
                                                 </div>
-
                                             </div>
                                         </div>
                                     );
@@ -546,13 +487,52 @@ export default function TabRetirarLocal({
                 )}
             </div>
 
-            {totalPaginas > 1 && (
-                <div style={styles.paginationContainer}>
-                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} style={{ ...styles.pageBtn, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>Anterior</button>
-                    <span style={{ margin: '0 15px', fontSize: '13px', fontWeight: 'bold', color: theme.textSec }}>Página {paginaAtual} de {totalPaginas}</span>
-                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} style={{ ...styles.pageBtn, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>Próxima</button>
+            {/* CONTROLES DE PAGINAÇÃO (RODAPÉ PADRONIZADO COM ANTERIOR E PRÓXIMA) */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${theme.border}`, fontSize: "12px" }}>
+                <span style={{ color: theme.textSec }}>
+                    Página <strong>{paginaAtual}</strong> de <strong>{totalPaginas}</strong> (Total: {pedidosEntregaLocal.length} pedidos)
+                </span>
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => setPaginaAtual(p => Math.max(p - 1, 1))}
+                        disabled={paginaAtual === 1 || pedidosEntregaLocal.length === 0}
+                        style={{
+                            background: paginaAtual === 1 ? theme.bgApp : theme.primary,
+                            color: paginaAtual === 1 ? theme.textSec : "#fff",
+                            border: `1px solid ${theme.border}`,
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            cursor: paginaAtual === 1 ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontWeight: "bold",
+                            opacity: paginaAtual === 1 ? 0.6 : 1
+                        }}
+                    >
+                        <FiChevronLeft size={14} /> Anterior
+                    </button>
+                    <button
+                        onClick={() => setPaginaAtual(p => Math.min(p + 1, totalPaginas))}
+                        disabled={paginaAtual === totalPaginas || pedidosEntregaLocal.length === 0}
+                        style={{
+                            background: paginaAtual === totalPaginas ? theme.bgApp : theme.primary,
+                            color: paginaAtual === totalPaginas ? theme.textSec : "#fff",
+                            border: `1px solid ${theme.border}`,
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            cursor: paginaAtual === totalPaginas ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontWeight: "bold",
+                            opacity: paginaAtual === totalPaginas ? 0.6 : 1
+                        }}
+                    >
+                        Próxima <FiChevronRight size={14} />
+                    </button>
                 </div>
-            )}
+            </div>
         </div>
     );
 }
@@ -620,11 +600,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
         </div>
     );
 });
-
-const styles: { [key: string]: React.CSSProperties } = {
-    paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
-    pageBtn: { padding: '8px 16px', cursor: 'pointer', border: '1px solid', borderRadius: '4px', fontWeight: 'bold' }
-};
 
 const localStyles: { [key: string]: React.CSSProperties } = {
     cardContainer: { borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },

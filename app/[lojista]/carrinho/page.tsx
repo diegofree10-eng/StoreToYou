@@ -483,7 +483,7 @@ export default function CarrinhoIdentidadeVisual() {
                     isPrecisaFreteProduto: !!(item.isPrecisaFreteProduto ?? true),
                     dsRespostasPersonalizadasProduto: respostasItem,
 
-                    insumosComposicao: item.insumosComposicao || [],
+                    insumosComposicaoProduto: item.insumosComposicaoProduto || [],
                     vlOutrosCustosProduto: item.vlOutrosCustosProduto || 0,
                     movimentarEstoque: item.movimentarEstoque ?? true,
                     movimentarEstoqueComposicao: item.movimentarEstoqueComposicao ?? true

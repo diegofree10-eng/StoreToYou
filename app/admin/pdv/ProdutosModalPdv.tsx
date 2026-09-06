@@ -1,6 +1,6 @@
-//app/admin/pdv/ProdutosModalPdv.tsx
+// app/admin/pdv/ProdutosModalPdv.tsx
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
 import { X, Search } from "lucide-react";
 
 export default function ProdutosModalPdv({
@@ -16,16 +16,98 @@ export default function ProdutosModalPdv({
   formatarMoeda,
   theme
 }: any) {
+  
+  // 🔍 Listener inteligente para capturar o código de barras ou SKU bipado pelo leitor
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let bufferCodigo = "";
+    let ultimoTempo = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tempoAtual = Date.now();
+      
+      // Se demorou mais de 100ms entre as teclas, reseta o buffer (evita conflito com digitação humana lenta)
+      if (tempoAtual - ultimoTempo > 100) {
+        bufferCodigo = "";
+      }
+      ultimoTempo = tempoAtual;
+
+      if (e.key === "Enter") {
+        if (bufferCodigo.trim().length > 1) {
+          const codigoBipado = bufferCodigo.trim().toLowerCase();
+          let produtoEncontrado = null;
+          let variacaoEncontrada = null;
+
+          // Varre os produtos cadastrados buscando correspondência por GTIN/EAN, SKU ou ID
+          for (const p of produtos) {
+            const eanPai = String(p.dsEANGTINProduto || "").trim().toLowerCase();
+            const skuPai = String(p.dsSkuProduto || "").trim().toLowerCase();
+            const idPai = String(p.id || "").trim().toLowerCase();
+
+            // 1. Verifica se bateu no produto pai
+            if (
+              (eanPai && eanPai === codigoBipado) ||
+              (skuPai && skuPai === codigoBipado) ||
+              idPai === codigoBipado
+            ) {
+              produtoEncontrado = p;
+              break;
+            }
+
+            // 2. Se o produto tem variações, verifica se o código bate em alguma variação específica
+            if (p.isTemVariacoesProduto && Array.isArray(p.variacoes)) {
+              const varMatch = p.variacoes.find((v: any) => {
+                const eanVar = String(v.dsEANGTINProduto || "").trim().toLowerCase();
+                const skuVar = String(v.dsSkuProduto || "").trim().toLowerCase();
+                return (eanVar && eanVar === codigoBipado) || (skuVar && skuVar === codigoBipado);
+              });
+
+              if (varMatch) {
+                produtoEncontrado = p;
+                variacaoEncontrada = varMatch;
+                break;
+              }
+            }
+          }
+
+          if (produtoEncontrado) {
+            // Se encontrou uma variação específica pelo leitor, podemos passá-la ou tratá-la diretamente
+            if (variacaoEncontrada) {
+              // Se sua função aceitar variação direta ou abrir o modal já com ela selecionada
+              lidarComCliqueProduto(produtoEncontrado, variacaoEncontrada);
+            } else {
+              lidarComCliqueProduto(produtoEncontrado);
+            }
+            onClose();
+          }
+          bufferCodigo = "";
+        }
+      } else if (e.key.length === 1) {
+        bufferCodigo += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, produtos, lidarComCliqueProduto, onClose]);
+
   if (!isOpen) return null;
 
   const produtosFiltrados = produtos.filter((p: any) => {
-    // Tratamento para ler categoria nova ou antiga
     const categoriaProd = p.dsCategoriaProduto || p.categoria || "Sem Categoria";
     const atendeCategoria = categoriaSelecionada === "Todos" || categoriaProd === categoriaSelecionada;
     
-    // Tratamento para ler nome novo ou antigo
     const nomeProd = p.dsNomeProduto || p.nome || "";
-    const atendeBusca = nomeProd.toLowerCase().includes(buscaProduto.toLowerCase());
+    const eanProd = p.dsEANGTINProduto || "";
+    const skuProd = p.dsSkuProduto || "";
+    
+    const atendeBusca = 
+      nomeProd.toLowerCase().includes(buscaProduto.toLowerCase()) || 
+      eanProd.toLowerCase().includes(buscaProduto.toLowerCase()) ||
+      skuProd.toLowerCase().includes(buscaProduto.toLowerCase());
     
     return atendeCategoria && atendeBusca;
   });
@@ -36,7 +118,7 @@ export default function ProdutosModalPdv({
         
         {/* Cabeçalho do Modal */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: `1px solid ${theme.border}` }}>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", textTransform: 'uppercase' }}>🛍️ Selecionar Produtos para o Pedido</h3>
+          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", textTransform: 'uppercase' }}>🛍️ Selecionar Produtos (Leitor de Código de Barras / SKU / Clique)</h3>
           <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textSec }}>
             <X size={20} />
           </button>
@@ -48,9 +130,10 @@ export default function ProdutosModalPdv({
             <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: theme.textSec }} />
             <input
               type="text"
-              placeholder="Digite o nome do produto para buscar..."
+              placeholder="Digite o nome, SKU, EAN/GTIN ou use o leitor de código de barras..."
               value={buscaProduto}
               onChange={(e) => setBuscaProduto(e.target.value)}
+              autoFocus
               style={{ width: "100%", padding: "10px 12px 10px 38px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "13px", outline: "none", background: theme.inputBg, color: theme.textMain, boxSizing: "border-box" }}
             />
           </div>
@@ -86,7 +169,6 @@ export default function ProdutosModalPdv({
             <p style={{ fontSize: "14px", color: theme.textSec, gridColumn: "1 / -1", textAlign: "center", padding: "40px" }}>Nenhum produto encontrado.</p>
           ) : (
             produtosFiltrados.map((p: any) => {
-              // Mapeando com suporte aos novos campos e fallback para os antigos
               const capaImg = p.dsCapaProduto || p.dsCapa || (p.dsImagensProduto?.[0]) || (p.dsImagens?.[0]) || "";
               const nomeProd = p.dsNomeProduto || p.nome || "Produto Sem Nome";
               const precoProd = p.vlPrecoBasicoProduto ?? p.vlPrecoBasico ?? p.preco ?? 0;
@@ -94,7 +176,10 @@ export default function ProdutosModalPdv({
               return (
                 <div
                   key={p.id}
-                  onClick={() => lidarComCliqueProduto(p)}
+                  onClick={() => {
+                    lidarComCliqueProduto(p);
+                    onClose();
+                  }}
                   style={{ border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "10px", cursor: "pointer", textAlign: "center", background: theme.bgApp, transition: "transform 0.1s, border-color 0.2s", display: "flex", flexDirection: "column", justifyContent: "space-between" }}
                 >
                   {capaImg ? (

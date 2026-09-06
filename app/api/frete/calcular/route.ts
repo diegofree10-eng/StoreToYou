@@ -216,6 +216,7 @@ export async function POST(request: Request) {
     let insumoRecomendadoNome = "Embalagem Padrão";
     let insumoRecomendadoCusto = 0;
     let insumoRecomendadoTipo = "envelope_seguranca";
+    let insumosComposicaoCompleta: any[] = [];
 
     let pacoteSeguro = {
       largura: Number(pacote?.largura || 11),
@@ -225,7 +226,6 @@ export async function POST(request: Request) {
     };
 
     try {
-      // 🔄 Consulta alterada para a nova subcoleção "embalagem"
       const insumosSnap = await dbAdmin
         .collection("lojistas")
         .doc(lojistaDocId)
@@ -254,6 +254,31 @@ export async function POST(request: Request) {
         comprimento: resultadoCalculo.dimensoesPacoteFinal.comprimento,
         peso: resultadoCalculo.dimensoesPacoteFinal.pesoTotal,
       };
+
+      // 🌟 BUSCA DIRETA NO BANCO PELO ID DA EMBALAGEM RECOMENDADA PARA PEGAR OS INSUMOS
+      if (insumoRecomendadoId) {
+        const embalagemDocRef = await dbAdmin
+          .collection("lojistas")
+          .doc(lojistaDocId)
+          .collection("embalagem")
+          .doc(insumoRecomendadoId)
+          .get();
+
+        if (embalagemDocRef.exists) {
+          const dadosEmbalagemBanco = embalagemDocRef.data() || {};
+          const arrayBruto =
+            dadosEmbalagemBanco.insumosComposicaoEmbalagem || [];
+
+          // Mapeia rigorosamente cada um dos campos que você pediu
+          insumosComposicaoCompleta = arrayBruto.map((ins: any) => ({
+            insumoId: ins.insumoId || "",
+            nome: ins.nome || "",
+            quantidade: Number(ins.quantidade || 1),
+            unidade: ins.unidade || "unidade",
+            custoUnitario: Number(ins.custoUnitario || 0),
+          }));
+        }
+      }
     } catch (embErr) {
       console.error(
         "Erro ao calcular embalagem e empilhamento na API de frete:",
@@ -426,7 +451,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // Retorno estruturado contendo as opções de frete, a recomendação e o objeto pronto para o helper salvar no Firebase
+    // Retorno estruturado contendo as opções de frete, a recomendação preenchida com os insumos e a escolhida vazia
     return NextResponse.json({
       opcoesFrete: fretesFiltrados,
       Embalagem: {
@@ -435,12 +460,16 @@ export async function POST(request: Request) {
           dsModeloEmbalagemRecomendado: insumoRecomendadoNome,
           vlCustoEmbalagemRecomendado: insumoRecomendadoCusto,
           dsTipoEmbalagem: insumoRecomendadoTipo,
+          insumosComposicaoEmbalagem: insumosComposicaoCompleta,
+          itensComposicao: insumosComposicaoCompleta,
         },
         escolhida: {
-          id: insumoRecomendadoId, // Começa igual à recomendada por padrão
-          dsModeloEmbalagemEscolhida: insumoRecomendadoNome,
-          vlCustoEmbalagemEscolhida: insumoRecomendadoCusto,
-          dsTipoEmbalagem: insumoRecomendadoTipo,
+          id: "",
+          dsModeloEmbalagemEscolhida: "",
+          vlCustoEmbalagemEscolhida: 0,
+          dsTipoEmbalagem: "",
+          insumosComposicaoEmbalagem: [],
+          itensComposicao: [],
         },
       },
     });

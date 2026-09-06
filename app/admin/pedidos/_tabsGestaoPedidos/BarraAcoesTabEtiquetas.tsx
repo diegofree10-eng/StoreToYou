@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import ModalProcessamento from '../ModalProcessamento';
 import AlertaErrosMelhorEnvio from './AlertaErrosMelhorEnvio';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
@@ -26,7 +26,6 @@ interface BarraAcoesProps {
     onConcluirEntregaLocal?: () => void;
     onConcluirDigital?: () => void;
     onConfirmarRecebimento?: () => void;
-    // 📦 Novas props para gerenciar as embalagens na aba de Produção
     listaEmbalagens?: any[];
     embalagemEscolhida?: string;
     setEmbalagemEscolhida?: (id: string) => void;
@@ -56,7 +55,6 @@ export default function BarraAcoesTabEtiquetas({
     setEmbalagemEscolhida,
     onSalvarEmbalagemProducao
 }: BarraAcoesProps) {
-    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
     const { theme } = useTheme();
 
     const [carregandoAcao, setCarregandoAcao] = useState(false);
@@ -66,29 +64,21 @@ export default function BarraAcoesTabEtiquetas({
         itens: { id: string; numero: string; status: 'processando' | 'sucesso' | 'erro'; mensagem?: string }[];
     }>({ aberto: false, titulo: "", itens: [] });
 
-    // Estado para controlar o modal central de erro do Melhor Envio
     const [erroModalMelhorEnvio, setErroModalMelhorEnvio] = useState<string | null>(null);
-
-    // 🌟 Estados para o Modal de Quitação Detalhado
     const [modalQuitacaoAberto, setModalQuitacaoAberto] = useState(false);
     const [formaPgtoRestante, setFormaPgtoRestante] = useState<string>("PIX");
 
-    // 🛡️ Se estiver na aba de concluídos, bloqueia completamente seleções e ações em massa
     const isAbaConcluidos = abaAtiva === 'concluidos';
-
-    // 🎯 Filtra os selecionados para considerar estritamente apenas os que pertencem aos IDs visíveis da aba atual
     const selecionadosNestaAba = isAbaConcluidos ? [] : selecionados.filter(id => idsVisiveisDaAba.includes(id));
     const selecionadosCount = selecionadosNestaAba.length;
     const temSelecionados = selecionadosCount > 0;
 
     const todosVisiveisSelecionados = !isAbaConcluidos && idsVisiveisDaAba.length > 0 && idsVisiveisDaAba.every(id => selecionados.includes(id));
 
-    // 🔍 Filtro: Pedidos que NÃO têm etiqueta gerada, NÃO possuem ID/Código de Envio OU que estão com erro (para permitir reemissão e correção)
     const pedidosSelecionadosObj = selecionadosNestaAba
         .map(id => localPedidos.find(p => p.id === id))
         .filter(Boolean);
 
-    // 🧮 Cálculos financeiros consolidados para o modal de quitação
     const resumoFinanceiroSelecionados = pedidosSelecionadosObj.reduce((acc, p) => {
         const fin = p?.financeiro || {};
         const subtotal = Number(fin.vlSubtotal ?? fin.subtotal ?? 0);
@@ -111,17 +101,12 @@ export default function BarraAcoesTabEtiquetas({
     const pedidosPendentesDeEtiqueta = pedidosSelecionadosObj.filter(p => {
         const idEtq = p?.Etiqueta?.IdEtiqueta;
         const codEnv = p?.Etiqueta?.codigoEnvio;
-        const statusEtq = String(p?.Etiqueta?.statusEtiqueta || p?.statusEtiqueta || '').toLowerCase(); // 🌟 Correção segura
-
-        // Se tem ID e Cod, a etiqueta existe no Melhor Envio.
+        const statusEtq = String(p?.Etiqueta?.statusEtiqueta || p?.statusEtiqueta || '').toLowerCase();
         if (idEtq && codEnv) return false;
-
-        // Se chegar aqui, não tem Id/Cod, então pode aparecer o botão de emitir se estiver em erro ou pendente
         return statusEtq === 'pendente' || statusEtq === 'erro' || !statusEtq;
     });
     const qtdPendentes = pedidosPendentesDeEtiqueta.length;
 
-    // 🔍 Filtro 2: Pedidos com erro de pagamento ou pendência de saldo (para o botão Tentar Pagamento)
     const pedidosComErroPagamento = pedidosSelecionadosObj.filter(p => {
         const statusEtq = String(p?.Etiqueta?.statusEtiqueta || p?.statusEtiqueta || "").toLowerCase();
         const temErroMsg = !!p?.erroPagamento || !!p?.Etiqueta?.erroPagamento || !!p?.mensagemErro;
@@ -129,7 +114,6 @@ export default function BarraAcoesTabEtiquetas({
     });
     const qtdComErro = pedidosComErroPagamento.length;
 
-    // 🔍 Verifica se há saldo pendente nos selecionados para exibir o modal de quitação
     const possuiSaldoPendenteSelecionados = pedidosSelecionadosObj.some(p => {
         const vlRestante = Number(p?.financeiro?.vlRestante || 0);
         const statusPgto = p?.financeiro?.statusPagamento;
@@ -145,10 +129,8 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    // 🌟 Executar Quitação e Conclusão via Barra de Ações (Atualizando dsStatusPedido para "Concluído")
     const executarQuitacaoEmMassa = async () => {
-        if (selecionadosCount === 0) return;
-        if (!db || !lojistaIdApp) return;
+        if (selecionadosCount === 0 || !db || !lojistaIdApp) return;
 
         setCarregandoAcao(true);
         try {
@@ -162,7 +144,7 @@ export default function BarraAcoesTabEtiquetas({
                 const totalVal = Number(fin.vlTotal ?? fin.total ?? (subtotalVal + freteVal - descontoVal));
 
                 await updateDoc(pedidoRef, {
-                    dsStatusPedido: "Concluído", // 🌟 Atualizando a variável existente
+                    dsStatusPedido: "Concluído",
                     enviado: true,
                     "StatusProducao.dsStatusProducao": "Concluído",
                     "StatusProducao.isPago": true,
@@ -180,7 +162,7 @@ export default function BarraAcoesTabEtiquetas({
                     const totalVal = Number(fin.vlTotal ?? fin.total ?? 0);
                     return {
                         ...p,
-                        dsStatusPedido: "Concluído", // 🌟 Atualizado localmente
+                        dsStatusPedido: "Concluído",
                         enviado: true,
                         pago: true,
                         financeiro: {
@@ -205,34 +187,31 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    // ⚡ 1. Emitir Etiquetas em Massa com Limpeza Prévia, Tradução e Status por Pedido
     const emitirEtiquetasEmMassa = async () => {
-        if (isAbaConcluidos) return;
-        if (selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
+        if (isAbaConcluidos || selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
 
-        // Filtra novamente para garantir segurança estrita contra duplicidade
         const pedidosParaProcessar = pedidosPendentesDeEtiqueta.filter(p => {
             const jaPossui = !!p?.Etiqueta?.codigoEnvio || !!p?.Etiqueta?.IdEtiqueta;
             return !jaPossui || p?.Etiqueta?.statusEtiqueta === 'erro' || !!p?.mensagemError;
         });
 
         if (pedidosParaProcessar.length === 0) {
-            alert("Nenhum pedido elegível para emissão (os selecionados já possuem etiqueta válida).");
-            return;
+            return alert("Nenhum pedido elegível para emissão (os selecionados já possuem etiqueta válida).");
         }
 
         setCarregandoAcao(true);
         setModalProgresso({
             aberto: true,
             titulo: "Emitindo Etiquetas em Massa",
-            itens: pedidosParaProcessar.map(ped => {
-                const num = ped?.numeroPedido ? String(ped.numeroPedido) : ped.id.slice(-4);
-                return { id: ped.id, numero: num, status: 'processando', mensagem: 'Limpando dados antigos e emitindo...' };
-            })
+            itens: pedidosParaProcessar.map(ped => ({
+                id: ped.id,
+                numero: ped?.numeroPedido ? String(ped.numeroPedido) : ped.id.slice(-4),
+                status: 'processando',
+                mensagem: 'Limpando dados antigos e emitindo...'
+            }))
         });
 
         try {
-            // 🛡️ Limpeza preventiva no banco para apagar resíduos de erros anteriores
             for (const ped of pedidosParaProcessar) {
                 if (db && lojistaIdApp) {
                     const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", ped.id);
@@ -256,41 +235,22 @@ export default function BarraAcoesTabEtiquetas({
             const res = await fetch("/api/frete/gerar-massa", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    lojistaId: lojistaIdApp,
-                    orders: pedidosParaProcessar
-                })
+                body: JSON.stringify({ lojistaId: lojistaIdApp, orders: pedidosParaProcessar })
             });
             const data = await res.json();
 
-            // Função para traduzir erros técnicos da API em mensagens claras para o lojista
             const traduzirErroMelhorEnvio = (msgBruta: string) => {
                 const m = (msgBruta || "").toLowerCase();
-                if (m.includes("unauthenticated") || m.includes("token") || m.includes("unauthorized")) {
-                    return "Token de acesso do Melhor Envio expirado ou inválido. Reconecte a integração.";
-                }
-                if (m.includes("cep") || m.includes("postal")) {
-                    return "CEP de origem ou destino inválido ou não encontrado.";
-                }
-                if (m.includes("balance") || m.includes("saldo") || m.includes("funds")) {
-                    return "Saldo insuficiente na carteira do Melhor Envio.";
-                }
-                if (m.includes("weight") || m.includes("dimensõ") || m.includes("dimension") || m.includes("size")) {
-                    return "Dimensões ou peso do pacote fora dos limites permitidos.";
-                }
-                if (m.includes("service") || m.includes("serviço")) {
-                    return "Serviço de frete indisponível para esta rota.";
-                }
-                return msgBruta || "Erro desconhecido ao processar etiqueta.";
+                if (m.includes("unauthenticated") || m.includes("token")) return "Token expirado. Reconecte a integração.";
+                if (m.includes("cep")) return "CEP de origem ou destino inválido.";
+                if (m.includes("balance") || m.includes("saldo")) return "Saldo insuficiente no Melhor Envio.";
+                return msgBruta || "Erro ao processar etiqueta.";
             };
 
-            // Processa o retorno item por item e atualiza individualmente o Firestore de cada pedido
             const novosItensProgresso = await Promise.all(pedidosParaProcessar.map(async (ped) => {
                 const num = ped?.numeroPedido ? String(ped.numeroPedido) : ped.id.slice(-4);
-
                 const resultadoItem = data.results?.find((r: any) => r.pedido === ped.id || r.pedidoId === ped.id);
                 const erroItem = data.errors?.find((err: any) => err.pedido === ped.id);
-
                 const isSucesso = resultadoItem && (resultadoItem.status === 'sucesso' || resultadoItem.sucesso);
                 const mensagemErroBruta = erroItem?.message || resultadoItem?.erro || (isSucesso ? null : data.error);
 
@@ -321,16 +281,11 @@ export default function BarraAcoesTabEtiquetas({
 
                 if (isSucesso) {
                     return { id: ped.id, numero: num, status: 'sucesso' as const, mensagem: 'Etiqueta emitida com sucesso!' };
-                } else {
-                    const msgFinal = traduzirErroMelhorEnvio(mensagemErroBruta);
-                    return { id: ped.id, numero: num, status: 'erro' as const, mensagem: msgFinal };
                 }
+                return { id: ped.id, numero: num, status: 'erro' as const, mensagem: traduzirErroMelhorEnvio(mensagemErroBruta) };
             }));
 
-            setModalProgresso(prev => ({
-                ...prev,
-                itens: novosItensProgresso
-            }));
+            setModalProgresso(prev => ({ ...prev, itens: novosItensProgresso }));
         } catch (e: any) {
             alert("Erro de conexão ao emitir etiquetas: " + e.message);
             setModalProgresso(prev => ({ ...prev, aberto: false }));
@@ -339,47 +294,41 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    // 💳 1.2 Tentar Pagamento Novamente (Exclusivo para Automático)
     const tentarPagamentoEmMassa = async () => {
         if (isAbaConcluidos || qtdComErro === 0) return;
-
         setCarregandoAcao(true);
         setModalProgresso({
             aberto: true,
             titulo: "Reprocessando Pagamento de Etiquetas",
-            itens: pedidosComErroPagamento.map(ped => {
-                const num = ped?.numeroPedido ? String(ped.numeroPedido) : ped.id.slice(-4);
-                return { id: ped.id, numero: num, status: 'processando', mensagem: 'Tentando pagar...' };
-            })
+            itens: pedidosComErroPagamento.map(ped => ({
+                id: ped.id,
+                numero: ped?.numeroPedido ? String(ped.numeroPedido) : ped.id.slice(-4),
+                status: 'processando',
+                mensagem: 'Tentando pagar...'
+            }))
         });
 
         try {
             const res = await fetch("/api/frete/tentar-pagamento", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    lojistaId: lojistaIdApp,
-                    orders: pedidosCompletosOuErro(pedidosComErroPagamento)
-                })
+                body: JSON.stringify({ lojistaId: lojistaIdApp, orders: pedidosComErroPagamento.map(idObj => localPedidos.find(p => p.id === (typeof idObj === 'string' ? idObj : idObj.id))).filter(Boolean) })
             });
             const data = await res.json();
-
             if (!res.ok || data.error) {
-                const msgErro = data.error || "Falha ao reprocessar pagamento.";
                 setModalProgresso(prev => ({ ...prev, aberto: false }));
-                setErroModalMelhorEnvio(msgErro);
+                setErroModalMelhorEnvio(data.error || "Falha ao reprocessar pagamento.");
                 return;
             }
-
             setModalProgresso(prev => ({
                 ...prev,
                 itens: prev.itens.map(item => {
                     const resultadoItem = data.results?.find((r: any) => r.pedido === item.id || r.pedidoId === item.id);
                     if (resultadoItem && (resultadoItem.status === 'sucesso' || resultadoItem.sucesso)) {
-                        return { ...item, status: 'sucesso', mensagem: 'Pagamento aprovado e etiqueta gerada!' };
+                        return { ...item, status: 'sucesso', mensagem: 'Pagamento aprovado!' };
                     }
                     const erroItem = data.errors?.find((err: any) => err.pedido === item.id);
-                    return { ...item, status: 'erro', mensagem: erroItem?.message || 'Saldo ainda insuficiente ou falha' };
+                    return { ...item, status: 'erro', mensagem: erroItem?.message || 'Saldo ainda insuficiente' };
                 })
             }));
         } catch (e: any) {
@@ -390,42 +339,26 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    const pedidosCompletosOuErro = (lista: any[]) => {
-        return lista.map(idObj => {
-            const id = typeof idObj === 'string' ? idObj : idObj.id;
-            return localPedidos.find(p => p.id === id);
-        }).filter(Boolean);
-    };
-
-    // 🖨️ 2. Imprimir Etiquetas em Massa
     const imprimirEtiquetasEmMassa = async () => {
         if (isAbaConcluidos || selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
-
         setCarregandoAcao(true);
         try {
-            const pedidosCompletos = selecionadosNestaAba
-                .map(id => localPedidos.find(p => p.id === id))
-                .filter(Boolean);
-
+            const pedidosCompletos = selecionadosNestaAba.map(id => localPedidos.find(p => p.id === id)).filter(Boolean);
             const res = await fetch("/api/melhor-envio/etiquetas/imprimir", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ lojistaId: lojistaIdApp, orders: pedidosCompletos })
             });
             const data = await res.json();
-            if (data.url) {
-                window.open(data.url, '_blank');
-            } else {
-                setErroModalMelhorEnvio(data.erro || "Não foi possível gerar o PDF de impressão.");
-            }
+            if (data.url) window.open(data.url, '_blank');
+            else setErroModalMelhorEnvio(data.erro || "Não foi possível gerar o PDF.");
         } catch (e: any) {
-            setErroModalMelhorEnvio("Erro ao imprimir etiquetas: " + e.message);
+            setErroModalMelhorEnvio("Erro ao imprimir: " + e.message);
         } finally {
             setCarregandoAcao(false);
         }
     };
 
-    // 🚀 3. Enviar Pedidos em Massa
     const enviarPedidosEmMassa = async () => {
         if (isAbaConcluidos || selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
         const validos = localPedidos.filter(p => selecionadosNestaAba.includes(p.id));
@@ -440,22 +373,18 @@ export default function BarraAcoesTabEtiquetas({
         });
 
         if (pedidosComEtiquetaIncompleta.length > 0) {
-            alert(`❌ Operação bloqueada! Há ${pedidosComEtiquetaIncompleta.length} pedido(s) selecionado(s) sem etiqueta gerada, sem URL ou sem número de rastreio.`);
-            return;
+            return alert(`❌ Operação bloqueada! Há ${pedidosComEtiquetaIncompleta.length} pedido(s) sem etiqueta gerada, URL ou rastreio.`);
         }
 
-        if (!confirm(`Deseja mover ${validos.length} pedido(s) selecionado(s) para a aba de Enviados?`)) return;
+        if (!confirm(`Deseja mover ${validos.length} pedido(s) para a aba de Enviados?`)) return;
 
         setCarregandoAcao(true);
         try {
             for (const pedido of validos) {
-                await alterarStatusPedido(pedido.id, 'enviado', {
-                    "enviado": true,
-                    "dataEnvio": new Date().toISOString()
-                });
+                await alterarStatusPedido(pedido.id, 'enviado', { "enviado": true, "dataEnvio": new Date().toISOString() });
             }
             setSelecionados(prev => prev.filter(id => !validos.some(v => v.id === id)));
-            alert("✅ Pedidos movidos para a aba de Enviados com sucesso!");
+            alert("✅ Pedidos movidos para Enviados com sucesso!");
         } catch (e: any) {
             alert("Erro ao enviar pedidos: " + e.message);
         } finally {
@@ -463,7 +392,6 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    // 🔄 5. Sincronizar Pagamentos / Dados da Etiqueta
     const sincronizarPagamentos = async () => {
         if (isAbaConcluidos) return;
         setCarregandoAcao(true);
@@ -483,421 +411,173 @@ export default function BarraAcoesTabEtiquetas({
         }
     };
 
-    // 🔄 6. Resetar / Liberar Status da Etiqueta em Massa
-    const resetarEtiquetasEmMassa = async () => {
-        if (isAbaConcluidos || selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
-        if (!db || !lojistaIdApp) return;
-
-        if (!confirm(`⚠️ Deseja resetar o status da etiqueta de ${selecionadosCount} pedido(s) selecionado(s)?`)) return;
-
-        setCarregandoAcao(true);
-        try {
-            for (const pedidoId of selecionadosNestaAba) {
-                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
-                await updateDoc(pedidoRef, {
-                    "Etiqueta.isEtiquetaGerada": false,
-                    "Etiqueta.statusEtiqueta": "pendente",
-                    "Etiqueta.urlEtiqueta": null,
-                    "Etiqueta.IdEtiqueta": null,
-                    "Etiqueta.codigoEnvio": null,
-                    "Etiqueta.dsNumRastreio": null,
-                    "statusEtiqueta": "pendente",
-                    "dsNumRastreio": "",
-                    "mensagemErro": null
-                });
-            }
-
-            setLocalPedidos(prev => prev.map(p => {
-                if (selecionadosNestaAba.includes(p.id)) {
-                    return {
-                        ...p,
-                        statusEtiqueta: "pendente",
-                        dsNumRastreio: "",
-                        mensagemErro: null,
-                        Etiqueta: {
-                            ...(p as any).Etiqueta,
-                            isEtiquetaGerada: false,
-                            statusEtiqueta: "pendente",
-                            urlEtiqueta: null,
-                            IdEtiqueta: null,
-                            codigoEnvio: null,
-                            dsNumRastreio: null,
-                            mensagemErro: null
-                        }
-                    };
-                }
-                return p;
-            }));
-
-            setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
-            alert(`✅ ${selecionadosCount} etiqueta(s) resetada(s) com sucesso!`);
-        } catch (e: any) {
-            alert("Erro ao resetar etiquetas: " + e.message);
-        } finally {
-            setCarregandoAcao(false);
-        }
-    };
-
-    // ⚙️ 7. Mudar Status em Massa (Com Trava Estricta de Sequência e Mudança de Aba)
-    const alterarStatusMassa = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-        if (isAbaConcluidos) return;
-        const valorAcao = e.target.value;
-        if (!valorAcao) return;
-
-        if (selecionadosCount === 0) {
-            alert("Selecione ao menos um pedido.");
-            e.target.value = "";
-            return;
-        }
-
-        if (valorAcao === 'resetar_etiqueta') {
-            e.target.value = "";
-            await resetarEtiquetasEmMassa();
-            return;
-        }
-
-        // 🗑️ Tratamento para Excluir Pedido(s) em Massa
-        if (valorAcao === 'excluir') {
-            if (!confirm(`⚠️ ATENÇÃO: Deseja realmente excluir permanentemente ${selecionadosCount} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`)) {
-                e.target.value = "";
-                return;
-            }
-
-            setCarregandoAcao(true);
-            try {
-                for (const pedidoId of selecionadosNestaAba) {
-                    if (db && lojistaIdApp) {
-                        const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoId);
-                        await deleteDoc(pedidoRef);
-                    }
-                }
-
-                // Remove os pedidos excluídos da listagem local e limpa a seleção
-                setLocalPedidos(prev => prev.filter(p => !selecionadosNestaAba.includes(p.id)));
-                setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
-
-                alert(`✅ ${selecionadosCount} pedido(s) excluído(s) com sucesso!`);
-            } catch (err: any) {
-                alert("Erro ao excluir pedidos: " + err.message);
-            } finally {
-                setCarregandoAcao(false);
-                e.target.value = "";
-            }
-            return;
-        }
-
-        // 🛡️ TRAVAS DE FLUXO ESTRITO (Pago ➔ Pendente ➔ Produção ➔ Pronto)
-        for (const pedidoId of selecionadosNestaAba) {
-            const ped = localPedidos.find(p => p.id === pedidoId);
-            if (!ped) continue;
-
-            const isPagoReal = ped.pago === true || ped.StatusProducao?.isPago === true || ped.statusPagamento === 'pago';
-            const statusAtualProd = String(ped.StatusProducao?.dsStatusProducao || ped.statusProducao || "pendente").trim().toLowerCase();
-
-            // 1. Se tentar ir para Pendente, Produção ou Pronto, o pedido obrigatoriamente precisa estar PAGO
-            if ((valorAcao === 'pendente' || valorAcao === 'produção' || valorAcao === 'pronto') && !isPagoReal) {
-                alert(`❌ Operação bloqueada! O pedido #${ped.numeroPedido || ped.id.slice(-4)} precisa estar marcado como PAGO antes de mudar de status.`);
-                e.target.value = "";
-                return;
-            }
-
-            // 2. Trava para ir de Pendente para Produção: Precisa estar em Pendente
-            if (valorAcao === 'produção' && statusAtualProd !== 'pendente') {
-                alert(`❌ Operação bloqueada! O pedido #${ped.numeroPedido || ped.id.slice(-4)} precisa estar na aba/status "Pendente" para ir para Produção.`);
-                e.target.value = "";
-                return;
-            }
-
-            // 3. Trava para ir de Produção para Pronto: Precisa estar em Produção
-            if (valorAcao === 'pronto' && statusAtualProd !== 'produção' && statusAtualProd !== 'producao') {
-                alert(`❌ Operação bloqueada! O pedido #${ped.numeroPedido || ped.id.slice(-4)} precisa estar na aba/status "Produção" antes de ser marcado como Pronto.`);
-                e.target.value = "";
-                return;
-            }
-        }
-
-        setCarregandoAcao(true);
-        try {
-            if (valorAcao === 'pago' || valorAcao === 'nao_pago') {
-                const novoPago = valorAcao === 'pago';
-                for (const pedidoId of selecionadosNestaAba) {
-                    await alterarStatusPedido(pedidoId, 'pendente', {
-                        "StatusProducao.isPago": novoPago,
-                        "StatusProducao.dsStatusProducao": "Pendente"
-                    });
-                }
-                setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
-                alert(`✅ ${selecionadosCount} pedido(s) atualizado(s) para ${novoPago ? 'PAGO' : 'NÃO PAGO'}!`);
-                if (novoPago) setAbaAtiva('pendente'); // Joga automaticamente para a aba pendente se for pago
-            } else {
-                if (!confirm(`Deseja alterar o status de produção para "${valorAcao.toUpperCase()}"?`)) {
-                    e.target.value = "";
-                    return;
-                }
-                for (const pedidoId of selecionadosNestaAba) {
-                    await alterarStatusPedido(pedidoId, valorAcao.toLowerCase(), {
-                        "StatusProducao.dsStatusProducao": valorAcao.charAt(0).toUpperCase() + valorAcao.slice(1)
-                    });
-                }
-                setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)));
-
-                // 🌟 Redireciona automaticamente para a aba correspondente ao novo status
-                const abaDestino = valorAcao.toLowerCase() === 'produção' ? 'producao' : valorAcao.toLowerCase();
-                setAbaAtiva(abaDestino);
-
-                alert("✅ Status atualizado e pedido movido com sucesso!");
-            }
-        } catch (e: any) {
-            alert("Erro ao atualizar em massa: " + e.message);
-        } finally {
-            setCarregandoAcao(false);
-            e.target.value = "";
-        }
-    };
-
-    // 🛡️ Se estiver na aba de concluídos, não exibe nenhuma barra de ação ou controle de massa
-    if (isAbaConcluidos) {
-        return null;
-    }
+    if (isAbaConcluidos) return null;
 
     return (
         <>
-            <div style={{ ...styles.selectionBarTop, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: theme.bgCard,
+                border: `1px solid ${theme.border}`,
+                padding: '8px 14px',
+                borderRadius: '8px',
+                marginTop: '10px',
+                minHeight: '42px',
+                boxSizing: 'border-box',
+                flexWrap: 'wrap',
+                gap: '10px'
+            }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <input
                         type="checkbox"
                         checked={todosVisiveisSelecionados && idsVisiveisDaAba.length > 0}
                         onChange={toggleSelecionarTodos}
-                        style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
-                        title="Selecionar todos os pedidos visíveis desta aba"
+                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: theme.primary }}
+                        title="Selecionar/Desselecionar visíveis da aba"
                     />
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.textSec }}>
-                        {temSelecionados ? `${selecionadosCount} selecionado(s)` : 'Nenhum selecionado'}
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.textMain }}>
+                        {selecionadosCount} selecionado(s)
                     </span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <select
-                        onChange={alterarStatusMassa}
-                        defaultValue=""
-                        style={{ ...styles.selectAcaoMassa, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
-                        disabled={carregandoAcao}
-                    >
-                        <option value="" disabled>⚙️ Mudar Status / Ações...</option>
-                        <option value="pago">✅ Marcar como Pago</option>
-                        <option value="nao_pago">❌ Marcar como Não Pago</option>
-                        <option value="pendente">⏳ Status: Pendente</option>
-                        <option value="produção">⚙️ Status: Produção</option>
-                        <option value="pronto">✅ Status: Pronto</option>
-                        {abaAtiva === 'etiquetas' && (
-                            <option value="resetar_etiqueta">🔄 Resetar Etiqueta (Reemitir)</option>
-                        )}
-                        <option value="excluir">🗑️ Excluir Pedido(s)</option>
-                    </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minHeight: '30px' }}>
+                    {temSelecionados ? (
+                        <>
+                            {abaAtiva === 'cotar' && onCotarSelecionados && (
+                                <button
+                                    disabled={carregandoAcao}
+                                    onClick={onCotarSelecionados}
+                                    style={{ backgroundColor: theme.primary, color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    ⚡ Cotar Frete Selecionados ({selecionadosCount})
+                                </button>
+                            )}
 
-                    <div style={{ width: '55px', display: 'flex', justifyContent: 'center' }}>
-                        {temSelecionados ? (
+                            {abaAtiva === 'retirada' && onConcluirRetirada && (
+                                <button
+                                    disabled={carregandoAcao}
+                                    onClick={() => {
+                                        if (possuiSaldoPendenteSelecionados) setModalQuitacaoAberto(true);
+                                        else onConcluirRetirada();
+                                    }}
+                                    style={{ backgroundColor: '#10b981', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                >
+                                    ✅ Confirmar Retirada ({selecionadosCount})
+                                </button>
+                            )}
+
+                            {abaAtiva === 'entregalocal' && onConcluirEntregaLocal && (
+                                <button
+                                    disabled={carregandoAcao}
+                                    onClick={() => {
+                                        if (possuiSaldoPendenteSelecionados) setModalQuitacaoAberto(true);
+                                        else onConcluirEntregaLocal();
+                                    }}
+                                    style={{ backgroundColor: '#10b981', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                >
+                                    ✅ Confirmar Entrega Local ({selecionadosCount})
+                                </button>
+                            )}
+
+                            {abaAtiva === 'digital' && onConcluirDigital && (
+                                <button
+                                    disabled={carregandoAcao}
+                                    onClick={onConcluirDigital}
+                                    style={{ backgroundColor: '#10b981', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                >
+                                    ✅ Concluir Envio ({selecionadosCount})
+                                </button>
+                            )}
+
+                            {abaAtiva === 'enviados' && onConfirmarRecebimento && (
+                                <button
+                                    disabled={carregandoAcao}
+                                    onClick={onConfirmarRecebimento}
+                                    style={{ backgroundColor: '#10b981', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                >
+                                    ✅ Confirmar Recebimento ({selecionadosCount})
+                                </button>
+                            )}
+
+                            {abaAtiva === 'etiquetas' && (
+                                <>
+                                    {qtdPendentes > 0 && (
+                                        <button
+                                            disabled={carregandoAcao}
+                                            onClick={emitirEtiquetasEmMassa}
+                                            style={{ backgroundColor: '#10b981', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                        >
+                                            ⚡ Emitir Etiquetas ({qtdPendentes})
+                                        </button>
+                                    )}
+
+                                    {isAutomacaoAtiva && qtdComErro > 0 && (
+                                        <button
+                                            disabled={carregandoAcao}
+                                            onClick={tentarPagamentoEmMassa}
+                                            style={{ backgroundColor: '#f59e0b', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                        >
+                                            💳 Tentar Pagamento ({qtdComErro})
+                                        </button>
+                                    )}
+
+                                    {isAutomacaoAtiva && (
+                                        <button
+                                            disabled={carregandoAcao}
+                                            onClick={imprimirEtiquetasEmMassa}
+                                            style={{ backgroundColor: theme.primary, color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                        >
+                                            🖨️ Imprimir ({selecionadosCount})
+                                        </button>
+                                    )}
+
+                                    <button
+                                        disabled={carregandoAcao}
+                                        onClick={enviarPedidosEmMassa}
+                                        style={{ backgroundColor: '#10b981', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                    >
+                                        🚀 Enviar ({selecionadosCount})
+                                    </button>
+                                </>
+                            )}
+
+                            {abaAtiva === 'etiquetas' && (
+                                <button
+                                    disabled={carregandoAcao}
+                                    onClick={sincronizarPagamentos}
+                                    style={{ backgroundColor: '#8b5cf6', color: '#fff', borderWidth: '0px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                                >
+                                    🔄 Sincronizar
+                                </button>
+                            )}
+
                             <button
                                 onClick={() => setSelecionados(prev => prev.filter(id => !idsVisiveisDaAba.includes(id)))}
-                                style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', padding: '4px 8px' }}
+                                style={{
+                                    background: 'transparent',
+                                    color: '#ef4444',
+                                    border: `1px solid #ef4444`,
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '12px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer'
+                                }}
                             >
                                 Limpar
                             </button>
-                        ) : null}
-                    </div>
-                </div>
-            </div>
-
-            <div style={{ ...styles.selectionBarBottom, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end', width: '100%' }}>
-                    {abaAtiva === 'cotar' && temSelecionados && (
-                        <button
-                            disabled={carregandoAcao}
-                            onClick={onCotarSelecionados}
-                            style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            ⚡ Cotar Frete Selecionados ({selecionadosCount})
-                        </button>
-                    )}
-
-                    {/* 📦 SELECT E BOTÃO DE EMBALAGEM EXCLUSIVOS DA ABA PRODUÇÃO */}
-                    {abaAtiva === 'producao' && temSelecionados && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                            {(() => {
-                                // Pega a recomendação do primeiro pedido selecionado apenas para exibição informativa na barra
-                                const primeiroPedidoSel = pedidosSelecionadosObj[0];
-                                const embDoc = primeiroPedidoSel?.Embalagem || {};
-                                const nomeRecomendado = embDoc.recomendada?.dsModeloEmbalagemRecomendado || embDoc.dsModeloEmbalagemRecomendado || "Não calculada";
-
-                                return (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', background: theme.inputBg, padding: '6px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-                                        <span>📦 Sugestão:</span>
-                                        <strong style={{ color: theme.primary }}>{nomeRecomendado}</strong>
-                                    </div>
-                                );
-                            })()}
-
-                            <select
-                                value={embalagemEscolhida}
-                                onChange={(e) => setEmbalagemEscolhida && setEmbalagemEscolhida(e.target.value)}
-                                style={{
-                                    padding: '7px 12px',
-                                    borderRadius: '6px',
-                                    border: `1px solid ${theme.border}`,
-                                    fontSize: '13px',
-                                    backgroundColor: theme.inputBg,
-                                    color: theme.textMain,
-                                    outline: 'none',
-                                    cursor: 'pointer',
-                                    fontWeight: '600'
-                                }}
-                            >
-                                <option value="">⚙️ Alterar Embalagem (Opcional)...</option>
-                                {listaEmbalagens.map((emb) => (
-                                    <option key={emb.id} value={emb.id}>
-                                        {emb.nome} ({emb.comprimento}x{emb.largura}x{emb.altura}cm - R$ {Number(emb.custo || 0).toFixed(2)})
-                                    </option>
-                                ))}
-                            </select>
-
-                            <button
-                                disabled={carregandoAcao || !embalagemEscolhida}
-                                onClick={onSalvarEmbalagemProducao}
-                                style={{
-                                    backgroundColor: (!embalagemEscolhida) ? '#9ca3af' : '#2563eb',
-                                    color: '#fff',
-                                    border: 'none',
-                                    padding: '7px 14px',
-                                    borderRadius: '6px',
-                                    fontWeight: 'bold',
-                                    fontSize: '13px',
-                                    cursor: (!embalagemEscolhida) ? 'not-allowed' : 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                💾 Salvar Escolha ({selecionadosCount})
-                            </button>
-                        </div>
-                    )}
-
-                    {/* 🌟 Confirmar Retirada: Abre Modal de Quitação se houver saldo pendente */}
-                    {abaAtiva === 'retirada' && temSelecionados && onConcluirRetirada && (
-                        <button
-                            disabled={carregandoAcao}
-                            onClick={() => {
-                                if (possuiSaldoPendenteSelecionados) {
-                                    setModalQuitacaoAberto(true);
-                                } else {
-                                    onConcluirRetirada();
-                                }
-                            }}
-                            style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            ✅ Confirmar Retirada ({selecionadosCount})
-                        </button>
-                    )}
-
-                    {/* 🌟 Confirmar Entrega Local: Abre Modal de Quitação se houver saldo pendente */}
-                    {abaAtiva === 'entregalocal' && temSelecionados && onConcluirEntregaLocal && (
-                        <button
-                            disabled={carregandoAcao}
-                            onClick={() => {
-                                if (possuiSaldoPendenteSelecionados) {
-                                    setModalQuitacaoAberto(true);
-                                } else {
-                                    onConcluirEntregaLocal();
-                                }
-                            }}
-                            style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            ✅ Confirmar Entrega Local ({selecionadosCount})
-                        </button>
-                    )}
-
-                    {abaAtiva === 'digital' && temSelecionados && onConcluirDigital && (
-                        <button
-                            disabled={carregandoAcao}
-                            onClick={onConcluirDigital}
-                            style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            ✅ Concluir Envio ({selecionadosCount})
-                        </button>
-                    )}
-
-                    {abaAtiva === 'enviados' && temSelecionados && onConfirmarRecebimento && (
-                        <button
-                            disabled={carregandoAcao}
-                            onClick={onConfirmarRecebimento}
-                            style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            ✅ Confirmar Recebimento ({selecionadosCount})
-                        </button>
-                    )}
-
-                    {abaAtiva === 'etiquetas' && temSelecionados && (
-                        <>
-                            {qtdPendentes > 0 && (
-                                <button
-                                    disabled={carregandoAcao}
-                                    onClick={emitirEtiquetasEmMassa}
-                                    style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                >
-                                    ⚡ Emitir Etiquetas ({qtdPendentes})
-                                </button>
-                            )}
-
-                            {isAutomacaoAtiva && qtdComErro > 0 && (
-                                <button
-                                    disabled={carregandoAcao}
-                                    onClick={tentarPagamentoEmMassa}
-                                    style={{ backgroundColor: '#f59e0b', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                >
-                                    💳 Tentar Pagamento ({qtdComErro})
-                                </button>
-                            )}
-
-                            {isAutomacaoAtiva && (
-                                <button
-                                    disabled={carregandoAcao}
-                                    onClick={imprimirEtiquetasEmMassa}
-                                    style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                >
-                                    🖨️ Imprimir Etiquetas ({selecionadosCount})
-                                </button>
-                            )}
-
-                            <button
-                                disabled={carregandoAcao}
-                                onClick={enviarPedidosEmMassa}
-                                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                            >
-                                🚀 Enviar Pedidos ({selecionadosCount})
-                            </button>
                         </>
-                    )}
-
-                    {abaAtiva === 'etiquetas' && (
-                        <button
-                            disabled={carregandoAcao}
-                            onClick={sincronizarPagamentos}
-                            style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            🔄 Sincronizar Dados da Etiqueta {temSelecionados ? `(${selecionadosCount})` : ''}
-                        </button>
-                    )}
+                    ) : null}
                 </div>
             </div>
 
-            {/* 🌟 Modal de Quitação de Saldo Restante Detalhado */}
             {modalQuitacaoAberto && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
                     <div style={{ background: theme.bgCard, color: theme.textMain, padding: '22px', borderRadius: '12px', width: '420px', maxWidth: '90%', border: `1px solid ${theme.border}`, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                         <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', color: theme.textMain, fontWeight: 'bold' }}>Quitar Saldo Restante</h3>
-                        <p style={{ fontSize: '12px', color: theme.textSec, margin: '0 0 16px 0' }}>
-                            {infoPedidoModal}
-                        </p>
+                        <p style={{ fontSize: '12px', color: theme.textSec, margin: '0 0 16px 0' }}>{infoPedidoModal}</p>
 
                         <div style={{ background: theme.inputBg, padding: '12px 14px', borderRadius: '8px', marginBottom: '16px', border: `1px solid ${theme.border}` }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: theme.textMain }}>
@@ -932,7 +612,7 @@ export default function BarraAcoesTabEtiquetas({
                             <button
                                 type="button"
                                 onClick={() => setModalQuitacaoAberto(false)}
-                                style={{ flex: 1, padding: '10px', background: theme.border, border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', color: theme.textMain, fontSize: '13px' }}
+                                style={{ flex: 1, padding: '10px', background: theme.border, borderWidth: '0px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', color: theme.textMain, fontSize: '13px' }}
                             >
                                 Cancelar
                             </button>
@@ -940,7 +620,7 @@ export default function BarraAcoesTabEtiquetas({
                                 type="button"
                                 disabled={carregandoAcao}
                                 onClick={executarQuitacaoEmMassa}
-                                style={{ flex: 1, padding: '10px', background: '#10b981', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px' }}
+                                style={{ flex: 1, padding: '10px', background: '#10b981', borderWidth: '0px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px' }}
                             >
                                 {carregandoAcao ? "Processando..." : "Confirmar e Concluir"}
                             </button>
@@ -966,51 +646,6 @@ export default function BarraAcoesTabEtiquetas({
         </>
     );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-    selectionBarTop: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: '10px',
-        padding: '0 16px',
-        height: '52px',
-        width: '100%',
-        boxSizing: 'border-box',
-        borderTopLeftRadius: '8px',
-        borderTopRightRadius: '8px',
-        border: '1px solid',
-        borderBottom: 'none',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        position: 'sticky',
-        top: '10px',
-        zIndex: 50
-    },
-    selectionBarBottom: {
-        display: 'flex',
-        alignItems: 'center',
-        padding: '10px 16px',
-        minHeight: '55px',
-        width: '100%',
-        boxSizing: 'border-box',
-        borderBottomLeftRadius: '8px',
-        borderBottomRightRadius: '8px',
-        border: '1px solid',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        position: 'sticky',
-        top: '62px',
-        zIndex: 49
-    },
-    selectAcaoMassa: {
-        padding: '7px 12px',
-        borderRadius: '6px',
-        border: '1px solid',
-        fontSize: '13px',
-        outline: 'none',
-        cursor: 'pointer',
-        fontWeight: '600'
-    }
-};
 // Barra de acoes controla toda a logica do select de Status produção e botoes de Etiquetas na TabEmitirEtiquetas.tsx
 //⚡ Emitir (Emitir Etiquetas) — Para gerar as etiquetas em lote na API do Melhor Envio.
 

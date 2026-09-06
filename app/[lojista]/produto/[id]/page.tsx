@@ -242,7 +242,7 @@ export default function ProdutoAgrupadoPage() {
     const fotoProdutoFinal = variacaoFinal?.dsFotoProduto || imgAtiva || produto.dsCapaProduto || produto.capa || "";
 
     // Repasse seguro dos insumos de composição e movimentações
-    const insumosComposicaoFinal = variacaoFinal?.insumosComposicao || produto.insumosComposicao || [];
+    const insumosComposicaoFinal = variacaoFinal?.insumosComposicaoProduto || produto.insumosComposicaoProduto || [];
     const outrosCustosFinal = variacaoFinal?.vlOutrosCustosProduto || produto.vlOutrosCustosProduto || 0;
     const movimentarEstoqueFinal = produto.movimentarEstoque ?? true;
     const movimentarEstoqueComposicaoFinal = produto.movimentarEstoqueComposicao ?? true;
@@ -284,7 +284,7 @@ export default function ProdutoAgrupadoPage() {
       nrDiasProducao: diasProdFinal,
       nrDiasProducaoProduto: diasProdFinal,
       // ✨ Repasse das propriedades de composição e controle de estoque
-      insumosComposicao: insumosComposicaoFinal,
+      insumosComposicaoProduto: insumosComposicaoFinal,
       vlOutrosCustosProduto: outrosCustosFinal,
       movimentarEstoque: movimentarEstoqueFinal,
       movimentarEstoqueComposicao: movimentarEstoqueComposicaoFinal

@@ -1,7 +1,7 @@
 // app/admin/pdv/PagamentoPdv.tsx
 "use client";
 import React from "react";
-import { Store, Truck, Edit3, PlusCircle, Clock } from "lucide-react";
+import { Store, Truck, Edit3, PlusCircle, Clock, Package } from "lucide-react";
 import { aplicarMascara } from "@/utils/formatters";
 
 export default function PagamentoPdv({
@@ -30,30 +30,33 @@ export default function PagamentoPdv({
   formatarMoeda,
   theme,
   styles,
-  onAbrirModalProdutos
+  onAbrirModalProdutos,
+  listaEmbalagens = [],
+  embalagemSelecionadaId,
+  setEmbalagemSelecionadaId
 }: any) {
-  
+
   const isParcelado = vlEntrada > 0;
 
   return (
-    <div style={{ 
-      background: theme.bgCard, 
-      padding: "24px", 
-      borderRadius: "16px", 
-      border: `1px solid ${theme.border}`, 
-      display: "flex", 
-      flexDirection: "column", 
-      justifyContent: "space-between", 
-      width: "100%", 
-      maxWidth: "1100px", 
-      margin: "0 auto", 
-      height: "calc(100vh - 30px)", 
-      boxShadow: "0 6px 16px rgba(0,0,0,0.08)", 
-      boxSizing: "border-box" 
+    <div style={{
+      background: theme.bgCard,
+      padding: "24px",
+      borderRadius: "16px",
+      border: `1px solid ${theme.border}`,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      width: "100%",
+      maxWidth: "1100px",
+      margin: "0 auto",
+      height: "calc(100vh - 30px)",
+      boxShadow: "0 6px 16px rgba(0,0,0,0.08)",
+      boxSizing: "border-box"
     }}>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px", flex: 1, minHeight: 0, overflow: "hidden" }}>
-        
+
         {/* CABEÇALHO DO PDV + BOTÃO DE ADICIONAR PRODUTOS */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", borderBottom: `1px solid ${theme.border}`, paddingBottom: "14px", flexShrink: 0 }}>
           <div>
@@ -86,10 +89,10 @@ export default function PagamentoPdv({
 
         {/* GRID PRINCIPAL (DUAS COLUNAS) */}
         <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "20px", flex: 1, minHeight: 0 }} className="pdv-grid-layout">
-          
+
           {/* COLUNA ESQUERDA: CLIENTE E ITENS DO CARRINHO */}
           <div style={{ display: "flex", flexDirection: "column", gap: "14px", minHeight: 0 }}>
-            
+
             {/* BLOCO DE DADOS DO CLIENTE */}
             <div style={{ background: theme.bgApp, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, flexShrink: 0 }}>
               <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '8px' }}>👤 DADOS DO CLIENTE</span>
@@ -177,15 +180,11 @@ export default function PagamentoPdv({
                   carrinho.map((item: any) => {
                     const requisitosLista = Array.isArray(item.requisitos) ? item.requisitos : [];
                     const possuiReq = requisitosLista.length > 0;
-                    
-                    // Suporte aos novos campos de prazo (com fallback para antigo)
+
                     const diasProducao = item.nrDiasProducaoProduto !== undefined ? item.nrDiasProducaoProduto : item.nrDiasProducao;
                     const prazoProd = diasProducao ? `${diasProducao} dias úteis` : "";
-                    
-                    // Texto da variação tratada
+
                     const textoVariacao = item.variacao || (item.variacaoStr !== "Padrão" ? item.variacaoStr : "");
-                    
-                    // Foto do item (lendo novo formato ou antigo)
                     const fotoItem = item.foto || item.dsFotoProduto || item.dsFoto;
 
                     return (
@@ -195,21 +194,18 @@ export default function PagamentoPdv({
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: "700", color: theme.textMain }}>{item.nome}</div>
 
-                            {/* 🌟 EXIBIÇÃO DA VARIAÇÃO ESCOLHIDA LOGO ABAIXO DO NOME */}
                             {textoVariacao && (
                               <div style={{ fontSize: "11px", color: theme.primary, fontWeight: "600", marginTop: "1px" }}>
                                 Variação: {textoVariacao}
                               </div>
                             )}
 
-                            {/* Dados de Personalização */}
                             {item.personalizacao && Object.values(item.personalizacao).some(Boolean) && (
                               <div style={{ fontSize: "10px", color: theme.textSec, marginTop: "2px" }}>
                                 {Object.entries(item.personalizacao).map(([k, v]) => v ? <span key={k}>{k}: {String(v)} | </span> : null)}
                               </div>
                             )}
 
-                            {/* Prazo de Produção */}
                             {prazoProd && (
                               <div style={{ fontSize: "10px", color: theme.primary, fontWeight: "600", marginTop: "3px", display: "flex", alignItems: "center", gap: "3px" }}>
                                 <Clock size={11} /> Produção: {prazoProd}
@@ -260,132 +256,149 @@ export default function PagamentoPdv({
 
           </div>
 
-          {/* COLUNA DIREITA: ENTREGA, PAGAMENTO E FECHAMENTO */}
-          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: 0, gap: "10px" }}>
-            
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", minHeight: 0, overflowY: "auto", paddingRight: "4px" }}>
-              {/* TIPO DE ENTREGA */}
-              <div style={{ background: theme.bgApp, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, flexShrink: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '8px' }}>🚚 TIPO DE ENTREGA</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setTipoEntrega("retirada")}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '8px',
-                      border: tipoEntrega === "retirada" ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
-                      background: tipoEntrega === "retirada" ? theme.bgCard : theme.bgApp,
-                      cursor: 'pointer',
-                      textAlign: 'left'
-                    }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Store size={13} color={theme.primary} /> Retirada
-                    </div>
-                    <div style={{ fontSize: '10px', color: theme.textSec, marginTop: '2px' }}><b>Grátis</b></div>
-                  </button>
+          {/* COLUNA DIREITA: ENTREGA, EMBALAGEM, PAGAMENTO, RESUMO E BOTÃO (COM SCROLL GLOBAL NA COLUNA) */}
+          <div style={{ display: "flex", flexDirection: "column", minHeight: 0, gap: "10px", overflowY: "auto", paddingRight: "4px" }}>
 
-                  <button
-                    type="button"
-                    onClick={() => setTipoEntrega("entrega_local")}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '8px',
-                      border: tipoEntrega === "entrega_local" ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
-                      background: tipoEntrega === "entrega_local" ? theme.bgCard : theme.bgApp,
-                      cursor: 'pointer',
-                      textAlign: 'left'
-                    }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Truck size={13} color={theme.primary} /> Entrega Local
-                    </div>
-                    <div style={{ fontSize: '10px', color: theme.textSec, marginTop: '2px' }}><b>{formatarMoeda(valorEntregaLocal)}</b></div>
-                  </button>
-                </div>
+            {/* TIPO DE ENTREGA */}
+            <div style={{ background: theme.bgApp, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, flexShrink: 0 }}>
+              <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '8px' }}>🚚 TIPO DE ENTREGA</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setTipoEntrega("retirada")}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: tipoEntrega === "retirada" ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
+                    background: tipoEntrega === "retirada" ? theme.bgCard : theme.bgApp,
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Store size={13} color={theme.primary} /> Retirada
+                  </div>
+                  <div style={{ fontSize: '10px', color: theme.textSec, marginTop: '2px' }}><b>Grátis</b></div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTipoEntrega("entrega_local")}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: tipoEntrega === "entrega_local" ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
+                    background: tipoEntrega === "entrega_local" ? theme.bgCard : theme.bgApp,
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Truck size={13} color={theme.primary} /> Entrega Local
+                  </div>
+                  <div style={{ fontSize: '10px', color: theme.textSec, marginTop: '2px' }}><b>{formatarMoeda(valorEntregaLocal)}</b></div>
+                </button>
+              </div>
+            </div>
+
+            {/* 📦 SELEÇÃO DA EMBALAGEM UTILIZADA NO CAIXA */}
+            <div style={{ background: theme.bgApp, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, flexShrink: 0 }}>
+              <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Package size={13} /> EMBALAGEM UTILIZADA
+              </span>
+              <select
+                value={embalagemSelecionadaId || ""}
+                onChange={(e) => setEmbalagemSelecionadaId(e.target.value)}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "12px", outline: "none", background: theme.inputBg, color: theme.textMain }}
+              >
+                <option value="">Selecione a embalagem utilizada...</option>
+                {listaEmbalagens.map((emb: any) => (
+                  <option key={emb.id} value={emb.id}>
+                    {emb.dsNomeEmbalagem || emb.nome || emb.dsModeloEmbalagemRecomendado || "Embalagem"} ({formatarMoeda(emb.vlCustoUnitarioEmbalagem || emb.custo || emb.vlCustoEmbalagemRecomendado || 0)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* PAGAMENTO E ENCOMENDA */}
+            <div style={{ background: theme.bgApp, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, flexShrink: 0 }}>
+              <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '8px' }}>💳 CONDIÇÕES DE PAGAMENTO</span>
+
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Tipo de Pagamento:</label>
+                <select
+                  value={isParcelado ? "parcelado" : "avista"}
+                  onChange={(e) => {
+                    if (e.target.value === "avista") {
+                      setVlEntrada(0);
+                      setDsPrazoRestante("");
+                    } else {
+                      setVlEntrada(Number((calcularTotalGeral() / 2).toFixed(2)));
+                    }
+                  }}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "12px", outline: "none", background: theme.inputBg, color: theme.textMain }}
+                >
+                  <option value="avista">Pagamento Total (À Vista)</option>
+                  <option value="parcelado">Entrada + Restante (Encomenda)</option>
+                </select>
               </div>
 
-              {/* PAGAMENTO E ENCOMENDA */}
-              <div style={{ background: theme.bgApp, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, flexShrink: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, display: 'block', marginBottom: '8px' }}>💳 CONDIÇÕES DE PAGAMENTO</span>
-
-                <div style={{ marginBottom: "8px" }}>
-                  <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Tipo de Pagamento:</label>
-                  <select
-                    value={isParcelado ? "parcelado" : "avista"}
-                    onChange={(e) => {
-                      if (e.target.value === "avista") {
-                        setVlEntrada(0);
-                        setDsPrazoRestante("");
-                      } else {
-                        setVlEntrada(Number((calcularTotalGeral() / 2).toFixed(2)));
-                      }
-                    }}
-                    style={{ width: "100%", padding: "6px 10px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "12px", outline: "none", background: theme.inputBg, color: theme.textMain }}
-                  >
-                    <option value="avista">Pagamento Total (À Vista)</option>
-                    <option value="parcelado">Entrada + Restante (Encomenda)</option>
-                  </select>
-                </div>
-
-                {isParcelado && (
-                  <div style={{ background: theme.bgCard, padding: "8px", borderRadius: "8px", marginBottom: "8px", border: `1px solid ${theme.primary}` }}>
-                    <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Entrada (R$):</label>
-                        <input
-                          type="text"
-                          placeholder="R$ 0,00"
-                          value={vlEntrada > 0 ? aplicarMascara((vlEntrada * 100).toString(), 'dinheiro') : ""}
-                          onChange={(e) => {
-                            const apenasDigitos = e.target.value.replace(/\D/g, "");
-                            const valorNumerico = apenasDigitos ? Number(apenasDigitos) / 100 : 0;
-                            setVlEntrada(valorNumerico);
-                          }}
-                          style={{ width: "100%", padding: "6px", borderRadius: "6px", border: `1px solid ${theme.border}`, fontSize: "11px", background: theme.inputBg, color: theme.textMain, outline: "none" }}
-                        />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Restante:</label>
-                        <input
-                          type="text"
-                          disabled
-                          value={formatarMoeda(Math.max(0, calcularTotalGeral() - vlEntrada))}
-                          style={{ width: "100%", padding: "6px", borderRadius: "6px", border: `1px solid ${theme.border}`, fontSize: "11px", background: theme.border, color: theme.textMain, fontWeight: "bold" }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Data de Retirada / Quitação:</label>
+              {isParcelado && (
+                <div style={{ background: theme.bgCard, padding: "8px", borderRadius: "8px", marginBottom: "8px", border: `1px solid ${theme.primary}` }}>
+                  <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Entrada (R$):</label>
                       <input
-                        type="date"
-                        value={dsPrazoRestante}
-                        onChange={(e) => setDsPrazoRestante(e.target.value)}
-                        style={{ width: "100%", padding: "6px", borderRadius: "6px", border: `1px solid ${theme.border}`, fontSize: "11px", background: theme.inputBg, color: theme.textMain, outline: "none", boxSizing: "border-box" }}
+                        type="text"
+                        placeholder="R$ 0,00"
+                        value={vlEntrada > 0 ? aplicarMascara((vlEntrada * 100).toString(), 'dinheiro') : ""}
+                        onChange={(e) => {
+                          const apenasDigitos = e.target.value.replace(/\D/g, "");
+                          const valorNumerico = apenasDigitos ? Number(apenasDigitos) / 100 : 0;
+                          setVlEntrada(valorNumerico);
+                        }}
+                        style={{ width: "100%", padding: "6px", borderRadius: "6px", border: `1px solid ${theme.border}`, fontSize: "11px", background: theme.inputBg, color: theme.textMain, outline: "none" }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Restante:</label>
+                      <input
+                        type="text"
+                        disabled
+                        value={formatarMoeda(Math.max(0, calcularTotalGeral() - vlEntrada))}
+                        style={{ width: "100%", padding: "6px", borderRadius: "6px", border: `1px solid ${theme.border}`, fontSize: "11px", background: theme.border, color: theme.textMain, fontWeight: "bold" }}
                       />
                     </div>
                   </div>
-                )}
-
-                <div>
-                  <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Forma de Pagamento:</label>
-                  <select
-                    value={formaPagamento}
-                    onChange={(e) => setFormaPagamento(e.target.value)}
-                    style={{ width: "100%", padding: "6px 10px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "12px", outline: "none", background: theme.inputBg, color: theme.textMain }}
-                  >
-                    <option value="pix">PIX</option>
-                    <option value="dinheiro">Dinheiro</option>
-                    <option value="cartao_credito">Cartão de Crédito</option>
-                    <option value="cartao_debito">Cartão de Débito</option>
-                  </select>
+                  <div>
+                    <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Data de Retirada / Quitação:</label>
+                    <input
+                      type="date"
+                      value={dsPrazoRestante}
+                      onChange={(e) => setDsPrazoRestante(e.target.value)}
+                      style={{ width: "100%", padding: "6px", borderRadius: "6px", border: `1px solid ${theme.border}`, fontSize: "11px", background: theme.inputBg, color: theme.textMain, outline: "none", boxSizing: "border-box" }}
+                    />
+                  </div>
                 </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: "10px", fontWeight: "600", color: theme.textSec, display: "block", marginBottom: "2px" }}>Forma de Pagamento:</label>
+                <select
+                  value={formaPagamento}
+                  onChange={(e) => setFormaPagamento(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${theme.border}`, fontSize: "12px", outline: "none", background: theme.inputBg, color: theme.textMain }}
+                >
+                  <option value="pix">PIX</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="cartao_credito">Cartão de Crédito</option>
+                  <option value="cartao_debito">Cartão de Débito</option>
+                </select>
               </div>
             </div>
 
             {/* RESUMO E BOTÃO DE FINALIZAR */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0, marginTop: "auto", paddingTop: "4px" }}>
               <div style={{ background: theme.bgApp, padding: "10px 12px", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "4px", border: `1px solid ${theme.border}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: theme.textSec }}>
                   <span>Subtotal Produtos:</span>

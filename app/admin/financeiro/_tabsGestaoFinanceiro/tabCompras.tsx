@@ -1,13 +1,13 @@
-// app/admin/estoque/_tabGestaoEstoque/tabCompras.tsx
+// app/admin/financeiro/_tabsGestaoFinanceiro/tabCompras.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, updateDoc, runTransaction } from "firebase/firestore";
-import { FiPlus, FiTrash2, FiEdit2, FiX, FiChevronDown, FiChevronUp, FiShoppingCart, FiHelpCircle } from "react-icons/fi";
+import { FiPlus, FiTrash2, FiEdit2, FiX, FiChevronDown, FiChevronUp, FiShoppingCart, FiHelpCircle, FiCheckCircle } from "react-icons/fi";
 import { useTheme } from "@/context/ThemeContext";
 import { aplicarMascara } from "@/utils/formatters";
-import { converterUnidade } from "@/utils/conversaoUnidades"; // 👈 Importação do nosso helper robusto
+import { converterUnidade } from "@/utils/conversaoUnidades";
 
 export function TabCompras({ uid }: { uid: string }) {
     const { theme } = useTheme();
@@ -90,22 +90,15 @@ export function TabCompras({ uid }: { uid: string }) {
     const insumoAtualObj = insumosLista.find(i => i.id === insumoSelecionadoId);
     const unidadeEstoqueAtual = insumoAtualObj?.dsUnidadeConsumoInsumo || insumoAtualObj?.dsUnidadeMedida || insumoAtualObj?.unidadeMedida || "un";
 
-    // 💡 INTEGRAÇÃO INTELIGENTE DO UOM HELPER:
-    // Sempre que o insumo atual ou a unidade comprada mudarem, verificamos se o helper 
-    // consegue sugerir a conversão automática (ex: comprou 1 kg, estoque em g -> fator 1000).
     useEffect(() => {
         if (insumoAtualObj && unidadeCompradaTemp) {
-            // Testamos converter 1 unidade da embalagem comprada para a unidade de estoque
             const fatorSugerido = converterUnidade(1, unidadeCompradaTemp, unidadeEstoqueAtual);
-
-            // Se o helper retornou um valor diferente de 1 ou se pertencem à mesma categoria de medida, atualizamos o fator
             if (fatorSugerido !== 1) {
                 setFatorConversaoTemp(String(fatorSugerido));
             }
         }
     }, [insumoSelecionadoId, unidadeCompradaTemp]);
 
-    // Cálculos de conversão em tempo real no formulário
     const qtdCompradaNum = parseFloat(qtdCompradaTemp.replace(",", ".")) || 0;
     const fatorConversaoNum = parseFloat(fatorConversaoTemp.replace(",", ".")) || 1;
     const qtdTotalEstoqueCalculada = qtdCompradaNum * fatorConversaoNum;
@@ -188,6 +181,7 @@ export function TabCompras({ uid }: { uid: string }) {
         }));
     };
 
+    // 1. REGISTRAR PEDIDO DE COMPRA (Pendente - Aguardando Entrega)
     const finalizarCompra = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!uid) return;
@@ -199,6 +193,16 @@ export function TabCompras({ uid }: { uid: string }) {
 
         try {
             const dataCompraIso = new Date().toISOString();
+
+            // Identifica o operador ativo
+            let operadorNome = "Administrador";
+            const operadorSalvo = localStorage.getItem("operadorAtivoPdv");
+            if (operadorSalvo) {
+                try {
+                    const colab = JSON.parse(operadorSalvo);
+                    operadorNome = colab.nome || colab.dsNomeColaborador || "Operador";
+                } catch (e) {}
+            }
 
             const contadorRef = doc(db, "lojistas", uid, "configuracoes", "contador_pedidos");
             let proximoNumero = 1;
@@ -222,10 +226,12 @@ export function TabCompras({ uid }: { uid: string }) {
                 valorTotalGeral: valorTotalGeral,
                 quantidadeItens: itensCompra.length,
                 itens: itensCompra,
+                status: "pendente", // 👈 AGUARDANDO ENTREGA FÍSICA
+                operador: operadorNome,
                 dataCompra: dataCompraIso
             });
 
-            // 💡 INTEGRAÇÃO AUTOMÁTICA COM PAGAMENTOS (Contas a Pagar)
+            // Contas a Pagar Financeira
             const novoPagamentoRef = doc(collection(db, "lojistas", uid, "pagamentos_financeiro"));
             await setDoc(novoPagamentoRef, {
                 descricao: `Compra: ${nomeFornecedor} (Ped #${numeroPedidoFormatado})`,
@@ -236,28 +242,51 @@ export function TabCompras({ uid }: { uid: string }) {
                 createdAt: dataCompraIso
             });
 
-            for (const item of itensCompra) {
+            limparFormulario();
+            alert(`Pedido de Compra #${numeroPedidoFormatado} gerado com sucesso! O estoque só será atualizado ao confirmar o recebimento físico.`);
+        } catch (error: any) {
+            alert("Erro ao registrar pedido de compra: " + error.message);
+        }
+    };
+
+    // 2. CONFIRMAR RECEBIMENTO (Baixa Física, Entrada no Estoque, CMP e Extrato)
+    const confirmarRecebimentoMercadoria = async (pedido: any) => {
+        if (!uid) return;
+        if (pedido.status === "recebido") {
+            alert("Este pedido já teve o recebimento confirmado.");
+            return;
+        }
+
+        const confirmar = window.confirm(`Deseja confirmar a chegada da mercadoria do Pedido #${pedido.numeroPedido}? Isso atualizará o estoque e gerará o extrato.`);
+        if (!confirmar) return;
+
+        try {
+            const dataRecebimentoIso = new Date().toISOString();
+            const pedidoRef = doc(db, "lojistas", uid, "compras_pedidos", pedido.id);
+
+            for (const item of pedido.itens) {
                 const qtdEstoqueFinal = Number(item.quantidadeTotalEstoque);
                 const valorTotalItem = Number(item.valorTotalItem);
                 const custoUnitarioNovaCompra = Number(item.valorUnitarioCalculado);
 
+                // Grava em compras_insumos
                 const novaCompraRef = doc(collection(db, "lojistas", uid, "compras_insumos"));
                 await setDoc(novaCompraRef, {
-                    pedidoId: novoPedidoRef.id,
-                    numeroPedido: numeroPedidoFormatado,
+                    pedidoId: pedido.id,
+                    numeroPedido: pedido.numeroPedido,
                     insumoId: item.insumoId,
-                    fornecedor: nomeFornecedor,
-                    observacao: observacao.trim(),
+                    fornecedor: pedido.fornecedor,
+                    observacao: pedido.observacao,
                     qtdComprada: item.qtdComprada,
                     unidadeComprada: item.unidadeComprada,
                     fatorConversao: item.fatorConversao,
                     quantidadeTotalEstoqueAdicionada: qtdEstoqueFinal,
                     valorTotalPago: valorTotalItem,
                     custoUnitarioCalculado: custoUnitarioNovaCompra,
-                    dataCompra: dataCompraIso
+                    dataCompra: dataRecebimentoIso
                 });
 
-                // Custo Médio Ponderado (CMP)
+                // Custo Médio Ponderado (CMP) e Atualização de Estoque
                 const insumoRef = doc(db, "lojistas", uid, "insumos_composicao", item.insumoId);
                 const insumoDocSnap = await getDoc(insumoRef);
                 const dadosAtuais = insumoDocSnap.exists() ? insumoDocSnap.data() : {};
@@ -268,21 +297,41 @@ export function TabCompras({ uid }: { uid: string }) {
                 const valorTotalVelho = estoqueVelho * custoVelho;
                 const estoqueTotalNovo = estoqueVelho + qtdEstoqueFinal;
                 const valorTotalGeralEstoque = valorTotalVelho + valorTotalItem;
-
-                // Evita divisão por zero
                 const novoCustoUnitarioMedio = estoqueTotalNovo > 0 ? (valorTotalGeralEstoque / estoqueTotalNovo) : custoUnitarioNovaCompra;
 
                 await updateDoc(insumoRef, {
                     nrEstoqueAtualInsumo: estoqueTotalNovo,
                     vlCustoUnitarioInsumo: Number(novoCustoUnitarioMedio.toFixed(4)),
-                    updatedAt: dataCompraIso
+                    updatedAt: dataRecebimentoIso
+                });
+
+                // 📜 Registro no Extrato de Movimentações
+                const movRef = doc(collection(db, "lojistas", uid, "movimentacoes_estoque"));
+                await setDoc(movRef, {
+                    idItem: item.insumoId,
+                    tipoItem: "insumo",
+                    nomeItem: item.dsNomeInsumo,
+                    variacao: `${item.qtdComprada} ${item.unidadeComprada} (Receb. Pedido #${pedido.numeroPedido})`,
+                    tipoMovimentacao: "ENTRADA",
+                    origem: "COMPRA",
+                    quantidade: qtdEstoqueFinal,
+                    estoqueAnterior: estoqueVelho,
+                    estoqueAtual: estoqueTotalNovo,
+                    pedidoId: pedido.numeroPedido,
+                    dataMovimentacao: Date.now(),
+                    operador: pedido.operador || "Administrador"
                 });
             }
 
-            limparFormulario();
-            alert(`Pedido #${numeroPedidoFormatado} finalizado, estoque fracionado, custos atualizados por Custo Médio Ponderado e conta a pagar gerada com sucesso!`);
+            // Atualiza o pedido para "recebido"
+            await updateDoc(pedidoRef, {
+                status: "recebido",
+                dataRecebimento: dataRecebimentoIso
+            });
+
+            alert(`Recebimento do Pedido #${pedido.numeroPedido} confirmado! Estoque atualizado.`);
         } catch (error: any) {
-            alert("Erro ao finalizar compra: " + error.message);
+            alert("Erro ao confirmar recebimento: " + error.message);
         }
     };
 
@@ -293,14 +342,14 @@ export function TabCompras({ uid }: { uid: string }) {
             <div style={{ background: theme.bgApp, borderRadius: '12px', border: `1px solid ${theme.border}`, padding: '24px', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
                     <div>
-                        <h2 style={{ fontSize: '18px', margin: 0, fontWeight: 800 }}>🛒 Histórico de Compras & Notas</h2>
-                        <p style={{ fontSize: '12px', color: theme.textSec, margin: '4px 0 0 0' }}>Lance notas de compras em embalagens comerciais para atualizar o estoque fracionado automaticamente.</p>
+                        <h2 style={{ fontSize: '18px', margin: 0, fontWeight: 800 }}>🛒 Histórico de Compras & Fornecedores</h2>
+                        <p style={{ fontSize: '12px', color: theme.textSec, margin: '4px 0 0 0' }}>Lance pedidos de compras e confirme o recebimento para atualizar o estoque e os custos.</p>
                     </div>
                     <button
                         onClick={() => { limparFormulario(); setModalAberto(true); }}
                         style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}
                     >
-                        <FiPlus size={16} /> Nova Compra / Nota
+                        <FiPlus size={16} /> Novo Pedido / Compra
                     </button>
                 </div>
             </div>
@@ -315,29 +364,34 @@ export function TabCompras({ uid }: { uid: string }) {
                                 <th style={{ padding: '14px 16px' }}>Data</th>
                                 <th style={{ padding: '14px 16px' }}>Pedido</th>
                                 <th style={{ padding: '14px 16px' }}>Fornecedor</th>
-                                <th style={{ padding: '14px 16px' }}>Qtd de Itens</th>
-                                <th style={{ padding: '14px 16px' }}>Observação / NF</th>
-                                <th style={{ padding: '14px 16px', textAlign: 'right' }}>Valor Total Geral</th>
+                                <th style={{ padding: '14px 16px' }}>Status</th>
+                                <th style={{ padding: '14px 16px' }}>Qtd Itens</th>
+                                <th style={{ padding: '14px 16px' }}>Responsável</th>
+                                <th style={{ padding: '14px 16px', textAlign: 'right' }}>Valor Total</th>
+                                <th style={{ padding: '14px 16px', textAlign: 'center' }}>Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {pedidos.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} style={{ textAlign: 'center', padding: '50px', color: theme.textSec }}>
+                                    <td colSpan={9} style={{ textAlign: 'center', padding: '50px', color: theme.textSec }}>
                                         Nenhum pedido de compra registrado. 📦
                                     </td>
                                 </tr>
                             ) : (
                                 pedidos.map((pedido) => {
                                     const estaExpandido = !!pedidosExpandidos[pedido.id];
+                                    const isRecebido = pedido.status === "recebido";
 
                                     return (
                                         <React.Fragment key={pedido.id}>
                                             <tr
-                                                onClick={() => alternarExpandirPedido(pedido.id)}
-                                                style={{ borderBottom: `1px solid ${theme.border}`, cursor: 'pointer', background: estaExpandido ? theme.bgCard : 'transparent', transition: 'background 0.2s' }}
+                                                style={{ borderBottom: `1px solid ${theme.border}`, background: estaExpandido ? theme.bgCard : 'transparent', transition: 'background 0.2s' }}
                                             >
-                                                <td style={{ padding: '14px 16px', textAlign: 'center', color: theme.primary }}>
+                                                <td 
+                                                    onClick={() => alternarExpandirPedido(pedido.id)} 
+                                                    style={{ padding: '14px 16px', textAlign: 'center', color: theme.primary, cursor: 'pointer' }}
+                                                >
                                                     {estaExpandido ? <FiChevronUp size={18} /> : <FiChevronDown size={18} />}
                                                 </td>
                                                 <td style={{ padding: '14px 16px', color: theme.textSec }}>
@@ -350,22 +404,60 @@ export function TabCompras({ uid }: { uid: string }) {
                                                     {pedido.fornecedor}
                                                 </td>
                                                 <td style={{ padding: '14px 16px' }}>
+                                                    <span style={{
+                                                        padding: '4px 8px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '11px',
+                                                        fontWeight: 'bold',
+                                                        color: '#fff',
+                                                        backgroundColor: isRecebido ? '#10b981' : '#f59e0b'
+                                                    }}>
+                                                        {isRecebido ? 'RECEBIDO' : 'PENDENTE'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '14px 16px' }}>
                                                     {pedido.quantidadeItens} {pedido.quantidadeItens === 1 ? 'item' : 'itens'}
                                                 </td>
                                                 <td style={{ padding: '14px 16px', color: theme.textSec }}>
-                                                    {pedido.observacao || '-'}
+                                                    {pedido.operador || 'Admin'}
                                                 </td>
                                                 <td style={{ padding: '14px 16px', textAlign: 'right', color: '#10b981', fontWeight: 'bold' }}>
                                                     R$ {Number(pedido.valorTotalGeral).toFixed(2).replace('.', ',')}
+                                                </td>
+                                                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                                    {!isRecebido && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                confirmarRecebimentoMercadoria(pedido);
+                                                            }}
+                                                            style={{
+                                                                backgroundColor: '#10b981',
+                                                                color: '#fff',
+                                                                border: 'none',
+                                                                padding: '6px 12px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: 'bold',
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}
+                                                            title="Confirmar recebimento físico da mercadoria"
+                                                        >
+                                                            <FiCheckCircle size={13} /> Confirmar Recebimento
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
 
                                             {estaExpandido && (
                                                 <tr style={{ background: theme.bgCard, borderBottom: `1px solid ${theme.border}` }}>
-                                                    <td colSpan={7} style={{ padding: '16px 24px' }}>
+                                                    <td colSpan={9} style={{ padding: '16px 24px' }}>
                                                         <div style={{ background: theme.bgApp, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '16px' }}>
                                                             <h4 style={{ fontSize: '13px', margin: '0 0 12px 0', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                <FiShoppingCart size={14} /> Detalhes dos Itens do Pedido #{pedido.numeroPedido}
+                                                                <FiShoppingCart size={14} /> Detalhes dos Itens do Pedido #{pedido.numeroPedido} {pedido.observacao ? `(Obs: ${pedido.observacao})` : ''}
                                                             </h4>
                                                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                                                                 <thead>
@@ -374,7 +466,7 @@ export function TabCompras({ uid }: { uid: string }) {
                                                                         <th style={{ padding: '10px', textAlign: 'left' }}>Compra Realizada</th>
                                                                         <th style={{ padding: '10px', textAlign: 'left' }}>Entrada no Estoque</th>
                                                                         <th style={{ padding: '10px', textAlign: 'right' }}>Total Pago</th>
-                                                                        <th style={{ padding: '10px', textAlign: 'right' }}>Custo Unitário Real</th>
+                                                                        <th style={{ padding: '10px', textAlign: 'right' }}>Custo Unitário Calculado</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -412,7 +504,7 @@ export function TabCompras({ uid }: { uid: string }) {
                     <div style={{ background: theme.bgApp, color: theme.textMain, padding: '28px', borderRadius: '12px', width: '100%', maxWidth: '1100px', border: `1px solid ${theme.border}`, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 800 }}>🛒 Lançar Compra / Nota de Insumos</h3>
+                            <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 800 }}>🛒 Novo Pedido de Compra / Nota de Insumos</h3>
                             <button onClick={limparFormulario} style={{ background: 'transparent', border: 'none', color: theme.textSec, cursor: 'pointer' }}><FiX size={22} /></button>
                         </div>
 
@@ -462,7 +554,7 @@ export function TabCompras({ uid }: { uid: string }) {
                                         <strong style={{ color: theme.textMain }}>💡 Como funciona a conversão inteligente de compra:</strong>
                                         <span>• <strong>Insumo Selecionado:</strong> O sistema puxa automaticamente se o controle dele é feito em metros, unidades, gramas ou mililitros.</span>
                                         <span>• <strong>Qtd Comprada + Unidade:</strong> Quantos pacotes, caixas, rolos ou unidades comerciais você comprou (ex: <code>1</code> rolo).</span>
-                                        <span>• <strong>Conteúdo / Fator:</strong> Quantas unidades da <strong>unidade base</strong> cada pacote/rolo possui (o helper sugere automaticamente se compatível). O sistema soma direto no estoque!</span>
+                                        <span>• <strong>Conteúdo / Fator:</strong> Quantas unidades da <strong>unidade base</strong> cada pacote/rolo possui (o helper sugere automaticamente se compatível).</span>
                                     </div>
                                 )}
 
@@ -604,7 +696,7 @@ export function TabCompras({ uid }: { uid: string }) {
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                                 <button type="button" onClick={limparFormulario} style={{ background: 'transparent', color: theme.textSec, border: `1px solid ${theme.border}`, padding: '10px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Cancelar</button>
-                                <button type="submit" style={{ background: theme.primary, color: '#fff', border: 'none', padding: '10px 22px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>Salvar Pedido e Atualizar Estoque</button>
+                                <button type="submit" style={{ background: theme.primary, color: '#fff', border: 'none', padding: '10px 22px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>Registrar Pedido de Compra</button>
                             </div>
 
                         </form>

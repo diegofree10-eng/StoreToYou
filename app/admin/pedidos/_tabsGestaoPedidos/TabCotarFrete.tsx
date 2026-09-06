@@ -6,6 +6,8 @@ import { useGerenciarPedido } from '@/hooks/useGerenciarPedido';
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
+import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import BlocoEmbalagemPedido from './BlocoEmbalagemPedido';
 
 interface TabCotarFreteProps {
     pedidos: Pedido[];
@@ -61,7 +63,6 @@ const gerarLinkWhatsApp = (pedido: Pedido) => {
     const telefoneFinal = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
     const nomeCliente = clienteObj.nmNomeCliente || clienteObj.nome || "Cliente";
 
-    // 🌟 Número do pedido direto da raiz
     const numPed = (pedido as any).nrNumeroPedido !== undefined && (pedido as any).nrNumeroPedido !== null ? (pedido as any).nrNumeroPedido : (pedido.id?.slice(-4));
 
     const mensagem = encodeURIComponent(`Olá ${nomeCliente}, tudo bem? Estou entrando em contato referente ao seu pedido #${numPed}.`);
@@ -84,12 +85,11 @@ const verificarSeEstaPago = (p: Pedido): boolean => {
 export default function TabCotarFrete({
     pedidos, lojistaIdApp, db, dadosLoja, cotarFrete, setLocalPedidos, selecionados = [], setSelecionados, registrarFuncaoCotar
 }: TabCotarFreteProps) {
-    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
     const { theme } = useTheme();
 
     const [pedidosExpandidos, setPedidosExpandidos] = useState<Record<string, boolean>>({});
 
-    // 📄 Paginação idêntica à aba de Etiquetas
+    // 📄 Paginação alinhada com o mesmo padrão e design
     const [paginaAtual, setPaginaAtual] = useState(1);
     const [itensPorPagina, setItensPorPagina] = useState(20);
 
@@ -213,13 +213,10 @@ export default function TabCotarFrete({
         try {
             const respostaApi = await cotarFrete(pedidoParaCotacao as any);
 
-            // 🛡️ Garante que pegamos o array de fretes de qualquer formato que venha da API
             let opcoes = Array.isArray(respostaApi)
                 ? respostaApi
-               : ((respostaApi as any)?.opcoesFrete || (respostaApi as any)?.fretes || []);
+                : ((respostaApi as any)?.opcoesFrete || (respostaApi as any)?.fretes || []);
 
-            // 🛡️ Se por acaso o filtro zerasse as opções, injetamos a primeira opção válida da lista bruta 
-            // ou o fallback para garantir que o lojista nunca fique travado com a tela vazia.
             if ((!opcoes || opcoes.length === 0) && Array.isArray(respostaApi)) {
                 opcoes = respostaApi;
             }
@@ -359,16 +356,16 @@ export default function TabCotarFrete({
                     </p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: theme.textSec, fontWeight: 'bold', marginLeft: 'auto' }}>
-                    <span>Mostrar:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: theme.inputBg, padding: '5px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                    <span style={{ fontSize: '11px', color: theme.textSec }}>Exibir:</span>
                     <select
                         value={itensPorPagina}
                         onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
-                        style={{ padding: '6px 10px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textMain, cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '11px', color: theme.textMain, cursor: 'pointer', fontWeight: 'bold' }}
                     >
-                        <option value={20}>20</option>
-                        <option value={40}>40</option>
-                        <option value={60}>60</option>
+                        <option value={20} style={{ background: theme.bgCard }}>20</option>
+                        <option value={40} style={{ background: theme.bgCard }}>40</option>
+                        <option value={60} style={{ background: theme.bgCard }}>60</option>
                     </select>
                 </div>
             </div>
@@ -383,7 +380,6 @@ export default function TabCotarFrete({
                         const clienteObj = (pedido as any).dsCliente || {};
                         const nomeCliente = typeof clienteObj === 'object' ? (clienteObj.nmNomeCliente || clienteObj.nome || "Cliente") : (clienteObj || "Cliente");
 
-                        // 🌟 Número do pedido direto da raiz
                         const numPedidoFormatado = String((pedido as any).nrNumeroPedido ?? (pedido as any).numeroPedido ?? (pedido as any).numero ?? (pedido as any).id?.slice(-4) ?? "").padStart(5, '0');
 
                         const expandido = !!pedidosExpandidos[pedido.id];
@@ -431,7 +427,6 @@ export default function TabCotarFrete({
                                             />
                                             <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', width: '60px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
 
-                                            {/* 🌟 Badge de Origem PC */}
                                             <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: ((pedido as any).dsOrigemPedido || pedido.origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
                                                 {(pedido as any).dsOrigemPedido || pedido.origemPedido || 'Site'}
                                             </span>
@@ -459,7 +454,6 @@ export default function TabCotarFrete({
                                                 />
                                                 <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
 
-                                                {/* 🌟 Badge de Origem Mobile */}
                                                 <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 5px', borderRadius: '4px', backgroundColor: ((pedido as any).dsOrigemPedido || pedido.origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
                                                     {(pedido as any).dsOrigemPedido || pedido.origemPedido || 'Site'}
                                                 </span>
@@ -500,41 +494,11 @@ export default function TabCotarFrete({
                                 </div>
 
                                 {expandido && (() => {
-                                    const embalagemData = (pedido as any).Embalagem || (pedido as any).embalagemRecomendada || {};
-
-                                    // Mapeamento seguro para suportar a estrutura aninhada (recomendada / escolhida) e modelos antigos planos
-                                    const recomendada = embalagemData.recomendada || embalagemData;
-                                    const escolhida = embalagemData.escolhida || null;
-
-                                    const modeloRecomendado = recomendada.dsModeloEmbalagemRecomendado || recomendada.nomeInsumo || recomendada.nome || "Não calculada";
-                                    const tipoRecomendado = recomendada.dsTipoEmbalagem || recomendada.tipo || "-";
-                                    const custoRecomendado = Number(recomendada.vlCustoEmbalagemRecomendado || recomendada.custo || 0);
-
-                                    const modeloEscolhido = escolhida?.dsModeloEmbalagemEscolhida || escolhida?.dsModeloEmbalagemRecomendado || escolhida?.nome || "";
-                                    const tipoEscolhido = escolhida?.dsTipoEmbalagem || escolhida?.tipo || "";
-                                    const custoEscolhido = Number(escolhida?.vlCustoEmbalagemEscolhida || escolhida?.vlCustoEmbalagemRecomendado || escolhida?.custo || 0);
-
                                     return (
                                         <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
-                                            {/* 📦 Embalagens (Recomendada vs Escolhida) abaixo dos itens e acima dos 5 cards */}
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                    <span style={{ fontSize: '15px' }}>📦</span>
-                                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>Embalagem Recomendada:</span>
-                                                    <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary, backgroundColor: theme.inputBg, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border}` }}>
-                                                        {modeloRecomendado} ({String(tipoRecomendado).replace('_', ' ')})
-                                                    </span>
 
-                                                    {modeloEscolhido && modeloEscolhido !== modeloRecomendado && (
-                                                        <>
-                                                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, marginLeft: '8px' }}>| Escolhida:</span>
-                                                            <span style={{ fontSize: '12px', fontWeight: '600', color: '#16a34a', backgroundColor: '#e6f4ea', padding: '2px 8px', borderRadius: '4px', border: '1px solid #34a853' }}>
-                                                                {modeloEscolhido} ({String(tipoEscolhido).replace('_', ' ')})
-                                                            </span>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
+                                            {/* 🌟 BARRA DE EMBALAGEM PADRONIZADA */}
+                                            <BlocoEmbalagemPedido pedido={pedido} />
 
                                             <div className="grid-expandido" style={localStyles.gridExpandido}>
                                                 <div style={{ ...localStyles.caixaPersonalizacao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
@@ -610,7 +574,6 @@ export default function TabCotarFrete({
                                                 <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                     <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                     <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-
                                                         <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                             <strong>Forma de Pagamento:</strong> {
                                                                 fin.dsFormaPagamentoCarrinho
@@ -642,13 +605,52 @@ export default function TabCotarFrete({
                 )}
             </div>
 
-            {totalPaginas > 1 && (
-                <div style={styles.paginationContainer}>
-                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} style={{ ...styles.pageBtn, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>Anterior</button>
-                    <span style={{ margin: '0 15px', fontSize: '13px', fontWeight: 'bold', color: theme.textSec }}>Página {paginaAtual} de {totalPaginas}</span>
-                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} style={{ ...styles.pageBtn, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>Próxima</button>
+            {/* CONTROLES DE PAGINAÇÃO (RODAPÉ PADRONIZADO COM ANTERIOR E PRÓXIMA) */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${theme.border}`, fontSize: "12px" }}>
+                <span style={{ color: theme.textSec }}>
+                    Página <strong>{paginaAtual}</strong> de <strong>{totalPaginas}</strong> (Total: {pedidosParaCotar.length} pedidos)
+                </span>
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => setPaginaAtual(p => Math.max(p - 1, 1))}
+                        disabled={paginaAtual === 1 || pedidosParaCotar.length === 0}
+                        style={{
+                            background: paginaAtual === 1 ? theme.bgApp : theme.primary,
+                            color: paginaAtual === 1 ? theme.textSec : "#fff",
+                            border: `1px solid ${theme.border}`,
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            cursor: paginaAtual === 1 ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontWeight: "bold",
+                            opacity: paginaAtual === 1 ? 0.6 : 1
+                        }}
+                    >
+                        <FiChevronLeft size={14} /> Anterior
+                    </button>
+                    <button
+                        onClick={() => setPaginaAtual(p => Math.min(p + 1, totalPaginas))}
+                        disabled={paginaAtual === totalPaginas || pedidosParaCotar.length === 0}
+                        style={{
+                            background: paginaAtual === totalPaginas ? theme.bgApp : theme.primary,
+                            color: paginaAtual === totalPaginas ? theme.textSec : "#fff",
+                            border: `1px solid ${theme.border}`,
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            cursor: paginaAtual === totalPaginas ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontWeight: "bold",
+                            opacity: paginaAtual === totalPaginas ? 0.6 : 1
+                        }}
+                    >
+                        Próxima <FiChevronRight size={14} />
+                    </button>
                 </div>
-            )}
+            </div>
 
             {pedidoSelecionadoParaFrete && (
                 <div style={localStyles.modalOverlayCentroFix}>
@@ -705,7 +707,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
     const selo = obterSeloItem(item, pedidoLogistica);
     const qtd = item.nrQuantidadeProduto || item.quantidade || item.qty || 1;
 
-    // 🌟 Captura o preço unitário do item usando as novas chaves
     const precoUnitario = Number(item.vlPrecoProduto || item.preco || item.valor || item.valorUnitario || 0);
     const valorTotalItem = precoUnitario * qtd;
 
@@ -735,7 +736,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
                                 Variação: {item.dsVariacaoProduto}
                             </span>
                         )}
-                        {/* 🌟 Exibição do valor unitário e total do item */}
                         <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary }}>
                             R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
                         </span>
@@ -760,11 +760,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
         </div>
     );
 });
-
-const styles: { [key: string]: React.CSSProperties } = {
-    paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
-    pageBtn: { padding: '8px 16px', cursor: 'pointer', border: '1px solid', borderRadius: '4px', fontWeight: 'bold' }
-};
 
 const localStyles: { [key: string]: React.CSSProperties } = {
     cardContainer: { borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
