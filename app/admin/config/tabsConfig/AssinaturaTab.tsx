@@ -28,9 +28,8 @@ export default function AssinaturaTab({
   const nomeLojaAtual = encodeURIComponent(config.dadosLoja?.dsNomeLoja || "Loja Parceira");
 
   const linkIndicacao = typeof window !== "undefined" 
-    ? `${window.location.origin}/auth?ref=${lojistaId}&nome=${nomeLojaAtual}` 
-    : `https://seudominio.com/auth?ref=${lojistaId}&nome=${nomeLojaAtual}`;
-
+    ? `${window.location.origin}/login?ref=${lojistaId}&nome=${nomeLojaAtual}` 
+    : `https://seudominio.com/login?ref=${lojistaId}&nome=${nomeLojaAtual}`;
   const copiarLink = () => {
     navigator.clipboard.writeText(linkIndicacao);
     setCopiado(true);
