@@ -542,13 +542,15 @@ exports.prepararNovoLojista = functions
     const userId = user.uid;
 
     // 🛡️ VERIFICAÇÃO DE SEGURANÇA:
-    // Se o usuário já foi cadastrado na coleção "usuarios" como colaborador,
-    // nós interrompemos a função aqui para ele NÃO criar a estrutura de lojista na raiz!
     const userDocRef = db.doc(`usuarios/${userId}`);
     const userDocSnap = await userDocRef.get();
 
+    let codigoIndicador = null;
+
     if (userDocSnap.exists) {
       const userData = userDocSnap.data();
+      
+      // Se for colaborador, bloqueia a criação na raiz
       if (
         userData.dsTipoConta === "colaborador" ||
         userData.role === "colaborador"
@@ -558,12 +560,21 @@ exports.prepararNovoLojista = functions
         );
         return null;
       }
+
+      // ✨ Recupera o código de indicação que foi salvo no documento do usuário pelo front-end
+      if (userData.indicadoPor) {
+        codigoIndicador = userData.indicadoPor;
+      }
     }
 
-    // Se não for colaborador (ou seja, é um Lojista principal se cadastrando), segue o fluxo normal:
     const lojistaId = userId;
 
     const estruturaLojista = {
+      uid: userId,
+      email: user.email || "",
+      dsTipoConta: "logista",
+      indicadoPor: codigoIndicador, // 👈 Campo que guarda quem indicou este lojista
+      dataCadastro: Date.now(),
       dadosPessoais: {
         dsNomeResponsavel: "",
         dsRuaResponsavel: "",
@@ -653,6 +664,25 @@ exports.prepararNovoLojista = functions
     await db
       .doc(`lojistas/${lojistaId}`)
       .set(estruturaLojista, { merge: true });
+
+    // ✨ Se existe um indicador válido, registra automaticamente na subcoleção de indicações do "padrinho"
+    if (codigoIndicador && codigoIndicador !== lojistaId) {
+      try {
+        const nomeLojaNovo = userDocSnap.exists ? (userDocSnap.data().nomeLoja || "Nova Loja") : "Nova Loja";
+        await db
+          .doc(`lojistas/${codigoIndicador}/indicacoes/${lojistaId}`)
+          .set({
+            uidIndicado: lojistaId,
+            emailIndicado: user.email || "",
+            nomeIndicado: nomeLojaNovo,
+            dataCadastro: new Date().toISOString(),
+            status: "pendente" // Ficará pendente até virar assinante pago
+          });
+      } catch (errInd) {
+        console.error("Erro ao registrar indicação na função trigger:", errInd);
+      }
+    }
+
     await db
       .collection(`lojistas/${lojistaId}/assinaturas`)
       .doc("registro_inicial")
@@ -663,6 +693,7 @@ exports.prepararNovoLojista = functions
         dsMesReferencia: "Cadastro Inicial",
         createdAt: FieldValue.serverTimestamp(),
       });
+
     await db.collection(`lojistas/${lojistaId}/mensagens`).add({
       titulo: "Bem-vindo!",
       texto: "...",
@@ -671,9 +702,11 @@ exports.prepararNovoLojista = functions
       prioridade: "alta",
       categoria: "sistema",
     });
+
     await db
       .doc(`lojistas/${lojistaId}/categorias/geral`)
       .set({ nome: "Geral" });
+
     return null;
   });
 

@@ -1,6 +1,9 @@
+// app/admin/configuracoes/_tabs/AssinaturaTab.tsx
 "use client";
 
+import React, { useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
+import { FiShare2, FiCopy, FiCheck, FiUsers, FiAward } from "react-icons/fi";
 
 export default function AssinaturaTab({
   config,
@@ -8,6 +11,7 @@ export default function AssinaturaTab({
   setShowUpgradeModal
 }: any) {
   const { theme, isModoNoturno } = useTheme();
+  const [copiado, setCopiado] = useState(false);
 
   const planoAtualNome = config.dadosLoja?.dsPlanoLoja || 'Bronze';
   const planoInfo = planosConfig?.[planoAtualNome] || {};
@@ -18,6 +22,25 @@ export default function AssinaturaTab({
     : '---';
 
   const historico = config.historicoPagamentos || [];
+
+  // 🚀 ID e Nome da Loja obtidos diretamente do objeto carregado (Custo de leitura zero no Firebase!)
+  const lojistaId = config.uid || config.dadosLoja?.lojaId || "";
+  const nomeLojaAtual = encodeURIComponent(config.dadosLoja?.dsNomeLoja || "Loja Parceira");
+
+  const linkIndicacao = typeof window !== "undefined" 
+    ? `${window.location.origin}/auth?ref=${lojistaId}&nome=${nomeLojaAtual}` 
+    : `https://seudominio.com/auth?ref=${lojistaId}&nome=${nomeLojaAtual}`;
+
+  const copiarLink = () => {
+    navigator.clipboard.writeText(linkIndicacao);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 3000);
+  };
+
+  // Dados de indicação vindos do objeto de configuração ou padrão 0
+  const totalIndicacoes = config.dadosLoja?.totalIndicacoes || 0;
+  const mesesGratisDisponiveis = config.dadosLoja?.mesesGratisDisponiveis || 0;
+  const progressoMeta = totalIndicacoes % 5; // Quantos faltam para o próximo bloco de 5
 
   return (
     <section style={{ padding: '20px', background: theme.bgCard, borderRadius: '12px', border: `1px solid ${theme.border}`, transition: 'background 0.3s' }}>
@@ -48,6 +71,77 @@ export default function AssinaturaTab({
             <div style={{ fontWeight: '800', color: '#ef4444', fontSize: '15px', marginTop: '2px' }}>
               {dataVencimentoStr}
             </div>
+            {mesesGratisDisponiveis > 0 && (
+              <div style={{ marginTop: '8px', background: '#dcfce7', color: '#166534', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
+                🎁 {mesesGratisDisponiveis} mês(es) grátis acumulado(s)!
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 🚀 BLOCO: INDIQUE E GANHE */}
+      <div style={{ ...styles.indiqueCard, background: isModoNoturno ? '#1e293b' : '#eff6ff', border: `1px solid ${isModoNoturno ? '#334155' : '#bfdbfe'}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <div style={{ background: '#2563eb', color: '#fff', padding: '8px', borderRadius: '8px', display: 'flex' }}>
+            <FiShare2 size={18} />
+          </div>
+          <div>
+            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: theme.textMain }}>Indique e Ganhe 1 Mês Grátis!</h4>
+            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: theme.textSec }}>
+              A cada <b>5 amigos assinantes</b> indicados pelo seu link, você ganha <b>1 mês grátis</b> na sua assinatura.
+            </p>
+          </div>
+        </div>
+
+        {/* Link de Compartilhamento */}
+        <div style={{ display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
+          <input 
+            type="text" 
+            readOnly 
+            value={linkIndicacao} 
+            style={{ 
+              flex: 1, 
+              minWidth: '220px', 
+              padding: '10px 12px', 
+              borderRadius: '8px', 
+              border: `1px solid ${theme.border}`, 
+              background: theme.inputBg || theme.bgApp, 
+              color: theme.textMain,
+              fontSize: '12px',
+              outline: 'none'
+            }} 
+          />
+          <button 
+            type="button" 
+            onClick={copiarLink}
+            style={{ 
+              background: copiado ? '#16a34a' : '#2563eb', 
+              color: '#fff', 
+              border: 'none', 
+              padding: '10px 16px', 
+              borderRadius: '8px', 
+              fontWeight: 'bold', 
+              fontSize: '12px', 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              transition: 'background 0.2s'
+            }}
+          >
+            {copiado ? <FiCheck size={14} /> : <FiCopy size={14} />}
+            {copiado ? "Copiado!" : "Copiar Link"}
+          </button>
+        </div>
+
+        {/* Estatísticas do Programa */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', paddingTop: '10px', borderTop: `1px solid ${isModoNoturno ? '#334155' : '#dbeafe'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: theme.textSec, fontWeight: '700' }}>
+            <FiUsers size={14} color="#2563eb" /> Amigos Assinantes Indicados: <span style={{ color: theme.textMain, fontWeight: '900' }}>{totalIndicacoes}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: theme.textSec, fontWeight: '700' }}>
+            <FiAward size={14} color="#d97706" /> Progresso da Meta: <span style={{ color: theme.textMain, fontWeight: '900' }}>{progressoTime(progressoMeta)}</span>
           </div>
         </div>
       </div>
@@ -116,9 +210,14 @@ export default function AssinaturaTab({
   );
 }
 
+function progressoTime(atual: number) {
+  return `${atual} / 5 amigos`;
+}
+
 const styles: any = {
   h3: { fontSize: "11px", fontWeight: "800", marginBottom: "12px", textTransform: 'uppercase', marginTop: '10px' },
   planoCard: { padding: '20px', borderRadius: '14px' },
+  indiqueCard: { padding: '16px 20px', borderRadius: '14px', marginTop: '20px' },
   msgContainer: { display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px', maxHeight: '250px', overflowY: 'auto' },
   historicoItem: { display: 'flex', justifyContent: 'space-between', padding: '12px 15px', borderRadius: '10px', alignItems: 'center' },
   noMsg: { textAlign: 'center', padding: '20px', fontSize: '12px' },
