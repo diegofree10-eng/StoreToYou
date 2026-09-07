@@ -58,7 +58,6 @@ export default function GestaoPedidos({
     const [debouncedBusca, setDebouncedBusca] = useState("");
 
     const [termoBuscaAtivo, setTermoBuscaAtivo] = useState("");
-    const [filtroLogistica, setFiltroLogistica] = useState("todos");
     const [ordenacao, setOrdenacao] = useState("recentes");
 
     // 📦 Estados otimizados para gerenciar as embalagens na aba de Produção
@@ -230,27 +229,53 @@ export default function GestaoPedidos({
     }, [pedidosFiltradosParaGestao, obterAbaDoPedidoEfetiva]);
 
     const verificarMatchBusca = useCallback((p: Pedido, termo: string): boolean => {
-        const numPedidoStr = p.numeroPedido !== undefined && p.numeroPedido !== null ? String(p.numeroPedido) : (p.numero !== undefined && p.numero !== null ? String(p.numero) : "");
+        if (!p) return false;
+        const termoBusca = String(termo || "").toLowerCase().trim();
+        if (!termoBusca) return false;
+
+        // 1. Número do pedido
+        const numPedidoStr = String(
+            p.nrNumeroPedido ?? p.numeroPedido ?? p.numero ?? ""
+        ).toLowerCase();
+
+        // 2. ID do documento/pedido no Firestore
         const idStr = String(p.id || "").toLowerCase();
 
-        const clienteObj = (p as any).dsCliente || (typeof p.cliente === 'object' && p.cliente !== null ? p.cliente : {});
-        const clienteNome = typeof clienteObj === 'object'
-            ? String((clienteObj as any).nmNomeCliente || (clienteObj as any).nome || (clienteObj as any).dsNomeCliente || "").toLowerCase()
-            : String(p.cliente || "").toLowerCase();
+        // 3. Nome do cliente
+        let clienteNome = "";
+        const clienteObj = (p as any).dsCliente;
+        if (clienteObj && typeof clienteObj === 'object') {
+            clienteNome = String(clienteObj.nmNomeCliente || clienteObj.nome || clienteObj.dsNomeCliente || "").toLowerCase();
+        } else if (typeof p.cliente === 'string') {
+            clienteNome = String(p.cliente).toLowerCase();
+        }
 
-        const nomeComecaComTermo = clienteNome.trim().startsWith(termo);
-        const itensNomes = (p.itens || []).map((i: any) => String(i.dsNomeProduto || i.nome || i.title || "").toLowerCase());
-        const itemComecaComTermo = itensNomes.some((item: string) => item.trim().startsWith(termo));
+        // 4. Nomes dos produtos (itens)
+        const itens = Array.isArray(p.itens) ? p.itens : [];
+        const itensNomes = itens.map((i: any) =>
+            String(i?.dsNomeProduto || i?.nome || "").toLowerCase()
+        );
 
-        const numeroBate = numPedidoStr.toLowerCase().startsWith(termo);
-        const idBate = idStr.startsWith(termo);
+        // 🔍 Ajustado para .startsWith() para validar se o nome, número ou produto COMEÇAM com o termo digitado
+        const bateNumero = numPedidoStr.startsWith(termoBusca);
+        const bateId = idStr.startsWith(termoBusca);
+        
+        // Verifica se o nome do cliente começa com o termo OU se alguma das palavras do nome do cliente começa com o termo
+        const palavrasCliente = clienteNome.split(" ");
+        const bateCliente = clienteNome.startsWith(termoBusca) || palavrasCliente.some(palavra => palavra.startsWith(termoBusca));
 
-        return nomeComecaComTermo || numeroBate || idBate || itemComecaComTermo;
+        // Verifica se algum produto começa com o termo
+        const bateItem = itensNomes.some(nomeItem => {
+            const palavrasItem = nomeItem.split(" ");
+            return nomeItem.startsWith(termoBusca) || palavrasItem.some(palavra => palavra.startsWith(termoBusca));
+        });
+
+        return bateNumero || bateId || bateCliente || bateItem;
     }, []);
 
     const resultadosBuscaMenu = useMemo(() => {
         const termo = busca.toLowerCase().trim();
-        if (!termo || termo.length < 2) return [];
+        if (!termo || termo.length < 1) return [];
 
         return pedidosFiltradosParaGestao.filter(p => {
             if (!p) return false;
@@ -260,9 +285,11 @@ export default function GestaoPedidos({
 
     const selecionarPedidoDoMenu = (pedidoSelecionado: Pedido) => {
         const abaDestino = obterAbaDoPedidoEfetiva(pedidoSelecionado);
-        const numPedidoStr = pedidoSelecionado.numeroPedido !== undefined && pedidoSelecionado.numeroPedido !== null
-            ? String(pedidoSelecionado.numeroPedido)
-            : (pedidoSelecionado.numero !== undefined && pedidoSelecionado.numero !== null ? String(pedidoSelecionado.numero) : pedidoSelecionado.id);
+        const numPedidoStr = pedidoSelecionado.nrNumeroPedido !== undefined && pedidoSelecionado.nrNumeroPedido !== null
+            ? String(pedidoSelecionado.nrNumeroPedido)
+            : (pedidoSelecionado.numeroPedido !== undefined && pedidoSelecionado.numeroPedido !== null
+                ? String(pedidoSelecionado.numeroPedido)
+                : (pedidoSelecionado.numero !== undefined && pedidoSelecionado.numero !== null ? String(pedidoSelecionado.numero) : pedidoSelecionado.id));
 
         if (abaDestino === 'pedidos') {
             lidarComCliqueAbaPedidos();
@@ -290,22 +317,13 @@ export default function GestaoPedidos({
                 if (!verificarMatchBusca(p, termoBuscaEfetivo)) return false;
             }
 
-            const formaEntregaStr = String(p.logistica?.dsFormaEntrega || p.formaEntrega || '').trim().toLowerCase();
-            const ehRetirada = p.logistica?.isRetirada === true || p.retirada === true || p.retirarNaLoja === true || formaEntregaStr === 'retirada';
-            const ehSemFrete = Array.isArray(p.itens) && p.itens.length > 0 ? p.itens.every((item: any) => item.precisaFrete === true) : false;
-
-            if (filtroLogistica === "pendentes") return p.etiquetaGerada && p.statusEtiqueta === 'pendente';
-            if (filtroLogistica === "freteGratis") return (p.logistica?.isFreteGratis || (p.financeiro as any)?.freteGratis) === true;
-            if (filtroLogistica === "semFrete") return ehSemFrete;
-            if (filtroLogistica === "retirada") return ehRetirada;
-
             return true;
         }).sort((a, b) => {
             const d1 = new Date(a.data || (a.cliente as any)?.data || 0).getTime();
             const d2 = new Date(b.data || (b.cliente as any)?.data || 0).getTime();
             return ordenacao === "recentes" ? d2 - d1 : d1 - d2;
         });
-    }, [pedidosFiltradosParaGestao, termoBuscaAtivo, debouncedBusca, filtroLogistica, ordenacao, abaAtiva, verificarMatchBusca, obterAbaDoPedidoEfetiva]);
+    }, [pedidosFiltradosParaGestao, termoBuscaAtivo, debouncedBusca, ordenacao, abaAtiva, verificarMatchBusca, obterAbaDoPedidoEfetiva]);
 
     // 📦 Ações em lote ajustadas para a aba Pedidos
     const lidarComMarcarPagoEmLote = async () => {
@@ -584,14 +602,53 @@ export default function GestaoPedidos({
                     <h2 style={{ fontSize: '20px', color: theme.textMain, margin: 0, fontWeight: 800 }}>📋 Gestão de Pedidos</h2>
                 </div>
 
+
+                {/* 🌟 BARRA DE ABAS PADRÃO (SEMPRE VISÍVEL) */}
+                <div style={{ ...styles.tabContainer, borderColor: theme.border }}>
+                    <button onClick={lidarComCliqueAbaPedidos} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'pedidos' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        PEDIDOS
+                        {novosPedidosCount > 0 && <span style={styles.badgeNovo}>{novosPedidosCount}</span>}
+                        <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['pedidos'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('pendente'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'pendente' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        PENDENTE <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['pendente'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('producao'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'producao' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        PRODUÇÃO <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['producao'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('cotar'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'cotar' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        COTAR FRETE <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['cotar'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('etiquetas'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'etiquetas' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        ETIQUETAS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['etiquetas'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('retirada'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'retirada' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        RETIRADA <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['retirada'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('entregalocal'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'entregalocal' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        ENTREGA LOCAL <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['entregalocal'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('digital'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'digital' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        DIGITAL <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['digital'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('enviados'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'enviados' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
+                        ENVIADOS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['enviados'] || 0})</span>
+                    </button>
+
+                    <button onClick={() => { setAbaAtiva('concluidos'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'concluidos' ? { ...styles.tabAtivaConcluidos, color: '#059669', borderColor: '#059669' } : {}) }}>
+                        CONCLUÍDOS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['concluidos'] || 0})</span>
+                    </button>
+                </div>
+
                 <div className="gp-filter-bar" style={{ ...styles.filterBar, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                    <select value={filtroLogistica} onChange={(e) => setFiltroLogistica(e.target.value)} style={{ ...styles.selectLogistica, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>
-                        <option value="todos">🗂️ Todas Logísticas</option>
-                        <option value="pendentes">🏷️ Etiqueta Pendente</option>
-                        <option value="freteGratis">🚚 Frete Grátis</option>
-                        <option value="semFrete">📦 Sem Frete</option>
-                        <option value="retirada">🏪 Retirada Loja</option>
-                    </select>
                     <select value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)} style={{ ...styles.selectOrdenacaoStyle, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}>
                         <option value="recentes">📅 Mais Recentes</option>
                         <option value="antigos">⏳ Mais Antigos</option>
@@ -603,7 +660,10 @@ export default function GestaoPedidos({
                                 type="text"
                                 placeholder="🔍 Digite para buscar (ex: Maria, nº pedido ou Id Pedido)..."
                                 value={busca}
-                                onChange={(e) => setBusca(e.target.value)}
+                                onChange={(e) => {
+                                    setBusca(e.target.value);
+                                    if (termoBuscaAtivo) setTermoBuscaAtivo("");
+                                }}
                                 style={{ ...styles.searchInput, backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
                             />
 
@@ -637,7 +697,11 @@ export default function GestaoPedidos({
                                 </div>
                                 <div style={styles.dropdownList}>
                                     {resultadosBuscaMenu.map((p) => {
-                                        const numPed = p.numeroPedido !== undefined && p.numeroPedido !== null ? p.numeroPedido : (p.numero || p.id.slice(-6));
+                                        const numPed = p.nrNumeroPedido !== undefined && p.nrNumeroPedido !== null
+                                            ? p.nrNumeroPedido
+                                            : (p.numeroPedido !== undefined && p.numeroPedido !== null
+                                                ? p.numeroPedido
+                                                : (p.numero || p.id.slice(-6)));
                                         const clienteObj = (p as any).dsCliente || (typeof p.cliente === 'object' && p.cliente !== null ? p.cliente : {});
                                         const clienteNome = typeof clienteObj === 'object' ? ((clienteObj as any).nmNomeCliente || (clienteObj as any).nome || (clienteObj as any).dsNomeCliente || "Cliente") : (p.cliente || "Cliente");
                                         const infoAba = obterAbaDoPedidoEfetiva(p);
@@ -664,52 +728,6 @@ export default function GestaoPedidos({
                         )}
                     </div>
                 </div>
-
-                {/* 🌟 BARRA DE ABAS PADRÃO (SEMPRE VISÍVEL) */}
-                <div style={{ ...styles.tabContainer, borderColor: theme.border }}>
-                    <button onClick={lidarComCliqueAbaPedidos} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'pedidos' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        PEDIDOS
-                        {novosPedidosCount > 0 && <span style={styles.badgeNovo}>{novosPedidosCount}</span>}
-                        <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['pedidos'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('pendente'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'pendente' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        PENDENTE <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['pendente'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('producao'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'producao' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        produção <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['producao'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('cotar'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'cotar' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        COTAR FRETE <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['cotar'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('etiquetas'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'etiquetas' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        ETIQUETAS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['etiquetas'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('retirada'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'retirada' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        RETIRADA <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['retirada'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('entregalocal'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'entregalocal' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        ENTREGA LOCAL <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['entregalocal'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('digital'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'digital' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        DIGITAL <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['digital'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('enviados'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'enviados' ? { ...styles.tabAtiva, color: theme.primary, borderColor: theme.primary } : {}) }}>
-                        ENVIADOS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['enviados'] || 0})</span>
-                    </button>
-
-                    <button onClick={() => { setAbaAtiva('concluidos'); setTermoBuscaAtivo(""); }} style={{ ...styles.tabStyle, color: theme.textSec, ...(abaAtiva === 'concluidos' ? { ...styles.tabAtivaConcluidos, color: '#059669', borderColor: '#059669' } : {}) }}>
-                        CONCLUÍDOS <span style={{ ...styles.badgeTotal, backgroundColor: theme.border, color: theme.textMain }}>({contadoresAbas['concluidos'] || 0})</span>
-                    </button>
-                </div>
-
                 {/* 🌟 RENDERIZAÇÃO CONDICIONAL DA BARRA DE AÇÕES POR ABA */}
                 {['pedidos', 'pendente', 'producao'].includes(abaAtiva) ? (
                     <BarraAcoesStatusProducao
@@ -893,7 +911,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     },
 
     filterBar: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid' },
-    selectLogistica: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', outline: 'none', cursor: 'pointer' },
     selectOrdenacaoStyle: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', outline: 'none', cursor: 'pointer' },
     searchInput: { padding: '7px 12px', borderRadius: '6px', border: '1px solid', fontSize: '13px', flex: 1 },
 

@@ -55,6 +55,11 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
         return () => unsub();
     }, [uid]);
 
+    // Função auxiliar para formatar a quantidade de forma limpa (ex: 0,25 em vez de 0.199999999)
+    const formatarQuantidade = (qtd: number) => {
+        return Number(qtd) % 1 !== 0 ? Number(qtd).toFixed(2).replace('.', ',') : Number(qtd).toString();
+    };
+
     const alternarExpandirInsumo = (insumoId: string) => {
         setInsumosExpandidos(prev => ({
             ...prev,
@@ -82,24 +87,18 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
     const salvarEstoqueInline = async (item: any) => {
         if (!uid) return;
 
-        // 1. Substitui vírgula por ponto para evitar erros de digitação brasileiros
         const valorTratado = String(valorEditado).trim().replace(",", ".");
         const novoValor = parseFloat(valorTratado);
 
-        // 2. Proteção contra valores vazios, letras ou símbolos inválidos
         if (isNaN(novoValor)) {
             alert("Por favor, digite um número válido para o estoque.");
             return;
         }
 
-        // 3. Proteção contra estoque negativo (opcional, remova se permitir negativo)
         if (novoValor < 0) {
             alert("O estoque não pode ficar com valor negativo.");
             return;
         }
-
-        // 4. Alerta de confirmação se a mudança for muito drástica (ex: alteração brusca)
-        // (Opcional, mas ajuda a evitar que o lojista digite "1000" em vez de "10" sem querer)
 
         setLoadingId(item.id);
         try {
@@ -229,12 +228,12 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
                                                             backgroundColor: isZerado ? '#fee2e2' : isBaixo ? '#fef3c7' : '#ecfdf5',
                                                             color: isZerado ? '#991b1b' : isBaixo ? '#b45309' : '#065f46'
                                                         }}>
-                                                            {item.estoque} {item.unidade}
+                                                            {formatarQuantidade(item.estoque)} {item.unidade}
                                                         </span>
                                                     )}
                                                 </td>
                                                 <td style={{ padding: '12px 16px', fontWeight: 'bold', color: theme.textMain }}>
-                                                    {estoqueMinDesejado} {item.unidade}
+                                                    {formatarQuantidade(estoqueMinDesejado)} {item.unidade}
                                                 </td>
                                                 <td style={{ padding: '12px 16px', fontWeight: '600', color: theme.primary }}>
                                                     R$ {Number(item.custo).toFixed(4).replace('.', ',')} / {item.unidade}
@@ -292,7 +291,7 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
                                                                 </div>
                                                                 <div>
                                                                     <span style={{ color: theme.textSec, display: 'block' }}>Estoque Mínimo (Alerta):</span>
-                                                                    <strong style={{ color: theme.textMain }}>{estoqueMinDesejado} {item.unidade}</strong>
+                                                                    <strong style={{ color: theme.textMain }}>{formatarQuantidade(estoqueMinDesejado)} {item.unidade}</strong>
                                                                 </div>
                                                                 <div>
                                                                     <span style={{ color: theme.textSec, display: 'block' }}>Composição Automática:</span>
@@ -314,7 +313,7 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
                 </div>
             </div>
 
-            {/* LISTA MOBILE COM COLUNAS DE TAMANHO FIXO */}
+            {/* LISTA MOBILE */}
             <div className="mobile-card-list">
                 {itensFiltrados.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '30px', color: theme.textSec, background: theme.bgCard, borderRadius: '8px', border: `1px solid ${theme.border}` }}>
@@ -383,14 +382,14 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
                                                 backgroundColor: isZerado ? '#fee2e2' : isBaixo ? '#fef3c7' : '#ecfdf5',
                                                 color: isZerado ? '#991b1b' : isBaixo ? '#b45309' : '#065f46'
                                             }}>
-                                                {item.estoque} {item.unidade}
+                                                {formatarQuantidade(item.estoque)} {item.unidade}
                                             </span>
                                         )}
                                     </div>
                                     <div>
                                         <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: theme.textSec }}>MÍNIMO</span>
                                         <span style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: theme.textMain, marginTop: '3px' }}>
-                                            {estoqueMinDesejado} {item.unidade}
+                                            {formatarQuantidade(estoqueMinDesejado)} {item.unidade}
                                         </span>
                                     </div>
                                     <div>
@@ -401,7 +400,7 @@ export function TabEstoqueInsumos({ uid, buscaExterna, filtroRapidoExterno }: { 
                                     </div>
                                     <div>
                                         <span style={{ display: 'block', fontSize: '9px', fontWeight: 'bold', color: theme.textSec }}>TOTAL</span>
-                                        <span style={{ display: 'block', fontSize: '10px', fontWeight: 'bold', color: theme.textMain, marginTop: '3px' }}>
+                                        <span style={{ display: 'block', fontSize: '10px', fontWeight: 'bold', color: theme.textMain, margin: 0 }}>
                                             R$ {Number(item.estoque * item.custo).toFixed(2).replace('.', ',')}
                                         </span>
                                     </div>

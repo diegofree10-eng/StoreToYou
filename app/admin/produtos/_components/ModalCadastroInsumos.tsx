@@ -52,10 +52,10 @@ export default function ModalCadastroInsumos({
         return acc + (custoUnit * qtd);
     }, 0);
 
-    // ✨ Conversão segura e precisa do valor monetário digitado (suporta "10,00", "1.000,50", etc)
+    // ✨ Conversão limpa e segura do valor monetário para os cálculos internos
     const valorOutrosNum = useMemo(() => {
         if (!outrosCustos) return 0;
-        const limpo = outrosCustos.toString().replace(/\./g, "").replace(",", ".");
+        const limpo = String(outrosCustos).replace(/\./g, "").replace(",", ".");
         const num = parseFloat(limpo);
         return isNaN(num) ? 0 : num;
     }, [outrosCustos]);
@@ -261,7 +261,7 @@ export default function ModalCadastroInsumos({
                     )}
                 </div>
 
-                {/* Input de Outros Custos */}
+              {/* Input de Outros Custos */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: `1px solid ${theme.border}`, paddingTop: '12px' }}>
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textSec, textTransform: 'uppercase' }}>
                         💵 Outros Custos / Despesas Avulsas (R$)
@@ -273,24 +273,21 @@ export default function ModalCadastroInsumos({
                         value={outrosCustos ?? ""}
                         onChange={(e) => {
                             const valorDigitado = e.target.value;
-                            if (!valorDigitado) {
-                                setOutrosCustos("");
-                                return;
-                            }
-                            if (formatInput) {
-                                formatInput(valorDigitado, setOutrosCustos);
-                                return;
-                            }
+                            
+                            // Remove tudo que não for número
                             const apenasDigitos = valorDigitado.replace(/\D/g, "");
+                            
                             if (!apenasDigitos) {
                                 setOutrosCustos("");
                                 return;
                             }
+
+                            // Formato caixa eletrônico (centavos automáticos da direita para a esquerda)
                             const numero = (parseInt(apenasDigitos, 10) / 100).toFixed(2);
                             const formatado = numero.replace(".", ",").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+                            
                             setOutrosCustos(formatado);
                         }}
-                        onBlur={() => aplicarCustoNoFormularioPrincipal()}
                         style={{ padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: '13px', outline: 'none' }}
                     />
                 </div>

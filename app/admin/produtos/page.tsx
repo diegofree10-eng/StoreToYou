@@ -177,10 +177,10 @@ export default function CadastroProdutos() {
                 return {
                     id: d.id,
                     ...data,
-                    nome: data.dsNome || data.nome || "",
-                    categoria: data.dsCategoria || data.categoria || "",
-                    ativo: data.isAtivo ?? data.ativo ?? true,
-                    imagens: data.dsImagens || data.imagens || [],
+                    nome: data.dsNomeProduto || data.dsNome || data.nome || "",
+                    categoria: data.dsCategoriaProduto || data.dsCategoria || data.categoria || "",
+                    ativo: data.isAtivoProduto ?? data.isAtivo ?? data.ativo ?? true,
+                    imagens: data.dsImagensProduto || data.dsImagens || data.imagens || [],
                     variacoes: data.variacoes || []
                 };
             }));
@@ -389,19 +389,17 @@ export default function CadastroProdutos() {
 
             const isPrecisaFrete = dsTipoProduto !== 'digital_download' && dsTipoProduto !== 'Digital_Personalizado';
 
-            // 🌟 Array final padronizado com o nome do produto pai concatenado na variação
+            // 🌟 Array final padronizado com ID único e seguro para cada variação
             const variacoesArrayFinal = temVariaveisComPreco ? combos.map(c => {
                 const itemVar = novaTabelaPrecos[c.key] || {};
 
                 const v1Limpo = String(c.v1 || "").trim();
                 const v2Limpo = String(c.v2 || "").trim();
 
-                // ✨ Monta o nome completo da variação: Nome do Produto Pai + Modelo (v1) + Tamanho (v2 se houver)
                 let nomeVariacaoCalculado = nome.trim();
                 if (v1Limpo) nomeVariacaoCalculado += ` - ${v1Limpo}`;
                 if (v2Limpo) nomeVariacaoCalculado += ` / ${v2Limpo}`;
 
-                // ✨ Calcula o custo somando todos os insumos vinculados a esta variação específica
                 const insumosDestaVariacao = Array.isArray(itemVar.insumosComposicaoProduto) ? itemVar.insumosComposicaoProduto : [];
                 const custoInsumosCalculado = insumosDestaVariacao.reduce((acc: number, ins: any) => {
                     const custoU = Number(ins.vlCustoUnitarioInsumo || 0);
@@ -413,16 +411,19 @@ export default function CadastroProdutos() {
                     ? Number(custoInsumosCalculado.toFixed(4))
                     : converterParaNumeroBanco(itemVar.vlCustoUnitarioProduto ?? itemVar.vlCustoUnitario ?? itemVar.custo ?? custoUnitario);
 
-                // ✨ Captura rigorosamente o estoque digitado na variação da grade
                 const estoqueVarBruto = itemVar.nrEstoqueProduto ?? itemVar.nrEstoque ?? itemVar.estoque ?? 0;
                 const estoqueFinalItem = parseInt(estoqueVarBruto.toString().replace(/\D/g, ""), 10) || 0;
 
+                // Garante que o ID da variação seja preservado ou gerado caso não exista
+                const idVariacaoFinal = itemVar.idVariacao || `var_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
                 return {
+                    idVariacao: idVariacaoFinal, // 🌟 Mantém ou gera o ID da variação
                     dsNomeProduto: nomeVariacaoCalculado,
-                    dsModeloProduto: v1Limpo,
-                    nrTamanhoProduto: v2Limpo ? v2Limpo : null,
+                    dsNomeVar1Produto: v1Limpo,
+                    dsNomeVar2Produto: v2Limpo ? v2Limpo : null,
                     dsSkuProduto: itemVar.dsSkuProduto || itemVar.sku || itemVar.dsSku || "",
-                    dsEANGTINProduto: itemVar.dsEANGTINProduto || itemVar.ean || itemVar.codigoBarras || "", // ✨ EAN por variação
+                    dsEANGTINProduto: itemVar.dsEANGTINProduto || itemVar.dsGtinProduto || itemVar.ean || itemVar.codigoBarras || "",
                     vlPrecoProduto: converterParaNumeroBanco(itemVar.vlPrecoProduto ?? itemVar.vlPreco ?? itemVar.preco ?? precoBasico),
                     vlCustoUnitarioProduto: custoFinalItem,
                     nrEstoqueProduto: estoqueFinalItem,
@@ -435,7 +436,6 @@ export default function CadastroProdutos() {
                 };
             }) : [];
 
-            // ✨ Calcula o custo do produto base somando os insumos globais caso não tenha variação
             const custoInsumosGlobais = insumosComposicaoProduto.reduce((acc: number, ins: any) => {
                 const custoU = Number(ins.vlCustoUnitarioInsumo || 0);
                 const qtdC = Number(ins.nrQuantidadeConsumida || 0);
@@ -450,7 +450,7 @@ export default function CadastroProdutos() {
                 dsLojistaIdProduto: uid,
                 dsNomeProduto: nome,
                 dsSkuProduto: sku,
-                dsEANGTINProduto: ean, // ✨ Salva o código de barras do fabricante global
+                dsEANGTINProduto: ean,
                 dsDescricaoProduto: descricao,
                 dsCategoriaProduto: categoria,
                 dsSubcategoriaProduto: subcategoria,
@@ -467,7 +467,6 @@ export default function CadastroProdutos() {
                 pesosDiferentesPorVariacao,
                 isPrecisaFreteProduto: isPrecisaFrete,
 
-                // ✨ Campos exatos para salvamento do status dos checkboxes
                 isMovimentarEstoque: movimentarEstoque,
                 isMovimentarEstoqueComposicao: movimentarEstoqueComposicao,
 
@@ -546,7 +545,6 @@ export default function CadastroProdutos() {
                     isPrecisaFrete: deleteField(),
                     isTemVariacoes: deleteField()
                 });
-
             } else {
                 await setDoc(docRef, { ...dados, isDestaque: false, nrCreatedAt: Date.now() });
             }
@@ -582,7 +580,8 @@ export default function CadastroProdutos() {
         setEditId(p.id);
         setNome(p.dsNomeProduto || p.dsNome || p.nome || "");
         setSku(p.dsSkuProduto || p.dsSku || p.sku || "");
-        setEan(p.dsEANGTINProduto || p.ean || p.codigoBarras || ""); // ✨ Carrega o EAN salvo
+        setEan(p.dsEANGTINProduto || p.dsEANGTIN || p.ean || p.codigoBarras || "");
+
         setCategoria(p.dsCategoriaProduto || p.dsCategoria || p.categoria || "");
         setSubcategoria(p.dsSubcategoriaProduto || p.dsSubcategoria || p.subcategoria || "");
         setDescricao(p.dsDescricaoProduto || p.dsDescricao || p.descricao || "");
@@ -594,8 +593,8 @@ export default function CadastroProdutos() {
         setCustoUnitario(custoVal !== undefined && custoVal !== null && !isNaN(Number(custoVal)) ? Number(custoVal).toFixed(2).replace('.', ',') : "");
 
         const outrosCustosVal = p.vlOutrosCustosProduto ?? p.vlOutrosCustos ?? p.outrosCustos;
-        setOutrosCustos(outrosCustosVal !== undefined && outrosCustosVal !== null && !isNaN(Number(outrosCustosVal)) ? Number(outrosCustosVal).toFixed(2).replace('.', ',') : ""); // ✨ Carrega outros custos
-        
+        setOutrosCustos(outrosCustosVal !== undefined && outrosCustosVal !== null && !isNaN(Number(outrosCustosVal)) ? Number(outrosCustosVal).toFixed(2).replace('.', ',') : "");
+
         const estoqueVal = p.nrEstoqueProduto ?? p.nrEstoque ?? p.estoque;
         setEstoque(estoqueVal !== undefined && estoqueVal !== null ? String(estoqueVal) : "");
 
@@ -607,7 +606,6 @@ export default function CadastroProdutos() {
         const diasProdVal = p.nrDiasProducaoProduto ?? p.nrDiasProducao ?? p.diasProducao;
         setNrDiasProducao(diasProdVal !== undefined && diasProdVal !== null ? String(diasProdVal) : "");
 
-        // ✨ Carrega os status de movimentação de estoque corretamente
         setMovimentarEstoque(p.isMovimentarEstoque ?? p.movimentarEstoque ?? true);
         setMovimentarEstoqueComposicao(p.isMovimentarEstoqueComposicao ?? p.movimentarEstoqueComposicao ?? true);
 
@@ -645,25 +643,31 @@ export default function CadastroProdutos() {
             const tab: any = {};
 
             p.variacoes.forEach((v: any) => {
-                const v1Val = v.dsModeloProduto || v.dsModelo || v.v1 || "";
-                const v2Val = v.nrTamanhoProduto !== undefined && v.nrTamanhoProduto !== null ? String(v.nrTamanhoProduto) : (v.nrTamanho !== undefined && v.nrTamanho !== null ? String(v.nrTamanho) : (v.v2 || ""));
+                const v1Val = v.dsNomeVar1Produto || v.dsModeloProduto || v.dsModelo || v.v1 || "";
+                const v2Val = v.dsNomeVar2Produto !== undefined && v.dsNomeVar2Produto !== null ? String(v.dsNomeVar2Produto) : (v.nrTamanhoProduto !== undefined && v.nrTamanhoProduto !== null ? String(v.nrTamanhoProduto) : (v.nrTamanho !== undefined && v.nrTamanho !== null ? String(v.nrTamanho) : (v.v2 || "")));
                 const key = v2Val ? `${v1Val}___${v2Val}` : v1Val;
 
                 const vPreco = v.vlPrecoProduto ?? v.vlPreco ?? v.preco;
                 const vCusto = v.vlCustoUnitarioProduto ?? v.vlCustoUnitario ?? v.custo;
                 const vEstoque = v.nrEstoqueProduto ?? v.nrEstoque ?? v.estoque;
+                
+                // 🌟 Leitura corrigida para capturar o EAN e o ID único da variação corretamente
+                const vEanVar = v.dsEANGTINProduto ?? v.dsGtinProduto ?? v.ean ?? v.codigoBarras ?? "";
+                const vIdVar = v.idVariacao || `var_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
                 const vPeso = v.nrPesoProduto ?? v.nrPeso ?? v.peso;
                 const vComp = v.nrComprimentoProduto ?? v.nrComprimento ?? v.comprimento;
                 const vLarg = v.nrLarguraProduto ?? v.nrLargura ?? v.largura;
                 const vAlt = v.nrAlturaProduto ?? v.nrAltura ?? v.altura;
 
                 tab[key] = {
+                    idVariacao: vIdVar, // 🌟 Atribuído corretamente aqui
                     vlPrecoProduto: vPreco !== undefined && vPreco !== null && !isNaN(Number(vPreco)) ? Number(vPreco).toFixed(2).replace('.', ',') : "",
                     vlCustoUnitarioProduto: vCusto !== undefined && vCusto !== null && !isNaN(Number(vCusto)) ? Number(vCusto).toFixed(2).replace('.', ',') : "",
                     nrEstoqueProduto: vEstoque !== undefined && vEstoque !== null ? String(vEstoque) : "",
                     dsFotoProduto: v.dsFotoProduto || v.dsFoto || v.foto || "",
                     dsSkuProduto: v.dsSkuProduto || v.dsSku || v.sku || "",
-                    dsEANGTINProduto: v.dsEANGTINProduto || v.ean || v.codigoBarras || "", // ✨ Carrega EAN da variação
+                    dsEANGTINProduto: vEanVar, // 🌟 Atribuído corretamente aqui
                     nrPesoProduto: vPeso !== undefined && vPeso !== null && !isNaN(Number(vPeso)) ? Number(vPeso).toFixed(2).replace('.', ',') : "",
                     nrComprimentoProduto: vComp !== undefined && vComp !== null && !isNaN(Number(vComp)) ? Number(vComp).toFixed(2).replace('.', ',') : "",
                     nrLarguraProduto: vLarg !== undefined && vLarg !== null && !isNaN(Number(vLarg)) ? Number(vLarg).toFixed(2).replace('.', ',') : "",
@@ -673,9 +677,9 @@ export default function CadastroProdutos() {
             });
             setTabelaPrecos(tab);
 
-            const op1Unicas = Array.from(new Set(p.variacoes.map((v: any) => v.dsModeloProduto || v.dsModelo || v.v1).filter(Boolean))) as string[];
+            const op1Unicas = Array.from(new Set(p.variacoes.map((v: any) => v.dsNomeVar1Produto || v.dsModeloProduto || v.dsModelo || v.v1).filter(Boolean))) as string[];
             const op2Unicas = Array.from(new Set(p.variacoes.map((v: any) => {
-                const val = v.nrTamanhoProduto !== undefined && v.nrTamanhoProduto !== null ? String(v.nrTamanhoProduto) : (v.nrTamanho !== undefined && v.nrTamanho !== null ? String(v.nrTamanho) : v.v2);
+                const val = v.dsNomeVar2Produto !== undefined && v.dsNomeVar2Produto !== null ? String(v.dsNomeVar2Produto) : (v.nrTamanhoProduto !== undefined && v.nrTamanhoProduto !== null ? String(v.nrTamanhoProduto) : (v.nrTamanho !== undefined && v.nrTamanho !== null ? String(v.nrTamanho) : v.v2));
                 return val;
             }).filter((val: any) => val !== undefined && val !== null && String(val).trim() !== ""))) as string[];
 
@@ -699,7 +703,7 @@ export default function CadastroProdutos() {
             setNomeVar2, setTabelaPrecos, setOpcoesVar1, setOpcoesVar2,
             isMobile: false, setIsOpenRight: () => { }
         });
-        setEan(p.dsEANGTINProduto || p.ean || p.codigoBarras || "");
+        setEan(p.dsEANGTINProduto || p.dsEANGTIN || p.ean || p.codigoBarras || "");
         setDsTipoProduto(p.dsTipoProduto || "Fisico_Sem");
         setNrDiasProducao(p.nrDiasProducaoProduto ? String(p.nrDiasProducaoProduto) : (p.nrDiasProducao ? String(p.nrDiasProducao) : ""));
         setMovimentarEstoque(p.isMovimentarEstoque ?? p.movimentarEstoque ?? true);
@@ -710,9 +714,9 @@ export default function CadastroProdutos() {
     };
 
     const produtosFiltrados = produtos.filter(p => {
-        const nomeProd = p.dsNome || p.nome || "";
-        const catProd = p.dsCategoria || p.categoria || "";
-        const ativoProd = p.isAtivo ?? p.ativo ?? true;
+        const nomeProd = p.dsNomeProduto || p.dsNome || p.nome || "";
+        const catProd = p.dsCategoriaProduto || p.dsCategoria || p.categoria || "";
+        const ativoProd = p.isAtivoProduto ?? p.isAtivo ?? p.ativo ?? true;
 
         return nomeProd.toLowerCase().includes(busca.toLowerCase()) &&
             (filtroCategoria === "Todos" || catProd === filtroCategoria) &&
@@ -888,7 +892,7 @@ export default function CadastroProdutos() {
                     <FormularioProduto
                         nome={nome} setNome={setNome}
                         sku={sku} setSku={setSku}
-                        ean={ean} setEan={setEan} // ✨ CORRIGIDO: Passando a função setter corretamente
+                        ean={ean} setEan={setEan}
                         setIsModalSKUOpen={setIsModalSKUOpen}
                         categoria={categoria} setCategoria={setCategoria}
                         subcategoria={subcategoria} setSubcategoria={setSubcategoria}
@@ -926,6 +930,7 @@ export default function CadastroProdutos() {
                         setMovimentarEstoque={setMovimentarEstoque}
                         movimentarEstoqueComposicao={movimentarEstoqueComposicao}
                         setMovimentarEstoqueComposicao={setMovimentarEstoqueComposicao}
+                        tabelaPrecos={tabelaPrecos}
                     />
                 </div>
 

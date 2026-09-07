@@ -58,8 +58,8 @@ export default function ProdutosModalPdv({
             // 2. Se o produto tem variações, verifica se o código bate em alguma variação específica
             if (p.isTemVariacoesProduto && Array.isArray(p.variacoes)) {
               const varMatch = p.variacoes.find((v: any) => {
-                const eanVar = String(v.dsEANGTINProduto || "").trim().toLowerCase();
-                const skuVar = String(v.dsSkuProduto || "").trim().toLowerCase();
+                const eanVar = String(v.dsEANGTINProduto || v.ean || "").trim().toLowerCase();
+                const skuVar = String(v.dsSkuProduto || v.sku || "").trim().toLowerCase();
                 return (eanVar && eanVar === codigoBipado) || (skuVar && skuVar === codigoBipado);
               });
 
@@ -72,9 +72,7 @@ export default function ProdutosModalPdv({
           }
 
           if (produtoEncontrado) {
-            // Se encontrou uma variação específica pelo leitor, podemos passá-la ou tratá-la diretamente
             if (variacaoEncontrada) {
-              // Se sua função aceitar variação direta ou abrir o modal já com ela selecionada
               lidarComCliqueProduto(produtoEncontrado, variacaoEncontrada);
             } else {
               lidarComCliqueProduto(produtoEncontrado);
@@ -177,7 +175,12 @@ export default function ProdutosModalPdv({
                 <div
                   key={p.id}
                   onClick={() => {
-                    lidarComCliqueProduto(p);
+                    // ✨ Se o produto tem apenas 1 variação padrão ou nenhuma, podemos passar direto, senão abre o fluxo com o produto pai
+                    if (p.isTemVariacoesProduto && Array.isArray(p.variacoes) && p.variacoes.length === 1) {
+                      lidarComCliqueProduto(p, p.variacoes[0]);
+                    } else {
+                      lidarComCliqueProduto(p);
+                    }
                     onClose();
                   }}
                   style={{ border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "10px", cursor: "pointer", textAlign: "center", background: theme.bgApp, transition: "transform 0.1s, border-color 0.2s", display: "flex", flexDirection: "column", justifyContent: "space-between" }}

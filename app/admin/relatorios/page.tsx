@@ -7,7 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useTheme } from "@/context/ThemeContext";
 import { 
   FiBarChart2, FiDollarSign, FiShoppingCart, FiTrendingUp, 
-  FiCalendar, FiPieChart, FiPackage, FiPrinter, FiSearch 
+  FiCalendar, FiPieChart, FiPackage, FiPrinter, FiSearch, FiArrowUp, FiArrowDown 
 } from "react-icons/fi";
 
 export default function RelatoriosPage() {
@@ -15,9 +15,27 @@ export default function RelatoriosPage() {
   const [loading, setLoading] = useState(true);
   const [lojistaId, setLojistaId] = useState<string | null>(null);
   
-  // Mês atual padrão no formato YYYY_M (ex: 2026_8)
+  // Mês atual padrão no formato YYYY_M dinâmico (ex: 2026_9)
   const dataAtual = new Date();
   const [mesAno, setMesAno] = useState(`${dataAtual.getFullYear()}_${dataAtual.getMonth() + 1}`);
+
+  // Lista dinâmica de meses para o select (últimos 12 meses)
+  const listaMesesOpcoes = useMemo(() => {
+    const meses = [];
+    const d = new Date();
+    for (let i = 0; i < 12; i++) {
+      const ano = d.getFullYear();
+      const mes = d.getMonth() + 1;
+      const nomeMes = d.toLocaleString('pt-BR', { month: 'long' });
+      const nomeFormatado = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
+      meses.push({
+        valor: `${ano}_${mes}`,
+        label: `${nomeFormatado} / ${ano}`
+      });
+      d.setMonth(d.getMonth() - 1);
+    }
+    return meses;
+  }, []);
 
   const [stats, setStats] = useState<any>({
     faturamentoLiquido: 0,
@@ -35,6 +53,7 @@ export default function RelatoriosPage() {
   const [filtroOrigem, setFiltroOrigem] = useState("todos");
   const [filtroEntrega, setFiltroEntrega] = useState("todos");
   const [buscaPedido, setBuscaPedido] = useState("");
+  const [ordemLista, setOrdemLista] = useState<"recente" | "antigo">("recente"); // ✨ Novo estado de ordenação
 
   // 1. Identifica o lojista logado
   useEffect(() => {
@@ -113,13 +132,13 @@ export default function RelatoriosPage() {
     carregarDadosRelatorio();
   }, [lojistaId, mesAno]);
 
-  // Função auxiliar unificada para identificar corretamente a origem do pedido (PDV vs Site)
+  // Função auxiliar unificada para mapear corretamente a origem do pedido (PDV vs Site)
   const obterOrigemPedido = (p: any) => {
     const orig = String(
-      p.origemPedido || 
       p.dsOrigemPedido || 
-      p.origem || 
+      p.origemPedido || 
       p.dsOrigem || 
+      p.origem || 
       "site"
     ).trim().toLowerCase();
     
@@ -129,9 +148,9 @@ export default function RelatoriosPage() {
     return "site";
   };
 
-  // Pedidos filtrados dinamicamente na tabela
+  // Pedidos filtrados e ordenados dinamicamente na tabela
   const pedidosFiltradosTabela = useMemo(() => {
-    return todosPedidosMes.filter((p: any) => {
+    const filtrados = todosPedidosMes.filter((p: any) => {
       const origem = obterOrigemPedido(p);
       const formaEntrega = String(p.logistica?.dsFormaEntrega || p.formaEntrega || "").trim().toLowerCase();
       
@@ -160,7 +179,26 @@ export default function RelatoriosPage() {
 
       return true;
     });
-  }, [todosPedidosMes, filtroOrigem, filtroEntrega, buscaPedido]);
+
+    // ✨ Ordenação por data (Mais Recentes / Mais Antigos)
+    filtrados.sort((a: any, b: any) => {
+      let rawA = a.timestamp || a.data;
+      if (rawA && typeof rawA.toDate === "function") rawA = rawA.toDate();
+      const tempoA = new Date(rawA).getTime() || 0;
+
+      let rawB = b.timestamp || b.data;
+      if (rawB && typeof rawB.toDate === "function") rawB = rawB.toDate();
+      const tempoB = new Date(rawB).getTime() || 0;
+
+      if (ordemLista === "recente") {
+        return tempoB - tempoA; // Descrescente (Mais recente primeiro)
+      } else {
+        return tempoA - tempoB; // Crescente (Mais antigo primeiro)
+      }
+    });
+
+    return filtrados;
+  }, [todosPedidosMes, filtroOrigem, filtroEntrega, buscaPedido, ordemLista]);
 
   // Função para imprimir a listagem de pedidos
   const imprimirRelatorio = () => {
@@ -188,14 +226,9 @@ export default function RelatoriosPage() {
             onChange={(e) => setMesAno(e.target.value)}
             style={{ ...styles.selectMes, background: theme.bgCard, color: theme.textMain }}
           >
-            <option value="2026_8">Agosto / 2026</option>
-            <option value="2026_7">Julho / 2026</option>
-            <option value="2026_6">Junho / 2026</option>
-            <option value="2026_5">Maio / 2026</option>
-            <option value="2026_4">Abril / 2026</option>
-            <option value="2026_3">Março / 2026</option>
-            <option value="2026_2">Fevereiro / 2026</option>
-            <option value="2026_1">Janeiro / 2026</option>
+            {listaMesesOpcoes.map((m) => (
+              <option key={m.valor} value={m.valor}>{m.label}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -323,6 +356,16 @@ export default function RelatoriosPage() {
           </div>
 
           <div style={styles.selectsFiltroGroup}>
+            {/* ✨ Seletor de Ordenação */}
+            <select 
+              value={ordemLista} 
+              onChange={(e) => setOrdemLista(e.target.value as any)}
+              style={{ ...styles.selectFiltro, background: theme.inputBg, color: theme.textMain, border: `1px solid ${theme.border}` }}
+            >
+              <option value="recente">🕒 Mais Recentes Primeiro</option>
+              <option value="antigo">⏳ Mais Antigos Primeiro</option>
+            </select>
+
             <select 
               value={filtroOrigem} 
               onChange={(e) => setFiltroOrigem(e.target.value)}
@@ -365,10 +408,8 @@ export default function RelatoriosPage() {
               </thead>
               <tbody>
                 {pedidosFiltradosTabela.map((p: any) => {
-                  // Extração robusta do número do pedido considerando todas as variações da base
                   const num = p.numeroPedido || p.numero || p.nrPedido || p.nrNumeroPedido || p.id.slice(-6);
                   
-                  // Extração robusta do nome do cliente (suporta strings ou sub-objetos dsCliente/cliente)
                   const clienteObj = p.dsCliente || p.cliente || {};
                   const clienteNome = typeof clienteObj === 'object' 
                     ? (clienteObj.nmNomeCliente || clienteObj.nome || clienteObj.dsNomeCliente || "Cliente Sem Nome") 

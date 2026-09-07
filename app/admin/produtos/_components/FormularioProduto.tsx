@@ -12,6 +12,9 @@ import { useTheme } from "@/context/ThemeContext";
 // ✨ Importando o novo Modal de Cadastro de Insumos
 import ModalCadastroInsumos from "./ModalCadastroInsumos";
 
+// ✨ Importando o Modal de Geração de Código de Barras
+import ModalGeradorCodBarrasVariacoes from "@/app/admin/_components/ModalGeradorCodBarrasVariacoes";
+
 interface FormularioProdutoProps {
     nome: string;
     setNome: (v: string) => void;
@@ -32,8 +35,8 @@ interface FormularioProdutoProps {
     setPrecoBasico: (v: string) => void;
     custoUnitario: string;
     setCustoUnitario: (v: string) => void;
-    outrosCustos?: string; // ✨ Prop para outros custos
-    setOutrosCustos?: (v: string) => void; // ✨ Setter para outros custos
+    outrosCustos?: string; 
+    setOutrosCustos?: (v: string) => void; 
     estoque: string;
     setEstoque: (v: string) => void;
     estoqueMinimo?: string;
@@ -72,6 +75,7 @@ interface FormularioProdutoProps {
     setMovimentarEstoque?: (v: boolean) => void;
     movimentarEstoqueComposicao?: boolean;
     setMovimentarEstoqueComposicao?: (v: boolean) => void;
+    tabelaPrecos?: any; // 🌟 Adicionado para manter referência aos IDs das variações
 }
 
 export default function FormularioProduto({
@@ -86,8 +90,8 @@ export default function FormularioProduto({
     descricao, setShowDescModal,
     precoBasico, setPrecoBasico,
     custoUnitario, setCustoUnitario,
-    outrosCustos = "", // ✨ Recebendo corretamente do componente pai
-    setOutrosCustos = () => { }, // ✨ Recebendo setter corretamente do componente pai
+    outrosCustos = "", 
+    setOutrosCustos = () => { }, 
     estoque, setEstoque,
     estoqueMinimo = "", setEstoqueMinimo = () => { },
     temVariaveisComPreco,
@@ -115,16 +119,17 @@ export default function FormularioProduto({
     movimentarEstoque = true,
     setMovimentarEstoque = () => { },
     movimentarEstoqueComposicao = true,
-    setMovimentarEstoqueComposicao = () => { }
+    setMovimentarEstoqueComposicao = () => { },
+    tabelaPrecos = {}
 }: FormularioProdutoProps) {
 
     const { theme } = useTheme();
 
     const [indiceArrastado, setIndiceArrastado] = useState<number | null>(null);
     const [isModalInsumosOpen, setIsModalInsumosOpen] = useState(false);
+    const [isModalEanOpen, setIsModalEanOpen] = useState(false);
 
     const totalImagensCount = imagens.length + files.length;
-    const bloqueadoPorGradeDeInsumos = temVariaveisComPreco;
 
     const removerImagemUnificada = (indexGlobal: number) => {
         if (indexGlobal < imagens.length) {
@@ -519,8 +524,8 @@ export default function FormularioProduto({
                 insumosComposicaoProduto={insumosComposicaoProduto}
                 setInsumosComposicaoProduto={setInsumosComposicaoProduto}
                 setCustoUnitario={setCustoUnitario}
-                outrosCustos={outrosCustos}          // ✨ Repassando corretamente
-                setOutrosCustos={setOutrosCustos}    // ✨ Repassando corretamente
+                outrosCustos={outrosCustos}        
+                setOutrosCustos={setOutrosCustos}   
                 formatInput={formatInput}
             />
 
@@ -597,9 +602,11 @@ export default function FormularioProduto({
 
             <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
-            {/* 4. VALORES E ESTOQUE */}
+            {/* 4. VALORES E ESTOQUE (Desativado se temVariaveisComPreco for true) */}
             <div style={{ opacity: temVariaveisComPreco ? 0.6 : 1, marginBottom: '15px' }}>
-                <label style={{ ...styles.miniLabel, color: theme.textSec }}>Valores e Estoque</label>
+                <label style={{ ...styles.miniLabel, color: theme.textSec }}>
+                    Valores e Estoque {temVariaveisComPreco && "— Gerenciado na Grade de Variações"}
+                </label>
                 <div style={{ display: 'flex', gap: '5px' }}>
                     <input
                         disabled={temVariaveisComPreco}
@@ -630,9 +637,9 @@ export default function FormularioProduto({
 
             <hr style={{ border: '0', borderTop: `1px solid ${theme.border}`, margin: '5px 0' }} />
 
-            {/* 5. CONFIGURAÇÕES DE LOGÍSTICA E FRETE */}
+            {/* 5. CONFIGURAÇÕES DE LOGÍSTICA E FRETE (Desativa inputs globais de peso/medidas APENAS se pesosDiferentesPorVariacao estiver ativado) */}
             {precisaDeFrete ? (
-                <div style={{ opacity: temVariaveisComPreco && !pesosDiferentesPorVariacao ? 0.6 : 1 }}>
+                <div style={{ opacity: pesosDiferentesPorVariacao ? 0.6 : 1 }}>
                     <div style={{ background: theme.bgCard, border: `1px solid ${theme.border}`, padding: '10px 12px', borderRadius: '8px', marginBottom: '12px' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 'bold', color: theme.textMain, cursor: 'pointer' }}>
                             <input
@@ -651,7 +658,9 @@ export default function FormularioProduto({
                         </label>
                     </div>
 
-                    <h3 style={{ ...styles.sideTitle, color: theme.textMain }}>🚚 Medidas para Cálculo de Frete (Melhor Envio)</h3>
+                    <h3 style={{ ...styles.sideTitle, color: theme.textMain }}>
+                        🚚 Medidas para Cálculo de Frete {pesosDiferentesPorVariacao && "— Gerenciado na Grade"}
+                    </h3>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', marginBottom: '10px', opacity: pesosDiferentesPorVariacao ? 0.4 : 1, pointerEvents: pesosDiferentesPorVariacao ? 'none' : 'auto' }}>
                         <input
@@ -770,38 +779,77 @@ export default function FormularioProduto({
                             </span>
                         )}
                     </div>
-                    <input
-                        disabled={temVariaveisComPreco}
-                        id="input-ean-gtin"
-                        style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border }}
-                        value={temVariaveisComPreco ? "Gerenciado na Grade de Variações" : ean}
-                        onChange={e => {
-                            const apenasNumeros = e.target.value.replace(/\D/g, "").slice(0, 14);
-                            if (setEan) setEan(apenasNumeros);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                const valorAtual = e.currentTarget.value.trim();
-                                if (!valorAtual) return;
+                    
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                        <input
+                            disabled={temVariaveisComPreco}
+                            id="input-ean-gtin"
+                            style={{ ...styles.input, marginBottom: 0, background: theme.inputBg, color: theme.textMain, borderColor: theme.border, flex: 1 }}
+                            value={temVariaveisComPreco ? "Gerenciado na Grade de Variações" : ean}
+                            onChange={e => {
+                                const apenasNumeros = e.target.value.replace(/\D/g, "").slice(0, 14);
+                                if (setEan) setEan(apenasNumeros);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const valorAtual = e.currentTarget.value.trim();
+                                    if (!valorAtual) return;
 
-                                const tamanhosValidos = [8, 12, 13, 14];
-                                if (!tamanhosValidos.includes(valorAtual.length)) {
-                                    const confirmar = window.confirm(`⚠️ O código digitado/bipado "${valorAtual}" possui ${valorAtual.length} dígitos (padrão comum é 8, 12, 13 ou 14). Deseja prosseguir mesmo assim?`);
-                                    if (!confirmar) return;
-                                }
+                                    const tamanhosValidos = [8, 12, 13, 14];
+                                    if (!tamanhosValidos.includes(valorAtual.length)) {
+                                        const confirmar = window.confirm(`⚠️ O código digitado/bipado "${valorAtual}" possui ${valorAtual.length} dígitos (padrão comum é 8, 12, 13 ou 14). Deseja prosseguir mesmo assim?`);
+                                        if (!confirmar) return;
+                                    }
 
-                                const inputNome = document.getElementById('input-nome-produto');
-                                if (inputNome) {
-                                    (inputNome as HTMLInputElement).focus();
-                                    (inputNome as HTMLInputElement).select();
+                                    const inputNome = document.getElementById('input-nome-produto');
+                                    if (inputNome) {
+                                        (inputNome as HTMLInputElement).focus();
+                                        (inputNome as HTMLInputElement).select();
+                                    }
                                 }
-                            }
-                        }}
-                        placeholder={temVariaveisComPreco ? "Gerenciado na Grade de Variações" : "Digite ou bipe o código..."}
-                    />
+                            }}
+                            placeholder={temVariaveisComPreco ? "Gerenciado na Grade de Variações" : "Digite ou bipe o código..."}
+                        />
+
+                        <button
+                            type="button"
+                            disabled={temVariaveisComPreco}
+                            onClick={() => setIsModalEanOpen(true)}
+                            style={{
+                                padding: '0 15px',
+                                background: temVariaveisComPreco ? theme.border : '#10b981',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: temVariaveisComPreco ? 'not-allowed' : 'pointer',
+                                fontWeight: 'bold',
+                                fontSize: '12px'
+                            }}
+                            title="Gerar Código de Barras automático"
+                        >
+                            Gen
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* Modal para gerar o EAN base */}
+            {isModalEanOpen && (
+                <ModalGeradorCodBarrasVariacoes
+                    onClose={() => setIsModalEanOpen(false)}
+                    onSave={(prefixoBase: string) => {
+                        const timestamp = Date.now().toString().slice(-8);
+                        const rand = Math.floor(100 + Math.random() * 900).toString();
+                        const eanGerado = (prefixoBase || "2") + timestamp + rand;
+                        
+                        if (setEan) {
+                            setEan(eanGerado.slice(0, 13));
+                        }
+                        setIsModalEanOpen(false);
+                    }}
+                />
+            )}
 
         </div>
     );

@@ -33,7 +33,7 @@ export const executarFluxoPedido = async ({
   dsPrazoRestante = "À vista",
   dsOperadorCaixa = "Balcão",
   embalagemDoCheckout = null,
-  embalagemRecomendada = null, // 🌟 Parquet capturado diretamente da API de frete
+  embalagemRecomendada = null,
 }: any) => {
   try {
     // 🛡️ BLINDAGEM FINANCEIRA: Garantia de precisão matemática antes de salvar
@@ -131,20 +131,18 @@ export const executarFluxoPedido = async ({
       dsFormaEntregaPadrao = "transportadora";
     }
 
-    // 📦 IDENTIFICAÇÃO ANINHADA E BLINDADA DA EMBALAGEM E SEUS INSUMOS
+    // 📦 IDENTIFICAÇÃO ANINHADA E BLINDADA DA EMBALAGEM E SEUS Insumos
     const fonteEmbalagem = embalagemRecomendada || embalagemDoCheckout || {};
     
     const recRaw = fonteEmbalagem?.recomendada || fonteEmbalagem;
     const escRaw = fonteEmbalagem?.escolhida || fonteEmbalagem;
 
-    // Extração segura dos insumos da embalagem recomendada
     const insumosEmbalagemRecomendada = Array.isArray(recRaw?.insumosComposicaoEmbalagem)
       ? recRaw.insumosComposicaoEmbalagem
       : Array.isArray(recRaw?.itensComposicao)
       ? recRaw.itensComposicao
       : [];
 
-    // Extração segura dos insumos da embalagem escolhida (se houver)
     const insumosEmbalagemEscolhida = Array.isArray(escRaw?.insumosComposicaoEmbalagem)
       ? escRaw.insumosComposicaoEmbalagem
       : Array.isArray(escRaw?.itensComposicao)
@@ -161,7 +159,6 @@ export const executarFluxoPedido = async ({
         comprimento: Number(recRaw?.comprimento ?? 32),
         largura: Number(recRaw?.largura ?? 22),
         pesoEmbarque: Number(recRaw?.pesoEmbarque ?? 0),
-        // 🌟 Salva a lista completa dos 6 insumos no pedido
         insumosComposicaoEmbalagem: insumosEmbalagemRecomendada,
       },
       escolhida: {
@@ -248,6 +245,7 @@ export const executarFluxoPedido = async ({
 
       return {
         idProduto: item.id || item.idProduto || "",
+        idVariacao: item.idVariacao || null, // ✨ Mapeando o ID único da variação corretamente
         dsNomeProduto: nomeProdutoFinal,
         nrQuantidadeProduto: qtdFinal,
         vlPrecoProduto: precoFinal,
@@ -255,6 +253,13 @@ export const executarFluxoPedido = async ({
           ? 0
           : Number(custoExtraido.toFixed(2)),
         dsVariacaoProduto: variacaoFinal,
+        
+        // ✨ Capturando os campos padronizados das duas variações (v1 e v2)
+        dsNomeVar1Produto: item.dsNomeVar1Produto || item.nomeVar1 || null,
+        v1: item.v1 || null,
+        dsNomeVar2Produto: item.dsNomeVar2Produto || item.nomeVar2 || null,
+        v2: item.v2 || null,
+
         isPrecisaFreteProduto:
           item.isPrecisaFreteProduto ?? item.precisaFrete ?? true,
 
@@ -273,7 +278,12 @@ export const executarFluxoPedido = async ({
         nrDiasProducaoProduto: Number(
           item.nrDiasProducaoProduto || item.nrDiasProducao || 0,
         ),
-        dsTipoProduto: String(item.dsTipoProduto || "Fisico_Sem"),
+        dsTipoProduto: String(
+          item.dsTipoProduto || 
+          item.tipoProduto || 
+          item.tipo || 
+          "Fisico_Padrao"
+        ),
         nrPesoProduto: Number(item.nrPesoProduto || item.weight || 0.3),
         nrAlturaProduto: Number(item.nrAlturaProduto || item.height || 0),
         nrLarguraProduto: Number(item.nrLarguraProduto || item.width || 0),
@@ -372,8 +382,8 @@ export const executarFluxoPedido = async ({
               logistica?.dsTransportadoraId ||
               null
             : dsFormaEntregaPadrao === "entrega_local"
-              ? "entrega_local"
-              : null,
+            ? "entrega_local"
+            : null,
       },
 
       itens: itensFormatados,

@@ -252,9 +252,15 @@ export default function PaginaPDV() {
     }
   };
 
-  const lidarComCliqueProduto = (produto: any) => {
+  const lidarComCliqueProduto = (produto: any, variacaoEspecifica?: any) => {
     setDadosPersonalizadosModal({});
     const temReqs = Array.isArray(produto.requisitos) && produto.requisitos.length > 0;
+
+    // Se veio uma variação específica direto (ex: via leitor de código de barras ou atalho)
+    if (variacaoEspecifica) {
+      adicionarAoCarrinhoDireto(produto, variacaoEspecifica);
+      return;
+    }
 
     if ((produto.temVariacoes && produto.variacoes && produto.variacoes.length > 0) || temReqs) {
       if (produto.temVariacoes && produto.variacoes && produto.variacoes.length > 0) {
@@ -285,19 +291,19 @@ export default function PaginaPDV() {
   };
 
   const adicionarAoCarrinhoDireto = (produto: any, variacao: any | null) => {
-    const valorPrecoVar = variacao ? (variacao.vlPrecoProduto ?? produto.preco) : produto.preco;
+    const valorPrecoVar = variacao ? (variacao.vlPrecoProduto ?? variacao.preco ?? produto.preco) : produto.preco;
     const precoVenda = typeof valorPrecoVar === 'string' ? Number(valorPrecoVar.replace(',', '.')) : Number(valorPrecoVar || 0);
 
-    const valorCustoVar = variacao ? (variacao.vlCustoUnitarioProduto ?? 0) : (produto.vlCustoUnitarioProduto ?? 0);
+    const valorCustoVar = variacao ? (variacao.vlCustoUnitarioProduto ?? variacao.custo ?? 0) : (produto.vlCustoUnitarioProduto ?? 0);
     const custoVenda = typeof valorCustoVar === 'string' ? Number(valorCustoVar.replace(',', '.')) : Number(valorCustoVar || 0);
 
-    const nomeVar = variacao ? (variacao.dsNomeProduto || variacao.dsModeloProduto || "") : "";
+    const nomeVar = variacao ? (variacao.dsVariacaoProduto || variacao.dsNomeProduto || variacao.dsModeloProduto || "") : "";
 
     const cartItemId = `${produto.id}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     
     let variacaoLimpa = nomeVar;
 
-    const nomeBase = produto.dsNomeProduto || "Produto sem nome";
+    const nomeBase = produto.dsNomeProduto || produto.nome || "Produto sem nome";
     const tipoProd = String(produto.dsTipoProduto || "").toLowerCase();
     const isDigitalItem = tipoProd.includes('digital');
 
@@ -310,19 +316,33 @@ export default function PaginaPDV() {
         ...variacao,
         cartItemId,
         id: produto.id,
+        idProduto: produto.id,
+        idVariacao: variacao?.idVariacao || null,
         nome: nomeBase,
         dsNomeProduto: nomeBase,
         preco: precoVenda,
+        vlPrecoProduto: precoVenda,
         custo: custoVenda,
+        vlCustoUnitarioProduto: custoVenda,
         quantidade: 1,
         qty: 1,
         foto: variacao?.dsFotoProduto || produto.capa,
         personalizacao: { ...dadosPersonalizadosModal },
         requisitos: produto.requisitos || [],
         variacaoStr: variacaoLimpa || "Padrão", 
-        variacao: variacaoLimpa,
-        dsTipoProduto: produto.dsTipoProduto || "",
-        precisaFrete: isDigitalItem ? false : true
+        dsVariacaoProduto: variacaoLimpa,
+        
+        // ✨ Nomes padronizados das variações (v1 e v2)
+        dsNomeVar1Produto: produto.dsNomeVar1Produto || null,
+        v1: variacao?.v1 || variacao?.dsValorVar1 || null,
+        dsNomeVar2Produto: produto.dsNomeVar2Produto || null,
+        v2: variacao?.v2 || variacao?.dsValorVar2 || null,
+
+        dsTipoProduto: produto.dsTipoProduto || "Fisico_Padrao",
+        isPrecisaFreteProduto: isDigitalItem ? false : true,
+        insumosComposicaoProduto: variacao?.insumosComposicaoProduto || produto.insumosComposicaoProduto || [],
+        movimentarEstoque: true,
+        movimentarEstoqueComposicao: true
       }
     ]);
 
@@ -387,17 +407,26 @@ export default function PaginaPDV() {
         return {
           ...item,
           idProduto: item.id || item.idProduto,
-          nome: nomeLimpo,
+          idVariacao: item.idVariacao || null,
+          dsNameProduto: nomeLimpo,
           dsNomeProduto: nomeLimpo,
           qty: Number(item.quantidade || item.qty || 1),
-          quantidade: Number(item.quantidade || item.qty || 1),
+          nrQuantidadeProduto: Number(item.quantidade || item.qty || 1),
           price: Number(Number(item.preco || 0).toFixed(2)),
-          preco: Number(Number(item.preco || 0).toFixed(2)),
+          vlPrecoProduto: Number(Number(item.preco || 0).toFixed(2)),
           custoUnitario: Number(Number(item.custo || item.custoUnitario || 0).toFixed(2)),
-          vlCustoUnitario: Number(Number(item.custo || item.custoUnitario || 0).toFixed(2)),
-          variacao: item.variacao || "",
-          dsTipoProduto: item.dsTipoProduto || "",
-          precisaFrete: isDigital ? false : (tipoEntrega === "entrega_local")
+          vlCustoUnitarioProduto: Number(Number(item.custo || item.custoUnitario || 0).toFixed(2)),
+          variacao: item.dsVariacaoProduto || item.variacao || "",
+          dsVariacaoProduto: item.dsVariacaoProduto || item.variacao || "",
+          dsNomeVar1Produto: item.dsNomeVar1Produto || null,
+          v1: item.v1 || null,
+          dsNomeVar2Produto: item.dsNomeVar2Produto || null,
+          v2: item.v2 || null,
+          dsTipoProduto: item.dsTipoProduto || "Fisico_Padrao",
+          isPrecisaFreteProduto: isDigital ? false : (tipoEntrega === "entrega_local"),
+          insumosComposicaoProduto: item.insumosComposicaoProduto || [],
+          movimentarEstoque: true,
+          movimentarEstoqueComposicao: true
         };
       });
 
@@ -686,8 +715,8 @@ export default function PaginaPDV() {
         categoriaSelecionada={categoriaSelecionada}
         setCategoriaSelecionada={setCategoriaSelecionada}
         categorias={categorias}
-        lidarComCliqueProduto={(p: any) => {
-          lidarComCliqueProduto(p);
+        lidarComCliqueProduto={(p: any, variacao?: any) => {
+          lidarComCliqueProduto(p, variacao);
         }}
         formatarMoeda={formatarMoeda}
         theme={theme}
@@ -778,8 +807,8 @@ export default function PaginaPDV() {
                 <label style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain, display: "block", marginBottom: "6px" }}>Selecione a Variação:</label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
                   {tamanhosDisponiveis.map((v, idx) => {
-                    const nomeVarItem = v.dsNomeProduto || v.dsModeloProduto || "";
-                    const precoVar = v.vlPrecoProduto ?? produtoSelecionado.preco;
+                    const nomeVarItem = v.dsVariacaoProduto || v.dsNomeProduto || v.dsModeloProduto || "";
+                    const precoVar = v.vlPrecoProduto ?? v.preco ?? produtoSelecionado.preco;
                     return (
                       <div
                         key={idx}
@@ -795,7 +824,7 @@ export default function PaginaPDV() {
                       >
                         <div style={{ fontSize: "12px", fontWeight: "bold", color: theme.textMain }}>{nomeVarItem}</div>
                         <div style={{ fontSize: "10px", color: theme.primary, fontWeight: "bold" }}>{formatarMoeda(precoVar ? Number(precoVar.toString().replace(',', '.')) : produtoSelecionado.preco)}</div>
-                        <div style={{ fontSize: "9px", color: theme.textSec }}>Est: {v.nrEstoqueProduto ?? 0}</div>
+                        <div style={{ fontSize: "9px", color: theme.textSec }}>Est: {v.nrEstoqueProduto ?? v.estoque ?? 0}</div>
                       </div>
                     );
                   })}
@@ -821,11 +850,11 @@ export default function PaginaPDV() {
                 Confirmar
               </button>
             </div>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
-    <style jsx global>{`
+      <style jsx global>{`
         ::-webkit-scrollbar {
           width: 6px;
           height: 6px;

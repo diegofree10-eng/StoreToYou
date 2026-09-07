@@ -8,6 +8,7 @@ import { storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
 import ImageCropperModal from "@/utils/ImageCropperModalProduto";
 import ModalGeradorSkuVariacoes from "@/app/admin/_components/ModalGeradorSkuVariaçoes";
+import ModalGeradorCodBarrasVariacoes from "./ModalGeradorCodBarrasVariacoes";
 import ModalCadastroInsumos from "@/app/admin/produtos/_components/ModalCadastroInsumos";
 import { formatarPeso, formatarMedida } from "@/utils/formatters";
 
@@ -58,6 +59,17 @@ const gerarSufixoInteligente = (texto: string) => {
   }
 };
 
+// 🌟 Função Ultra Segura para Gerar ID Único e Irrepetível para a Variação
+const gerarIdVariacaoUnico = () => {
+  const randomPart = Math.random().toString(36).substring(2, 10);
+  const timePart = Date.now().toString(36);
+  const cryptoPart = typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID 
+    ? window.crypto.randomUUID().split('-')[0] 
+    : Math.floor(Math.random() * 1000000).toString(36);
+  
+  return `var_${timePart}_${cryptoPart}_${randomPart}`;
+};
+
 interface VariacoesModalProps {
   showVarModal: boolean;
   setShowVarModal: (show: boolean) => void;
@@ -98,6 +110,7 @@ export default function VariacoesModal({
   const [showVar2, setShowVar2] = useState(nomeVar2 !== "" || opcoesVar2.length > 0);
 
   const [showModalGeradorSkuVar, setShowModalGeradorSkuVar] = useState(false);
+  const [showModalCodBarrasVar, setShowModalCodBarrasVar] = useState(false);
   const [arquivoParaCortar, setArquivoParaCortar] = useState<File | null>(null);
   const [combsParaAtualizar, setCombsParaAtualizar] = useState<any[]>([]);
 
@@ -112,14 +125,14 @@ export default function VariacoesModal({
     return () => window.removeEventListener("resize", checkScreen);
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
     if (showVarModal) {
       const tabelaFormatada: any = {};
       if (tabelaPrecos) {
         if (Array.isArray(tabelaPrecos)) {
           tabelaPrecos.forEach((item: any) => {
-            const v1 = item.dsModeloProduto || item.dsModelo || item.v1 || "";
-            const v2Raw = item.nrTamanhoProduto ?? item.nrTamanho ?? item.v2;
+            const v1 = item.dsNomeVar1Produto || item.dsNomeVar1 || item.dsModeloProduto || item.dsModelo || item.v1 || "";
+            const v2Raw = item.dsNomeVar2Produto ?? item.dsNomeVar2 ?? item.nrTamanhoProduto ?? item.nrTamanho ?? item.v2;
             const v2 = v2Raw !== null && v2Raw !== undefined ? String(v2Raw) : "";
             const key = v2 ? `${v1}___${v2}` : v1;
 
@@ -127,14 +140,16 @@ export default function VariacoesModal({
             const custoItem = item.vlCustoUnitarioProduto ?? item.vlCustoUnitario ?? item.custo ?? 0;
             const estoqueItem = item.nrEstoqueProduto ?? item.nrEstoque ?? item.estoque ?? "";
             const skuItem = item.dsSkuProduto ?? item.dsSku ?? item.sku ?? "";
-            const gtinItem = item.dsGtinProduto ?? item.dsGtin ?? item.gtin ?? item.cdBarra ?? "";
+            
+            // 🌟 Captura o EAN independentemente de qual propriedade o banco/página enviou
+            const gtinItem = item.dsEANGTINProduto ?? item.dsEANGTIN ?? item.dsGtinProduto ?? item.dsGtin ?? item.gtin ?? item.ean ?? item.codigoBarras ?? item.cdBarra ?? "";
+            
             const fotoItem = item.dsFotoProduto ?? item.dsFoto ?? item.foto ?? "";
             const pesoItem = item.nrPesoProduto ?? item.nrPeso ?? item.peso ?? "";
             const compItem = item.nrComprimentoProduto ?? item.nrComprimento ?? item.comprimento ?? "";
             const largItem = item.nrLarguraProduto ?? item.nrLargura ?? item.largura ?? "";
             const altItem = item.nrAlturaProduto ?? item.nrAltura ?? item.altura ?? "";
 
-            // 🌟 Padronizado para insumosComposicaoProduto
             const insumosVar = item.insumosComposicaoProduto || item.insumosComposicao || [];
             const outrosCustosVar = item.vlOutrosCustosProduto !== undefined && item.vlOutrosCustosProduto !== null
               ? converterDoPadraoParaCaixa(item.vlOutrosCustosProduto)
@@ -142,10 +157,11 @@ export default function VariacoesModal({
 
             tabelaFormatada[key] = {
               ...item,
+              idVariacao: item.idVariacao && item.idVariacao.trim() !== "" ? item.idVariacao : gerarIdVariacaoUnico(),
               v1: v1,
               v2: v2,
               dsSkuProduto: skuItem,
-              dsGtinProduto: gtinItem,
+              dsGtinProduto: gtinItem, // Salva na chave padrão que o input do modal lê
               vlPrecoProduto: converterDoPadraoParaCaixa(precoItem),
               vlCustoUnitarioProduto: converterDoPadraoParaCaixa(custoItem),
               nrEstoqueProduto: estoqueItem !== null && estoqueItem !== undefined && estoqueItem !== "" ? String(estoqueItem) : "",
@@ -154,7 +170,7 @@ export default function VariacoesModal({
               nrComprimentoProduto: compItem !== null && compItem !== undefined ? String(compItem) : "",
               nrLarguraProduto: largItem !== null && largItem !== undefined ? String(largItem) : "",
               nrAlturaProduto: altItem !== null && altItem !== undefined ? String(altItem) : "",
-              insumosComposicaoProduto: insumosVar, // 🌟 Chave padronizada
+              insumosComposicaoProduto: insumosVar,
               vlOutrosCustosProduto: outrosCustosVar
             };
           });
@@ -167,8 +183,8 @@ export default function VariacoesModal({
             const fallbackV1 = partes[0] || "";
             const fallbackV2 = partes[1] || "";
 
-            const v1 = item.dsModeloProduto || item.dsModelo || item.v1 || fallbackV1;
-            const v2Raw = item.nrTamanhoProduto ?? item.nrTamanho ?? item.v2;
+            const v1 = item.dsNomeVar1Produto || item.dsNomeVar1 || item.dsModeloProduto || item.dsModelo || item.v1 || fallbackV1;
+            const v2Raw = item.dsNomeVar2Produto ?? item.dsNomeVar2 ?? item.nrTamanhoProduto ?? item.nrTamanho ?? item.v2;
             const v2 = v2Raw !== null && v2Raw !== undefined && String(v2Raw).trim() !== "" ? String(v2Raw) : fallbackV2;
             const keyReal = v2 ? `${v1}___${v2}` : v1;
 
@@ -176,14 +192,16 @@ export default function VariacoesModal({
             const custoItem = item.vlCustoUnitarioProduto ?? item.vlCustoUnitario ?? item.custo ?? 0;
             const estoqueItem = item.nrEstoqueProduto ?? item.nrEstoque ?? item.estoque ?? "";
             const skuItem = item.dsSkuProduto ?? item.dsSku ?? item.sku ?? "";
-            const gtinItem = item.dsGtinProduto ?? item.dsGtin ?? item.gtin ?? item.cdBarra ?? "";
+            
+            // 🌟 Captura o EAN independentemente de qual propriedade o banco/página enviou
+            const gtinItem = item.dsEANGTINProduto ?? item.dsEANGTIN ?? item.dsGtinProduto ?? item.dsGtin ?? item.gtin ?? item.ean ?? item.codigoBarras ?? item.cdBarra ?? "";
+            
             const fotoItem = item.dsFotoProduto ?? item.dsFoto ?? item.foto ?? "";
             const pesoItem = item.nrPesoProduto ?? item.nrPeso ?? item.peso ?? "";
             const compItem = item.nrComprimentoProduto ?? item.nrComprimento ?? item.comprimento ?? "";
             const largItem = item.nrLarguraProduto ?? item.nrLargura ?? item.largura ?? "";
             const altItem = item.nrAlturaProduto ?? item.nrAltura ?? item.altura ?? "";
 
-            // 🌟 Padronizado para insumosComposicaoProduto
             const insumosVar = item.insumosComposicaoProduto || item.insumosComposicao || [];
             const outrosCustosVar = item.vlOutrosCustosProduto !== undefined && item.vlOutrosCustosProduto !== null
               ? converterDoPadraoParaCaixa(item.vlOutrosCustosProduto)
@@ -191,10 +209,11 @@ export default function VariacoesModal({
 
             tabelaFormatada[keyReal] = {
               ...item,
+              idVariacao: item.idVariacao && item.idVariacao.trim() !== "" ? item.idVariacao : gerarIdVariacaoUnico(),
               v1: v1,
               v2: v2,
               dsSkuProduto: skuItem,
-              dsGtinProduto: gtinItem,
+              dsGtinProduto: gtinItem, // Salva na chave padrão que o input do modal lê
               vlPrecoProduto: converterDoPadraoParaCaixa(precoItem),
               vlCustoUnitarioProduto: converterDoPadraoParaCaixa(custoItem),
               nrEstoqueProduto: estoqueItem !== null && estoqueItem !== undefined && estoqueItem !== "" ? String(estoqueItem) : "",
@@ -203,7 +222,7 @@ export default function VariacoesModal({
               nrComprimentoProduto: compItem !== null && compItem !== undefined && String(compItem).trim() !== "" ? String(compItem) : "",
               nrLarguraProduto: largItem !== null && largItem !== undefined && String(largItem).trim() !== "" ? String(largItem) : "",
               nrAlturaProduto: altItem !== null && altItem !== undefined && String(altItem).trim() !== "" ? String(altItem) : "",
-              insumosComposicaoProduto: insumosVar, // 🌟 Chave padronizada
+              insumosComposicaoProduto: insumosVar,
               vlOutrosCustosProduto: outrosCustosVar
             };
           });
@@ -241,11 +260,19 @@ export default function VariacoesModal({
 
     combinacoesValidas.forEach((c) => {
       const itemDraft = draftTabela[c.key] || {};
+      const nomeFormatadoVar = c.v2 ? `${c.v1} / ${c.v2}` : c.v1;
+
+      // 🌟 Garante que cada combinação tenha um ID Único Irrepetível
+      const idFinalVariacao = itemDraft.idVariacao && itemDraft.idVariacao.trim() !== "" 
+        ? itemDraft.idVariacao 
+        : gerarIdVariacaoUnico();
 
       novaTabelaPadrao[c.key] = {
         ...itemDraft,
-        dsModeloProduto: c.v1,
-        nrTamanhoProduto: c.v2 || null,
+        idVariacao: idFinalVariacao,
+        dsNomeVar1Produto: c.v1,
+        dsNomeVar2Produto: c.v2 || null,
+        dsNomeProduto: nomeFormatadoVar,
         dsSkuProduto: itemDraft.dsSkuProduto || itemDraft.dsSku || itemDraft.sku || "",
         dsGtinProduto: itemDraft.dsGtinProduto || itemDraft.dsGtin || itemDraft.gtin || itemDraft.cdBarra || "",
         vlPrecoProduto: itemDraft.vlPrecoProduto || itemDraft.vlPreco || itemDraft.preco || "",
@@ -256,7 +283,7 @@ export default function VariacoesModal({
         nrComprimentoProduto: itemDraft.nrComprimentoProduto || itemDraft.nrComprimento || itemDraft.comprimento || "",
         nrLarguraProduto: itemDraft.nrLarguraProduto || itemDraft.nrLargura || itemDraft.largura || "",
         nrAlturaProduto: itemDraft.nrAlturaProduto || itemDraft.nrAltura || itemDraft.altura || "",
-        insumosComposicaoProduto: itemDraft.insumosComposicaoProduto || [], // 🌟 Salvo com a chave exata solicitada
+        insumosComposicaoProduto: itemDraft.insumosComposicaoProduto || [],
         vlOutrosCustosProduto: itemDraft.vlOutrosCustosProduto || itemDraft.vlOutrosCustos || itemDraft.outrosCustos || ""
       };
     });
@@ -286,13 +313,22 @@ export default function VariacoesModal({
           <h3 style={{ ...shopeeStyles.title, color: theme.textMain }}>Grade de Variações, GTIN/EAN e Custos</h3>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {temVariaçõesVisiveis && (
-              <button
-                type="button"
-                onClick={() => setShowModalGeradorSkuVar(true)}
-                style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
-              >
-                ⚡ Gerar SKUs
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowModalGeradorSkuVar(true)}
+                  style={{ backgroundColor: theme.primary, color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                >
+                  ⚡ Gerar SKUs
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowModalCodBarrasVar(true)}
+                  style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                >
+                  📊 Gerar EANs
+                </button>
+              </div>
             )}
             <button onClick={() => setShowVarModal(false)} style={{ ...shopeeStyles.closeBtn, color: theme.textMain }}>✕</button>
           </div>
@@ -452,7 +488,7 @@ export default function VariacoesModal({
                     const valorLargura = draftTabela[c.key]?.nrLarguraProduto || "";
                     const valorAltura = draftTabela[c.key]?.nrAlturaProduto || "";
 
-                    const insumosItem = draftTabela[c.key]?.insumosComposicaoProduto || []; // 🌟 Lendo com a chave correta
+                    const insumosItem = draftTabela[c.key]?.insumosComposicaoProduto || [];
                     const custoInsumosTot = insumosItem.reduce((acc: number, item: any) => acc + (Number(item.vlCustoUnitarioInsumo || 0) * Number(item.nrQuantidadeConsumida || 0)), 0);
                     const outrosCustosItem = parseFloat(String(draftTabela[c.key]?.vlOutrosCustosProduto || "0").replace(/\./g, "").replace(",", ".")) || 0;
                     const custoCalculadoTotal = custoInsumosTot + outrosCustosItem;
@@ -548,7 +584,7 @@ export default function VariacoesModal({
                             </div>
                           </div>
 
-                          {/* ✨ BOTÃO DE GERENCIAR INSUMOS DA VARIAÇÃO (MOBILE) */}
+                          {/* BOTÃO DE GERENCIAR INSUMOS DA VARIAÇÃO (MOBILE) */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: theme.inputBg, padding: '8px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textMain }}>Insumos da Variação</span>
@@ -652,7 +688,7 @@ export default function VariacoesModal({
                       const valorLargura = draftTabela[c.key]?.nrLarguraProduto || "";
                       const valorAltura = draftTabela[c.key]?.nrAlturaProduto || "";
 
-                      const insumosItem = draftTabela[c.key]?.insumosComposicaoProduto || []; // 🌟 Lendo com a chave correta
+                      const insumosItem = draftTabela[c.key]?.insumosComposicaoProduto || [];
                       const custoInsumosTot = insumosItem.reduce((acc: number, item: any) => acc + (Number(item.vlCustoUnitarioInsumo || 0) * Number(item.nrQuantidadeConsumida || 0)), 0);
                       const outrosCustosItem = parseFloat(String(draftTabela[c.key]?.vlOutrosCustosProduto || "0").replace(/\./g, "").replace(",", ".")) || 0;
                       const custoCalculadoTotal = custoInsumosTot + outrosCustosItem;
@@ -745,7 +781,7 @@ export default function VariacoesModal({
                             />
                           </td>
 
-                          {/* ✨ BOTÃO DE GERENCIAR INSUMOS DA VARIAÇÃO (DESKTOP) */}
+                          {/* BOTÃO DE GERENCIAR INSUMOS DA VARIAÇÃO (DESKTOP) */}
                           <td style={{ ...shopeeStyles.td, textAlign: 'center' }}>
                             <button
                               type="button"
@@ -834,19 +870,19 @@ export default function VariacoesModal({
         </div>
       </div>
 
-      {/* ✨ MODAL DE CADASTRO DE INSUMOS ESPECÍFICO PARA A VARIAÇÃO ATIVA */}
+      {/* MODAL DE CADASTRO DE INSUMOS ESPECÍFICO PARA A VARIAÇÃO ATIVA */}
       {modalInsumosKeyAtiva && (
         <ModalCadastroInsumos
           isOpen={true}
           onClose={() => setModalInsumosKeyAtiva(null)}
           listaInsumos={listaInsumos}
           insumosComposicaoProduto={draftTabela[modalInsumosKeyAtiva]?.insumosComposicaoProduto || []} 
-          setInsumosComposicaoProduto={(novosInsumos) => {                            
+          setInsumosComposicaoProduto={(novosInsumos) => {                         
             setDraftTabela((prev: any) => ({
               ...prev,
               [modalInsumosKeyAtiva]: {
                 ...prev[modalInsumosKeyAtiva],
-                insumosComposicaoProduto: novosInsumos // 🌟 Atualizado mantendo o padrão exato
+                insumosComposicaoProduto: novosInsumos
               }
             }));
           }}
@@ -902,6 +938,30 @@ export default function VariacoesModal({
             });
             setDraftTabela(novaTabela);
             setShowModalGeradorSkuVar(false);
+          }}
+        />
+      )}
+
+      {/* CHAMADA DO MODAL DE GERAR CÓDIGOS DE BARRAS (EAN) EM MASSA */}
+      {showModalCodBarrasVar && (
+        <ModalGeradorCodBarrasVariacoes
+          onClose={() => setShowModalCodBarrasVar(false)}
+          onSave={(prefixoBase: string) => {
+            const novaTabela = { ...draftTabela };
+            
+            combinacoesValidas.forEach((c) => {
+              const timestamp = Date.now().toString().slice(-8);
+              const rand = Math.floor(100 + Math.random() * 900).toString();
+              const eanGerado = (prefixoBase || "2") + timestamp + rand;
+
+              novaTabela[c.key] = {
+                ...novaTabela[c.key],
+                dsGtinProduto: eanGerado.slice(0, 13)
+              };
+            });
+
+            setDraftTabela(novaTabela);
+            setShowModalCodBarrasVar(false);
           }}
         />
       )}

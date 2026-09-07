@@ -97,6 +97,7 @@ export default function ProdutoAgrupadoPage() {
               capa: rawData.dsCapaProduto || rawData.dsCapa || rawData.capa || "",
               imagens: rawData.dsImagensProduto || rawData.dsImagens || rawData.imagens || [],
               sku: rawData.dsSkuProduto || rawData.dsSku || rawData.sku || "",
+              ean: rawData.dsEANGTINProduto || rawData.dsEANGTIN || rawData.ean || "",
               nomeVar1: rawData.dsNomeVar1Produto || rawData.dsNomeVar1 || rawData.nomeVar1 || null,
               nomeVar2: rawData.dsNomeVar2Produto || rawData.dsNomeVar2 || rawData.nomeVar2 || null,
               variacoes: rawData.variacoes || rawData.dsVariacoes || [],
@@ -151,13 +152,14 @@ export default function ProdutoAgrupadoPage() {
     return Array.from(setImagens);
   }, [produto]);
 
+  // ✨ Leitura ajustada para buscar os novos campos de variação padronizados
   useEffect(() => {
     if (!produto?.variacoes || !v1Selecionada) return;
     const match = produto.variacoes.find((v: any) => {
-      const val1 = (v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim().toLowerCase();
+      const val1 = String(v.dsNomeVar1Produto || v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim().toLowerCase();
       const bateV1 = val1 === v1Selecionada.toLowerCase();
       if (!produto.nomeVar2) return bateV1;
-      const val2 = (v.nrTamanhoProduto || v.v2 || v.nrTamanho || v.tamanho || v.quantidade || "").trim().toLowerCase();
+      const val2 = String(v.dsNomeVar2Produto || v.nrTamanhoProduto || v.v2 || v.nrTamanho || v.tamanho || v.quantidade || "").trim().toLowerCase();
       return bateV1 && val2 === v2Selecionada.toLowerCase();
     });
     setVariacaoFinal(match || null);
@@ -167,7 +169,7 @@ export default function ProdutoAgrupadoPage() {
     if (!produto?.variacoes) return [];
     const vistas = new Set();
     return produto.variacoes.filter((v: any) => {
-      const valor = (v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim();
+      const valor = String(v.dsNomeVar1Produto || v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim();
       if (!valor || vistas.has(valor.toLowerCase())) return false;
       vistas.add(valor.toLowerCase());
       return true;
@@ -177,10 +179,10 @@ export default function ProdutoAgrupadoPage() {
   const listaOpcoesV2 = useMemo(() => {
     if (!v1Selecionada || !produto?.variacoes) return [];
     const sub = produto.variacoes.filter((v: any) =>
-      (v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim().toLowerCase() === v1Selecionada.toLowerCase()
+      String(v.dsNomeVar1Produto || v.dsModeloProduto || v.v1 || v.dsModelo || v.dsNome || v.sabor || v.cor || v.modelo || "").trim().toLowerCase() === v1Selecionada.toLowerCase()
     );
     const vistas = new Set();
-    return sub.map((v: any) => String(v.nrTamanhoProduto || v.v2 || v.nrTamanho || v.tamanho || v.quantidade || "").trim()).filter((v: string) => {
+    return sub.map((v: any) => String(v.dsNomeVar2Produto || v.nrTamanhoProduto || v.v2 || v.nrTamanho || v.tamanho || v.quantidade || "").trim()).filter((v: string) => {
       if (!v || vistas.has(v.toLowerCase())) return false;
       vistas.add(v.toLowerCase());
       return true;
@@ -224,39 +226,43 @@ export default function ProdutoAgrupadoPage() {
 
     let variacaoTextoFinal = "";
     if (temVariacoesReais && variacaoFinal) {
-      const modelo = String(variacaoFinal.dsModeloProduto || v1Selecionada || "").trim();
-      const tamanho = String(variacaoFinal.nrTamanhoProduto || v2Selecionada || "").trim();
+      const modelo = String(variacaoFinal.dsNomeVar1Produto || variacaoFinal.dsModeloProduto || v1Selecionada || "").trim();
+      const tamanho = String(variacaoFinal.dsNomeVar2Produto || variacaoFinal.nrTamanhoProduto || v2Selecionada || "").trim();
       variacaoTextoFinal = modelo && tamanho ? `${modelo} / ${tamanho}` : (modelo || tamanho || "");
     }
 
     const cartItemKey = `${produtoId}_${variacaoTextoFinal || "padrao"}`;
     const skuParaSalvar = variacaoFinal ? (variacaoFinal.dsSkuProduto || variacaoFinal.sku || "") : (produto.dsSkuProduto || produto.sku || "SEM-SKU");
-    const gtinParaSalvar = variacaoFinal ? (variacaoFinal.dsGtinProduto || variacaoFinal.gtin || "") : (produto.dsGtinProduto || produto.gtin || "");
+    const gtinParaSalvar = variacaoFinal ? (variacaoFinal.dsEANGTINProduto || variacaoFinal.dsGtinProduto || variacaoFinal.gtin || "") : (produto.dsEANGTINProduto || produto.dsGtin || produto.gtin || "");
     const precoFinal = variacaoFinal ? Number(variacaoFinal.vlPrecoProduto ?? 0) : Number(produto.vlPrecoBasicoProduto || produto.precoBasico || 0);
     const diasProdFinal = Number(variacaoFinal?.nrDiasProducaoProduto || produto.nrDiasProducaoProduto || 0);
     
-    // Tratamento de custo (considerando insumos e outros custos da variação se existirem)
     let custoUnitarioFinal = variacaoFinal ? Number(variacaoFinal.vlCustoUnitarioProduto ?? 0) : Number(produto.vlCustoUnitarioProduto ?? 0);
     if (isNaN(custoUnitarioFinal)) custoUnitarioFinal = 0;
 
     const fotoProdutoFinal = variacaoFinal?.dsFotoProduto || imgAtiva || produto.dsCapaProduto || produto.capa || "";
 
-    // Repasse seguro dos insumos de composição e movimentações
     const insumosComposicaoFinal = variacaoFinal?.insumosComposicaoProduto || produto.insumosComposicaoProduto || [];
     const outrosCustosFinal = variacaoFinal?.vlOutrosCustosProduto || produto.vlOutrosCustosProduto || 0;
     const movimentarEstoqueFinal = produto.movimentarEstoque ?? true;
     const movimentarEstoqueComposicaoFinal = produto.movimentarEstoqueComposicao ?? true;
 
-    const novoItem = {
+    // ✨ Objeto do item contendo os novos campos padronizados para salvar no pedido
+   const novoItem = {
       id: produtoId,
       idProduto: produtoId,
+      idVariacao: variacaoFinal?.idVariacao || null,
       cartItemKey,
       sku: skuParaSalvar,
       dsSkuProduto: skuParaSalvar,
       gtin: gtinParaSalvar,
-      dsGtinProduto: gtinParaSalvar,
+      dsEANGTINProduto: gtinParaSalvar,
       nome: nomeProdutoPuro,
       dsNomeProduto: nomeProdutoPuro,
+      
+      // ✨ ADICIONE ESTA LINHA AQUI para repassar o tipo correto do produto:
+      dsTipoProduto: produto.dsTipoProduto || produto.tipoProduto || "Fisico_Padrao",
+
       preco: precoFinal,
       vlPrecoProduto: precoFinal,
       custoUnitario: custoUnitarioFinal,
@@ -264,10 +270,14 @@ export default function ProdutoAgrupadoPage() {
       isTemVariacoesProduto: temVariacoesReais,
       variacao: variacaoTextoFinal,
       dsVariacaoProduto: variacaoTextoFinal,
+      
       nomeVar1: temVariacoesReais ? (produto.nomeVar1 || null) : null,
+      dsNomeVar1Produto: temVariacoesReais ? (produto.nomeVar1 || null) : null,
       v1: temVariacoesReais ? (v1Selecionada || null) : null,
+      dsNomeVar2Produto: temVariacoesReais ? (produto.nomeVar2 || null) : null,
       nomeVar2: temVariacoesReais ? (produto.nomeVar2 || null) : null,
       v2: temVariacoesReais ? (v2Selecionada || null) : null,
+
       imagem: fotoProdutoFinal,
       dsFotoProduto: fotoProdutoFinal,
       dsCapaProduto: produto.dsCapaProduto || produto.capa || "",
@@ -283,12 +293,11 @@ export default function ProdutoAgrupadoPage() {
       nrComprimentoProduto: Number(variacaoFinal?.nrComprimentoProduto ?? produto.nrComprimentoProduto ?? 0),
       nrDiasProducao: diasProdFinal,
       nrDiasProducaoProduto: diasProdFinal,
-      // ✨ Repasse das propriedades de composição e controle de estoque
       insumosComposicaoProduto: insumosComposicaoFinal,
       vlOutrosCustosProduto: outrosCustosFinal,
       movimentarEstoque: movimentarEstoqueFinal,
       movimentarEstoqueComposicao: movimentarEstoqueComposicaoFinal
-    };
+  };
 
     const idx = dadosExistentes.items.findIndex((i: any) => i.cartItemKey === cartItemKey);
     const existingItems = Array.isArray(dadosExistentes.items) ? dadosExistentes.items : [];
@@ -476,7 +485,7 @@ export default function ProdutoAgrupadoPage() {
                   <p style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#64748b', marginBottom: '5px', margin: 0 }}>{produto.nomeVar1}</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {listaOpcoesV1.map((item: any, i: number) => {
-                      const valor = (item.dsModeloProduto || item.v1 || item.dsModelo || item.dsNome || item.sabor || item.cor || item.modelo || "").trim();
+                      const valor = String(item.dsNomeVar1Produto || item.dsModeloProduto || item.v1 || item.dsModelo || item.dsNome || item.sabor || item.cor || item.modelo || "").trim();
                       const ativo = v1Selecionada === valor;
                       const fotoOpcao = item.dsFotoProduto || item.dsFoto || item.foto || item.imagem || item.url || item.fotoCapa;
                       return (

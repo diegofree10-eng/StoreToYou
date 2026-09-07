@@ -802,36 +802,39 @@ exports.contabilizarVendaPdvV2 = functions
 // ==========================================================================================
 // 6. FUNÇÃO DAR BAIXA NO ESTOQUE (CORRIGIDA)
 // ==========================================================================================
+
 exports.darBaixaEstoqueUniversal = functions
   .region("southamerica-east1")
   .firestore.document("lojistas/{lojistaId}/pedidos/{pedidoId}")
   .onCreate(async (snap, context) => {
     const pedido = snap.data();
     const lojistaId = context.params.lojistaId;
-    const pedidoId = context.params.pedidoId;
 
     const itens = pedido.itens || [];
     if (itens.length === 0) return null;
 
-    // 1. Consolida rigorosamente por ID + dsVariacaoProduto
+    // 1. Consolida os itens do pedido por idProduto + idVariacao
     const itensConsolidados = {};
     for (const item of itens) {
       const idProduto = String(item.idProduto || "").trim();
       if (!idProduto) continue;
 
-      const variacaoPedido = String(item.dsVariacaoProduto || "Padrão").trim();
+      const idVariacao = String(item.idVariacao || "").trim();
+      const variacaoTexto = String(item.dsVariacaoProduto || "Padrão").trim();
       const qtdVendida = Number(item.nrQuantidadeProduto || item.qty || 1);
 
-      const chaveUnica = `${idProduto}_${variacaoPedido}`;
+      // Chave única para agrupar caso o mesmo item/variação repita no carrinho
+      const chaveUnica = `${idProduto}_${idVariacao || variacaoTexto}`;
 
       if (itensConsolidados[chaveUnica]) {
         itensConsolidados[chaveUnica].qtdVendida += qtdVendida;
       } else {
         itensConsolidados[chaveUnica] = {
           idProduto,
-          variacaoPedido,
+          idVariacao,
+          variacaoTexto,
           qtdVendida: isNaN(qtdVendida) || qtdVendida <= 0 ? 1 : qtdVendida,
-          itemOriginal: item, // Guarda o item para pegar os insumos depois
+          itemOriginal: item,
         };
       }
     }
@@ -841,12 +844,13 @@ exports.darBaixaEstoqueUniversal = functions
 
     await db.runTransaction(async (t) => {
       const acoesPorProduto = {};
-      const insumosParaAtualizar = {}; // Dicionário para somar o consumo total de cada insumo
+      const insumosParaAtualizar = {};
 
+      // FASE 1: LEITURA DOS PRODUTOS
       for (const itemUnico of listaParaBaixa) {
         if (!acoesPorProduto[itemUnico.idProduto]) {
           const produtoRef = db.doc(
-            `lojistas/${lojistaId}/produtos/${itemUnico.idProduto}`,
+            `lojistas/${lojistaId}/produtos/${itemUnico.idProduto}`
           );
           const produtoSnap = await t.get(produtoRef);
 
@@ -861,14 +865,34 @@ exports.darBaixaEstoqueUniversal = functions
         acoesPorProduto[itemUnico.idProduto].itensParaBaixar.push(itemUnico);
       }
 
-      // 2. Processa a baixa de estoque dos Produtos / Variações e coleta os insumos
+      // FASE 1.1: LEITURA PRÉVIA DOS INSUMOS DE COMPOSIÇÃO NA COLEÇÃO CORRETA
+      const insumosSnaps = {};
+      for (const idProduto in acoesPorProduto) {
+        const prodInfo = acoesPorProduto[idProduto];
+        for (const itemUnico of prodInfo.itensParaBaixar) {
+          const movComposicao = itemUnico.itemOriginal.movimentarEstoqueComposicao ?? true;
+          const insumosLista = itemUnico.itemOriginal.insumosComposicaoProduto || [];
+
+          if (movComposicao && Array.isArray(insumosLista)) {
+            for (const ins of insumosLista) {
+              const insumoId = String(ins.id || ins.idInsumo || "").trim();
+              if (insumoId && !insumosSnaps[insumoId]) {
+                const insumoRef = db.doc(`lojistas/${lojistaId}/insumos_composicao/${insumoId}`);
+                insumosSnaps[insumoId] = { ref: insumoRef, snap: await t.get(insumoRef) };
+              }
+            }
+          }
+        }
+      }
+
+      // FASE 2: PROCESSAMENTO E CÁLCULOS DE ESTOQUE (PRODUTOS, VARIAÇÕES E INSUMOS)
       for (const idProduto in acoesPorProduto) {
         const prodInfo = acoesPorProduto[idProduto];
         const dadosProd = prodInfo.dados;
 
         const variacoesAtuais = dadosProd.variacoes || [];
         let estoqueSimplesAtual = Number(
-          dadosProd.nrEstoqueProduto || dadosProd.estoque || 0,
+          dadosProd.nrEstoqueProduto || dadosProd.estoque || 0
         );
 
         if (Array.isArray(variacoesAtuais) && variacoesAtuais.length > 0) {
@@ -877,31 +901,37 @@ exports.darBaixaEstoqueUniversal = functions
           for (const itemUnico of prodInfo.itensParaBaixar) {
             const movEstoqueVar = itemUnico.itemOriginal.movimentarEstoque ?? true;
             const movComposicaoVar = itemUnico.itemOriginal.movimentarEstoqueComposicao ?? true;
-            const varPedidoLimpa = itemUnico.variacaoPedido.toLowerCase();
+            const idVarPedido = itemUnico.idVariacao;
+            const varPedidoLimpa = itemUnico.variacaoTexto.toLowerCase();
 
             novasVariacoes = novasVariacoes.map((v) => {
-              const nomeVarBanco = String(v.dsNomeProduto || "").trim();
-              const modeloBanco = String(v.dsModeloProduto || "").trim();
-              const nomeBancoSimples = modeloBanco.toLowerCase();
-              const nomeCompletoVar = nomeVarBanco.toLowerCase();
+              const idVarBanco = String(v.idVariacao || "").trim();
+              const nomeVarBanco = String(v.dsNomeVar1Produto || v.dsNomeProduto || "").trim().toLowerCase();
+              const modeloBanco = String(v.dsModeloProduto || v.modelo || "").trim().toLowerCase();
+              const varTextoBanco = String(v.dsVariacaoProduto || "").trim().toLowerCase();
 
-              // Valida se esta variação bate com a comprada
-              const bateVariacao =
+              // 🌟 Identificação prioritária pelo ID único da variação
+              const batePorId = idVarPedido && idVarBanco && idVarPedido === idVarBanco;
+              const batePorTexto = 
                 !varPedidoLimpa ||
                 varPedidoLimpa === "padrão" ||
-                nomeCompletoVar === varPedidoLimpa ||
-                nomeBancoSimples === varPedidoLimpa ||
-                varPedidoLimpa.includes(nomeBancoSimples);
+                nomeVarBanco === varPedidoLimpa ||
+                modeloBanco === varPedidoLimpa ||
+                varTextoBanco === varPedidoLimpa ||
+                varPedidoLimpa.includes(modeloBanco) ||
+                modeloBanco.includes(varPedidoLimpa);
+
+              const bateVariacao = idVarPedido ? batePorId : batePorTexto;
 
               if (bateVariacao) {
-                // Baixa o estoque da variação (se permitido)
+                // 1. Baixa o estoque da variação específica do produto
                 if (movEstoqueVar) {
                   const estoqueAtualVar = Number(
-                    v.nrEstoqueProduto || v.estoque || 0,
+                    v.nrEstoqueProduto || v.estoque || v.nrEstoque || 0
                   );
                   const novoEstoqueVar = Math.max(
                     0,
-                    estoqueAtualVar - itemUnico.qtdVendida,
+                    estoqueAtualVar - itemUnico.qtdVendida
                   );
 
                   v.estoque = novoEstoqueVar;
@@ -909,13 +939,14 @@ exports.darBaixaEstoqueUniversal = functions
                   v.nrEstoqueProduto = novoEstoqueVar;
                 }
 
-                // Coleta os insumos de composição do produto/variação (se permitido)
+                // 2. Acumula os insumos da composição desta variação específica
                 if (movComposicaoVar && Array.isArray(itemUnico.itemOriginal.insumosComposicaoProduto)) {
                   itemUnico.itemOriginal.insumosComposicaoProduto.forEach((ins) => {
-                    const insumoId = ins.id || ins.idInsumo;
+                    const insumoId = String(ins.id || ins.idInsumo || "").trim();
                     if (insumoId) {
-                      const qtdConsumida = Number(ins.nrQuantidadeConsumida || 0) * itemUnico.qtdVendida;
-                      insumosParaAtualizar[insumoId] = (insumosParaAtualizar[insumoId] || 0) + qtdConsumida;
+                      const qtdPorUnidade = Number(ins.nrQuantidadeConsumida || ins.quantidade || 0);
+                      const qtdConsumidaTotal = qtdPorUnidade * itemUnico.qtdVendida;
+                      insumosParaAtualizar[insumoId] = (insumosParaAtualizar[insumoId] || 0) + qtdConsumidaTotal;
                     }
                   });
                 }
@@ -926,7 +957,7 @@ exports.darBaixaEstoqueUniversal = functions
 
           t.update(prodInfo.ref, { variacoes: novasVariacoes });
         } else {
-          // Produto Simples (Sem Variação)
+          // Produto Simples (Sem Variações cadastradas)
           let totalBaixaSimples = 0;
           let movEstoqueSimples = true;
           let movComposicaoSimples = true;
@@ -936,13 +967,13 @@ exports.darBaixaEstoqueUniversal = functions
             movComposicaoSimples = itemUnico.itemOriginal.movimentarEstoqueComposicao ?? true;
             totalBaixaSimples += itemUnico.qtdVendida;
 
-            // Coleta os insumos globais do produto simples
             if (movComposicaoSimples && Array.isArray(itemUnico.itemOriginal.insumosComposicaoProduto)) {
               itemUnico.itemOriginal.insumosComposicaoProduto.forEach((ins) => {
-                const insumoId = ins.id || ins.idInsumo;
+                const insumoId = String(ins.id || ins.idInsumo || "").trim();
                 if (insumoId) {
-                  const qtdConsumida = Number(ins.nrQuantidadeConsumida || 0) * itemUnico.qtdVendida;
-                  insumosParaAtualizar[insumoId] = (insumosParaAtualizar[insumoId] || 0) + qtdConsumida;
+                  const qtdPorUnidade = Number(ins.nrQuantidadeConsumida || ins.quantidade || 0);
+                  const qtdConsumidaTotal = qtdPorUnidade * itemUnico.qtdVendida;
+                  insumosParaAtualizar[insumoId] = (insumosParaAtualizar[insumoId] || 0) + qtdConsumidaTotal;
                 }
               });
             }
@@ -951,7 +982,7 @@ exports.darBaixaEstoqueUniversal = functions
           if (movEstoqueSimples) {
             const novoEstoqueSimples = Math.max(
               0,
-              estoqueSimplesAtual - totalBaixaSimples,
+              estoqueSimplesAtual - totalBaixaSimples
             );
 
             t.update(prodInfo.ref, {
@@ -963,20 +994,21 @@ exports.darBaixaEstoqueUniversal = functions
         }
       }
 
-      // 3. Processa a baixa dos Insumos de Composição consolidados na coleção de insumos
+      // FASE 3: ESCRITA DAS BAIXAS DOS INSUMOS NA COLEÇÃO `insumos_composicao`
       for (const insumoId in insumosParaAtualizar) {
         const qtdTotalConsumida = insumosParaAtualizar[insumoId];
-        const insumoRef = db.doc(`lojistas/${lojistaId}/insumos_composicao/${insumoId}`);
-        const insumoSnap = await t.get(insumoRef);
+        const dadosInsumo = insumosSnaps[insumoId];
 
-        if (insumoSnap.exists) {
+        if (dadosInsumo && dadosInsumo.snap.exists) {
+          const insumoData = dadosInsumo.snap.data();
           const estoqueInsumoAtual = Number(
-            insumoSnap.data().nrEstoqueInsumo || insumoSnap.data().estoque || 0
+            insumoData.nrEstoqueAtualInsumo || insumoData.estoque || 0
           );
+          
           const novoEstoqueInsumo = Math.max(0, estoqueInsumoAtual - qtdTotalConsumida);
 
-          t.update(insumoRef, {
-            nrEstoqueInsumo: novoEstoqueInsumo,
+          t.update(dadosInsumo.ref, {
+            nrEstoqueAtualInsumo: novoEstoqueInsumo,
           });
         }
       }

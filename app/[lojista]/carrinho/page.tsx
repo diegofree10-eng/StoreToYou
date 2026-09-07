@@ -470,7 +470,7 @@ export default function CarrinhoIdentidadeVisual() {
                     idProduto: item.id || item.idProduto || "",
                     dsSkuProduto: item.dsSkuProduto || item.sku || "SEM-SKU",
                     dsGtinProduto: item.dsGtinProduto || item.gtin || "",
-                    dsTipoProduto: item.dsTipoProduto || "Fisico_Padrao",
+                    dsTipoProduto: String(item.dsTipoProduto || item.tipoProduto || item.tipo || "Fisico_Padrao"),
                     nrPesoProduto: Number(item.nrPesoProduto || 0.4),
                     nrAlturaProduto: Number(item.nrAlturaProduto || 1),
                     nrLarguraProduto: Number(item.nrLarguraProduto || 21),
