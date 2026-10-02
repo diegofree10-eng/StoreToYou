@@ -1,11 +1,12 @@
+// app/admin/config/page.tsx (ou o caminho equivalente do seu componente AdminConfig)
 "use client";
 
 import { useEffect, useState } from "react";
 import { db, auth, storage } from "@/lib/firebase";
-import { doc, setDoc, onSnapshot, collection, query, orderBy, getDoc, updateDoc, addDoc } from "firebase/firestore";
+import { doc, setDoc, onSnapshot, collection, query, orderBy, getDoc, updateDoc, addDoc, Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
-import { FiBell } from "react-icons/fi";
+import { FiBell, FiAlertTriangle, FiXCircle } from "react-icons/fi";
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
@@ -34,13 +35,22 @@ export default function AdminConfig() {
     dadosLoja: { [key: string]: any };
     banners: { [key: string]: any };
     pagamentos: { [key: string]: any };
-    aparencia: { [key: string]: any };
+    aparencia: {
+      dscorFundo?: string;
+      dscorPrincipal?: string;
+      dscorSecundaria?: string;
+      dscorTextoCard?: string;
+      isModoNoturno?: boolean;
+      configuracoesWhatsapp?: { msgProducao?: string; msgEnviado?: string; msgConcluido?: string };
+      [key: string]: any;
+    };
     sistema: { [key: string]: any };
     atualizacao: { [key: string]: any };
     historicoMensagens: any[];
     financeiro: { [key: string]: any };
     redesSociais: any[];
     historicoPagamentos?: any[];
+    indicadoPor?: string; // 🌟 Tipagem estrita adicionada
   }
 
   const [config, setConfig] = useState<ConfigState>({
@@ -48,7 +58,17 @@ export default function AdminConfig() {
     dadosLoja: { dsNomeLoja: "Nova Loja", dsRuaLoja: "", nrNumeroLoja: "", dsCepLoja: "", dsBairroLoja: "", dsCidadeLoja: "", dsUfLoja: "", nrCnpjCpfLoja: "", dsStatusLoja: "ativo", dsPlanoLoja: "Bronze", nrWhatssapLoja: "", dsSeguimentoLoja: "", dsSlug: "", dsLogoLoja: "", redesSociais: [] },
     banners: { dsDesktop: [], dsMobile: [], dsBanner1: "", dsBanner2: "", dsBanner3: "", dsLinkBanner1: "", dsLinkBanner2: "", dsLinkBanner3: "" },
     pagamentos: { dsChavePix: "", dsMercadoPago: { publicKey: "", accessToken: "", ativo: false }, dsPagSeguro: { token: "", email: "", ativo: false } },
-    aparencia: { dscorFundo: "#f8fafc", dscorPrincipal: "#FF8C00", dscorSecundaria: "#F5F5DC", dscorTextoCard: "#1e293b", isModoNoturno: false },
+
+    // 🌟 Organizado perfeitamente dentro do mapa aparencia
+    aparencia: {
+      dscorFundo: "#f8fafc",
+      dscorPrincipal: "#FF8C00",
+      dscorSecundaria: "#F5F5DC",
+      dscorTextoCard: "#1e293b",
+      isModoNoturno: false,
+      configuracoesWhatsapp: { msgProducao: "", msgEnviado: "", msgConcluido: "" }
+    },
+
     sistema: { isFreteGratisAtivo: false, vlFreteGratisMinimo: 0, dsTokenMelhorEnvio: "", dstransportadoras: { correios: true, jadlog: true, azul: true, latam: true }, cupons: {}, horarios: {}, isLojaAberta: true, dsVersaoSistema: "1.0.0" },
     atualizacao: { nrVersaoSistemaLogista: "0.0.0", nrVersaoSchemaLogista: 0 },
     historicoMensagens: [],
@@ -308,6 +328,22 @@ export default function AdminConfig() {
       if (arquivoBanner3) dadosParaSalvar.banners.dsBanner3 = await processarBanner(arquivoBanner3, 3);
 
       await setDoc(doc(db, "lojistas", uid), dadosParaSalvar, { merge: true });
+
+      const indicadoPor = config.indicadoPor || dadosAntigos?.indicadoPor;
+      if (indicadoPor) {
+        const indicacaoRef = doc(db, "lojistas", indicadoPor, "indicacoes", uid);
+        const indicacaoSnap = await getDoc(indicacaoRef);
+
+        if (indicacaoSnap.exists()) {
+          await updateDoc(indicacaoRef, {
+            nomeIndicado: dL.dsNomeLoja || "Loja",
+            NomeResponsavelIndicado: dP.dsNomeResponsavel || "",
+            CidadeResponsavelIndicado: dP.dsCidadeResponsavel || "",
+            UfResponsavelIndicado: dP.dsUfResponsavel || ""
+          });
+        }
+      }
+
       setDadosAntigos(dadosParaSalvar);
 
       alert("Configurações salvas com sucesso! ✅");
@@ -322,26 +358,32 @@ export default function AdminConfig() {
     }
   };
 
-  const solicitarUpgrade = async (novoPlano: string) => {
+  const solicitarUpgrade = async ({ planoAtual, planoDesejado, valorNovoPlano }: any) => {
     if (!uid) return;
 
     try {
-      const subColRef = collection(db, "lojistas", uid, "assinaturas", "registro_inicial", "up_upgrade");
+      const idSolicitacao = `UPG-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 900 + 100)}`;
 
-      await addDoc(subColRef, {
-        tsDataSolicitacao: new Date(),
+      // 🚀 Salva apenas na subcoleção de controle de aprovação do Master (up_upgrade)
+      const subColRef = doc(db, "lojistas", uid, "assinaturas", "registro_inicial", "up_upgrade", idSolicitacao);
+      await setDoc(subColRef, {
+        id: idSolicitacao,
+        tsDataSolicitacao: Timestamp.now(),
         dsLojaId: uid,
         dsLojaNome: config.dadosLoja.dsNomeLoja || "Loja Sem Nome",
-        dsPlanoAtual: config.dadosLoja.dsPlanoLoja || "Bronze",
-        dsPlanoDesejado: novoPlano,
+        dsPlanoAtual: planoAtual,
+        dsPlanoDesejado: planoDesejado,
+        tipoRegistro: "upgrade",
+        vlNovoPlano: Number(valorNovoPlano || 0),
         dsStatusUpgrade: "pendente"
       });
 
+      // Atualiza o status geral na loja indicando que há um upgrade pendente
       await updateDoc(doc(db, "lojistas", uid), {
         "sistema.dsStatusUpgrade": "pendente"
       });
 
-      alert("Solicitação de upgrade enviada com sucesso!");
+      alert("🚀 Solicitação de upgrade enviada com sucesso! O Master analisará em breve.");
       setShowUpgradeModal(false);
     } catch (error) {
       console.error("Erro ao solicitar upgrade:", error);
@@ -395,6 +437,82 @@ export default function AdminConfig() {
     const novasRedes = config.dadosLoja.redesSociais.filter((_: any, i: number) => i !== index);
     setConfig({ ...config, dadosLoja: { ...config.dadosLoja, redesSociais: novasRedes } });
   };
+
+  // 🚨 COMPONENTE DE BANNER DE ALERTA DE VENCIMENTO OU SUSPENSÃO
+  function renderBannerAlerta() {
+    const statusLoja = config.dadosLoja?.dsStatusLoja || "ativo";
+    const isOuroAtivo = config.sistema?.dsPlanoTeste === "Ouro";
+    const tsVencimento = isOuroAtivo ? config.sistema?.tsVencimentoTeste : config.dadosLoja?.tsVencimentoLoja;
+    const dataVencimento = tsVencimento?.seconds ? new Date(tsVencimento.seconds * 1000) : null;
+
+    if (statusLoja === "suspenso") {
+      return (
+        <div style={{
+          background: isModoNoturno ? '#7f1d1d' : '#fee2e2',
+          border: '1px solid #ef4444',
+          color: isModoNoturno ? '#fca5a5' : '#991b1b',
+          padding: '16px 20px',
+          borderRadius: '12px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+        }}>
+          <FiXCircle size={24} style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: '13px', lineHeight: '1.5' }}>
+            <strong style={{ display: 'block', fontSize: '14px', fontWeight: '900', marginBottom: '2px' }}>
+              Acesso Suspenso Temporariamente
+            </strong>
+            Sua assinatura consta como suspensa por falta de regularização. Entre em contato com o suporte ou envie o comprovante de pagamento via WhatsApp para reativar seu acesso.
+          </div>
+        </div>
+      );
+    }
+
+    if (!dataVencimento) return null;
+
+    const hoje = new Date();
+    const diffDays = Math.ceil((dataVencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays > 5) return null;
+
+    const isVencido = diffDays < 0;
+    const corBg = isVencido
+      ? (isModoNoturno ? '#7f1d1d' : '#fee2e2')
+      : (isModoNoturno ? '#78350f' : '#fef3c7');
+    const corBorda = isVencido ? '#ef4444' : '#f59e0b';
+    const corTexto = isVencido
+      ? (isModoNoturno ? '#fca5a5' : '#991b1b')
+      : (isModoNoturno ? '#fcd34d' : '#92400e');
+
+    return (
+      <div style={{
+        background: corBg,
+        border: `1px solid ${corBorda}`,
+        color: corTexto,
+        padding: '16px 20px',
+        borderRadius: '12px',
+        marginBottom: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+      }}>
+        {isVencido ? <FiXCircle size={24} style={{ flexShrink: 0 }} /> : <FiAlertTriangle size={24} style={{ flexShrink: 0 }} />}
+
+        <div style={{ flex: 1, fontSize: '13px', lineHeight: '1.5' }}>
+          <strong style={{ display: 'block', fontSize: '14px', fontWeight: '900', marginBottom: '2px' }}>
+            {isVencido ? "Sua assinatura venceu!" : `Atenção: Sua assinatura vence em ${diffDays} dia(s)!`}
+          </strong>
+          {isVencido
+            ? `O plano expirou em ${dataVencimento.toLocaleDateString('pt-BR')}. Regularize o pagamento para evitar a suspensão dos serviços da plataforma.`
+            : `Evite interrupções no funcionamento da sua loja efetuando o pagamento da mensalidade até o dia ${dataVencimento.toLocaleDateString('pt-BR')}.`
+          }
+        </div>
+      </div>
+    );
+  }
 
   function renderSeloPlano() {
     const isOuroAtivo = config.sistema?.dsPlanoTeste === "Ouro";
@@ -481,6 +599,9 @@ export default function AdminConfig() {
           </span>
         </div>
 
+        {/* 🚨 RENDERIZAÇÃO DO BANNER DE ALERTA */}
+        {renderBannerAlerta()}
+
         {renderSeloPlano()}
 
         <div style={{ ...styles.tabBar, borderBottom: `1px solid ${theme.border}` }}>
@@ -512,7 +633,7 @@ export default function AdminConfig() {
             theme={theme}
           />
         )}
-        {abaAtiva === 'pagamentos' && <PagamentosTab config={config} setConfig={setConfig} masterLiberouMeioPagamento={masterLiberouMeioPagamento} theme={theme} />}
+        {abaAtiva === 'pagamentos' && <PagamentosTab config={config} setConfig={setConfig} masterLiberouMeioPagamento={masterLiberouMeioPagamento} uid={uid} theme={theme} />}
         {abaAtiva === 'aparencia' && <AparenciaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} theme={theme} />}
         {abaAtiva === 'sistema' && <SistemaTab config={config} setConfig={setConfig} masterLiberou={masterLiberou} setShowCupomModal={setShowCupomModal} showToken={showToken} setShowToken={setShowToken} theme={theme} />}
         {abaAtiva === 'mensagens' && <MensagensTab config={config} lojistaId={uid} confirmarLeituraMensagem={confirmarLeituraMensagem} theme={theme} />}

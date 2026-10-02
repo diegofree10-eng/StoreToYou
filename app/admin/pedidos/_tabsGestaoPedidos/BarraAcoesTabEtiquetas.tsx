@@ -190,9 +190,18 @@ export default function BarraAcoesTabEtiquetas({
     const emitirEtiquetasEmMassa = async () => {
         if (isAbaConcluidos || selecionadosCount === 0) return alert("Selecione ao menos um pedido.");
 
-        const pedidosParaProcessar = pedidosPendentesDeEtiqueta.filter(p => {
+        // 🌟 Mapeia rigorosamente os IDs selecionados para os objetos completos da lista local
+        const pedidosCompletosSelecionados = selecionadosNestaAba
+            .map(id => localPedidos.find(p => p.id === id))
+            .filter(Boolean);
+
+        // Filtra quais deles realmente precisam de emissão de etiqueta
+        // Filtra quais deles realmente precisam de emissão de etiqueta de forma segura
+        const pedidosParaProcessar = pedidosCompletosSelecionados.filter(p => {
             const jaPossui = !!p?.Etiqueta?.codigoEnvio || !!p?.Etiqueta?.IdEtiqueta;
-            return !jaPossui || p?.Etiqueta?.statusEtiqueta === 'erro' || !!p?.mensagemError;
+            const statusEtq = String(p?.Etiqueta?.statusEtiqueta || p?.statusEtiqueta || '').toLowerCase();
+            const temErro = statusEtq === 'erro' || !!p?.Etiqueta?.mensagemErro || !!p?.mensagemErro || !!p?.mensagemError;
+            return !jaPossui || temErro;
         });
 
         if (pedidosParaProcessar.length === 0) {
@@ -232,6 +241,7 @@ export default function BarraAcoesTabEtiquetas({
                 }
             }
 
+            // 🚀 Enviando o array com os OBJETOS COMPLETOS (com endereço, cliente, itens e financeiro) para a API
             const res = await fetch("/api/frete/gerar-massa", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

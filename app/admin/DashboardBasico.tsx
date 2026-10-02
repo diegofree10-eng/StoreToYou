@@ -1,3 +1,4 @@
+// app/admin/DashboardBronze.tsx
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
@@ -63,11 +64,14 @@ const LinhaPedidoBronze = React.memo(({ pedido, expandido, onExpandir, dataForma
 });
 LinhaPedidoBronze.displayName = "LinhaPedidoBronze";
 
-export function DashboardBronze({ pedidos }: { pedidos: Pedido[], dadosLojista?: any }) {
+export function DashboardBronze({ pedidos, dadosLojista }: { pedidos: Pedido[], dadosLojista?: any }) {
   const router = useRouter();
   const [abaAtiva, setAbaAtiva] = useState("vendas"); 
   const [buscaNome, setBuscaNome] = useState("");
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
+
+  // Extração segura do ID do lojista (uid)
+  const lojistaId = dadosLojista?.uid || dadosLojista?.id || dadosLojista?.lojaId || "";
 
   const parseDataPedido = useCallback((dataStr: string) => {
     if (!dataStr) return null;
@@ -83,19 +87,11 @@ export function DashboardBronze({ pedidos }: { pedidos: Pedido[], dadosLojista?:
   }, [parseDataPedido]);
 
   const inteligencia = useMemo(() => {
-    const i = { faturamento: 0, totalPedidos: 0, rankingProdutos: {} as Record<string, any> };
+    const i = { faturamento: 0, totalPedidos: 0 };
     pedidos.forEach(p => {
       if (p.devolvido) return;
       i.faturamento += Number(p.financeiro?.total || 0);
       i.totalPedidos += 1;
-      (p.itens || []).forEach((item: ItemPedido) => {
-        const n = item.nome || "Produto Não Identificado";
-        const q = Number(item.qty || 0);
-        if (q > 0) {
-          if (!i.rankingProdutos[n]) i.rankingProdutos[n] = { qtd: 0 };
-          i.rankingProdutos[n].qtd += q;
-        }
-      });
     });
     return i;
   }, [pedidos]);
@@ -109,14 +105,14 @@ export function DashboardBronze({ pedidos }: { pedidos: Pedido[], dadosLojista?:
       <header style={styles.header}>
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
           <h1 style={{margin: 0, color: '#2c3e50'}}>📉 Painel de Controle (Bronze)</h1>
-          <button onClick={() => router.back()} style={styles.btnVoltar}>⬅️ Voltar</button>
+          <button type="button" onClick={() => router.back()} style={styles.btnVoltar}>⬅️ Voltar</button>
         </div>
         <div style={styles.filtrosCard}>
           <input type="text" placeholder="🔍 Filtrar por nome do cliente..." value={buscaNome} onChange={e => setBuscaNome(e.target.value)} style={styles.input} />
         </div>
         <div style={styles.tabBar}>
-          <button style={abaAtiva === 'vendas' ? styles.tabActive : styles.tab} onClick={() => setAbaAtiva('vendas')}>PEDIDOS</button>
-          <button style={abaAtiva === 'catalogo' ? styles.tabActive : styles.tab} onClick={() => setAbaAtiva('catalogo')}>PRODUTOS</button>
+          <button type="button" style={abaAtiva === 'vendas' ? styles.tabActive : styles.tab} onClick={() => setAbaAtiva('vendas')}>PEDIDOS</button>
+          <button type="button" style={abaAtiva === 'catalogo' ? styles.tabActive : styles.tab} onClick={() => setAbaAtiva('catalogo')}>PRODUTOS</button>
         </div>
       </header>
 
@@ -140,7 +136,7 @@ export function DashboardBronze({ pedidos }: { pedidos: Pedido[], dadosLojista?:
            </table>
         )}
         {abaAtiva === 'catalogo' && (
-          <TabCatalogo rankingProdutos={inteligencia.rankingProdutos} formatarMoeda={formatarMoeda} styles={styles} />
+          <TabCatalogo uid={lojistaId} formatarMoeda={formatarMoeda} styles={styles} />
         )}
       </section>
     </div>
@@ -149,6 +145,7 @@ export function DashboardBronze({ pedidos }: { pedidos: Pedido[], dadosLojista?:
 
 const styles: Record<string, React.CSSProperties> = {
   page: { padding: "20px 40px", background: "#f4f7f6", minHeight: "100vh", fontFamily: "sans-serif" },
+  header: {},
   btnVoltar: { padding: "8px 15px", borderRadius: '6px', border: 'none', background: '#2c3e50', color: '#fff', cursor: 'pointer', fontWeight: 'bold' },
   filtrosCard: { background: '#fff', padding: '15px', borderRadius: '10px', display: 'flex', gap: '10px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
   input: { padding: '8px', borderRadius: '5px', border: '1px solid #ddd', flex: 1, outline: 'none' },
@@ -168,3 +165,5 @@ const styles: Record<string, React.CSSProperties> = {
   detalheBox: { padding: '10px 20px 20px 20px' },
   expandInfo: { padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }
 };
+
+export default DashboardBronze;

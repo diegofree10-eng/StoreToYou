@@ -1,8 +1,8 @@
 // components/_tabsGestaoPedidos/TabDigital.tsx
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Pedido } from '@/types/pedido';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, increment } from 'firebase/firestore';
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
@@ -64,7 +64,6 @@ const gerarLinkWhatsApp = (pedido: Pedido) => {
     const telefoneFinal = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
     const nomeCliente = clienteObj.nmNomeCliente || clienteObj.nome || "Cliente";
     
-    // 🌟 Número do pedido direto da raiz
     const numPed = (pedido as any).nrNumeroPedido !== undefined && (pedido as any).nrNumeroPedido !== null ? (pedido as any).nrNumeroPedido : (pedido.id?.slice(-4));
 
     const mensagem = encodeURIComponent(`Olá ${nomeCliente}, tudo bem? Estou entrando em contato referente ao seu pedido digital #${numPed}.`);
@@ -74,7 +73,6 @@ const gerarLinkWhatsApp = (pedido: Pedido) => {
 export default function TabDigital({
     pedidos, lojistaIdApp, db, setLocalPedidos, selecionados = [], setSelecionados, mudarStatusDireto, registrarFuncaoConcluirDigital
 }: TabDigitalProps) {
-    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO INÍCIO DO COMPONENTE
     const { theme } = useTheme();
 
     const [processandoMassa, setProcessandoMassa] = useState(false);
@@ -86,6 +84,10 @@ export default function TabDigital({
     const pedidosDigitais = useMemo(() => {
         return pedidos.filter(p => {
             if (!p) return false;
+
+            const isConcluido = (p as any).isStatusPedidoConcluido === true;
+            if (isConcluido) return false;
+
             const statusGeral = String(p.status || '').trim().toLowerCase();
             if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusGeral === 'enviado' || (p as any).enviado === true) return false;
 
@@ -139,7 +141,8 @@ export default function TabDigital({
         alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
     };
 
-    const concluirDigitalEmLote = async () => {
+    // 🌟 Envolvido em useCallback para manter a estabilidade da referência no useEffect
+    const concluirDigitalEmLote = useCallback(async () => {
         const selecionadosAtuais = (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id));
         if (selecionadosAtuais.length === 0) return alert("Nenhum pedido digital selecionado para concluir.");
         if (!db || !lojistaIdApp) return;
@@ -153,16 +156,16 @@ export default function TabDigital({
             for (const idPedido of selecionadosAtuais) {
                 const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", idPedido);
                 await updateDoc(pedidoRef, {
-                    status: 'Concluído',
-                    enviado: true,
-                    "StatusProducao.dsStatusProducao": "Concluído"
+                    isStatusPedidoConcluido: true,
+                    "StatusProducao.dsStatusProducao": "Concluído",
+                    nrContadorMudancas: increment(1)
                 });
             }
 
             setLocalPedidos(prev => prev.map(p => selecionadosAtuais.includes(p.id) ? {
                 ...p,
-                status: 'Concluído',
-                enviado: true
+                isStatusPedidoConcluido: true,
+                nrContadorMudancas: ((p as any).nrContadorMudancas || 0) + 1
             } : p));
 
             setSelecionados(prev => prev.filter(id => !selecionadosAtuais.includes(id)));
@@ -172,13 +175,13 @@ export default function TabDigital({
         } finally {
             setProcessandoMassa(false);
         }
-    };
+    }, [selecionados, idsVisiveisNestaAba, db, lojistaIdApp, setLocalPedidos, setSelecionados]);
 
     useEffect(() => {
         if (registrarFuncaoConcluirDigital) {
             registrarFuncaoConcluirDigital(concluirDigitalEmLote);
         }
-    }, [selecionados, pedidosDigitais, processandoMassa]);
+    }, [registrarFuncaoConcluirDigital, concluirDigitalEmLote]);
 
     return (
         <div style={{ background: theme.bgCard, color: theme.textMain, padding: '16px', borderRadius: '12px', border: `1px solid ${theme.border}` }}>
@@ -277,7 +280,6 @@ export default function TabDigital({
                         const clienteObj = (pedido as any).dsCliente || {};
                         const nomeCliente = typeof clienteObj === 'object' ? (clienteObj.nmNomeCliente || clienteObj.nome || "Cliente") : (clienteObj || "Cliente");
                         
-                        // 🌟 Número do pedido direto da raiz
                         const numPedidoFormatado = String((pedido as any).nrNumeroPedido ?? (pedido as any).numeroPedido ?? (pedido as any).numero ?? (pedido as any).id?.slice(-4) ?? "").padStart(5, '0');
                         
                         const expandido = !!pedidosExpandidos[pedido.id];
@@ -327,7 +329,6 @@ export default function TabDigital({
                                             />
                                             <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', width: '70px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
 
-                                            {/* 🌟 Badge de Origem PC */}
                                             <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: ((pedido as any).dsOrigemPedido || (pedido as any).origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
                                                 {(pedido as any).dsOrigemPedido || (pedido as any).origemPedido || 'Site'}
                                             </span>
@@ -355,7 +356,6 @@ export default function TabDigital({
                                                 />
                                                 <span style={{ fontWeight: '800', color: theme.primary, fontSize: '15px', flexShrink: 0 }}>#{numPedidoFormatado}</span>
 
-                                                {/* 🌟 Badge de Origem Mobile */}
                                                 <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 5px', borderRadius: '4px', backgroundColor: ((pedido as any).dsOrigemPedido || (pedido as any).origemPedido || "").toLowerCase() === 'pdv' ? '#8b5cf6' : '#3b82f6', color: '#fff', textTransform: 'uppercase', flexShrink: 0 }}>
                                                     {(pedido as any).dsOrigemPedido || (pedido as any).origemPedido || 'Site'}
                                                 </span>
@@ -399,7 +399,6 @@ export default function TabDigital({
                                     <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
                                         <div className="grid-expandido" style={localStyles.gridExpandido}>
 
-                                            {/* BLOCO 1: PERSONALIZAÇÃO */}
                                             <div style={{ ...localStyles.caixaPersonalizacao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                 <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '4px', fontSize: '12px' }}>
                                                     ✨ Personalização:
@@ -425,7 +424,6 @@ export default function TabDigital({
                                                 )}
                                             </div>
 
-                                            {/* BLOCO 2: ENDEREÇO */}
                                             <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                 <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço</div>
                                                 <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
@@ -437,7 +435,6 @@ export default function TabDigital({
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 3: LOGÍSTICA */}
                                             <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                 <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
                                                 <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
@@ -448,7 +445,6 @@ export default function TabDigital({
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 4: ETIQUETA */}
                                             <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                 <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🏷️ Etiqueta</div>
                                                 <div style={{ fontSize: '11px', color: theme.textSec, fontStyle: 'italic', padding: '4px 0' }}>
@@ -456,12 +452,9 @@ export default function TabDigital({
                                                 </div>
                                             </div>
 
-                                            {/* BLOCO 5: PAGAMENTO */}
                                             <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                 <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                 <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-
-                                                    {/* 🌟 Exibição da Forma de Pagamento salva no pedido */}
                                                     <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                         <strong>Forma de Pagamento:</strong> {
                                                             fin.dsFormaPagamentoCarrinho
@@ -493,7 +486,6 @@ export default function TabDigital({
                 )}
             </div>
 
-            {/* CONTROLES DE PAGINAÇÃO (RODAPÉ PADRONIZADO COM ANTERIOR E PRÓXIMA) */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${theme.border}`, fontSize: "12px" }}>
                 <span style={{ color: theme.textSec }}>
                     Página <strong>{paginaAtual}</strong> de <strong>{totalPaginas}</strong> (Total: {pedidosDigitais.length} pedidos)
@@ -544,17 +536,14 @@ export default function TabDigital({
 }
 
 const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }: any) => {
-    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO ITEM RESUMIDO
     const { theme } = useTheme();
 
     const selo = obterSeloItem(item, pedidoLogistica);
     const qtd = item.nrQuantidadeProduto || item.quantidade || item.qty || 1;
 
-    // 🌟 Captura o preço unitário do item padronizado
     const precoUnitario = Number(item.vlPrecoProduto || item.preco || item.valor || item.valorUnitario || 0);
     const valorTotalItem = precoUnitario * qtd;
 
-    // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido
     const fotoUrl = useMemo(() => {
         return extrairFotoDoItem(item);
     }, [item]);
@@ -581,7 +570,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
                                 Variação: {item.dsVariacaoProduto}
                             </span>
                         )}
-                        {/* 🌟 Exibição padronizada do valor unitário e total do item */}
                         <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary }}>
                              R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
                         </span>
@@ -606,11 +594,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
         </div>
     );
 });
-
-const styles: { [key: string]: React.CSSProperties } = {
-    paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
-    pageBtn: { padding: '8px 16px', cursor: 'pointer', border: '1px solid', borderRadius: '4px', fontWeight: 'bold' }
-};
 
 const localStyles: { [key: string]: React.CSSProperties } = {
     cardContainer: { borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },

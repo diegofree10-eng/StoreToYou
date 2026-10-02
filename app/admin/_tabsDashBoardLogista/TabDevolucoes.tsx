@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { FiSearch, FiChevronLeft, FiChevronRight, FiList, FiBarChart2, FiChevronDown, FiChevronUp, FiUser } from "react-icons/fi";
 import { Pedido } from "@/types/pedido";
 
@@ -34,9 +34,8 @@ export const TabDevolucoes = ({
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [pedidoExpandidoId, setPedidoExpandidoId] = useState<string | null>(null);
 
-  // Estados dos dados consolidados vindos da Cloud Function
+  // Estados dos dados consolidados vindos da Cloud Function (Leitura Única Otimizada)
   const [estatisticasDevolucoes, setEstatisticasDevolucoes] = useState<any>(null);
-  const [itensRankConsolidado, setItensRankConsolidado] = useState<any[]>([]);
   const [loadingCloud, setLoadingCloud] = useState(true);
 
   // 🗓️ Chave do mês atual idêntica à gerada pela Cloud Function (ex: "agosto_2026")
@@ -47,13 +46,13 @@ export const TabDevolucoes = ({
   ];
   const chaveMesAtual = `${mesesNomes[dataHoje.getMonth()]}_${dataHoje.getFullYear()}`;
 
-  // 1. Busca os dados consolidados nos caminhos exatos da Cloud Function
+  // 1. Busca os dados consolidados em uma única chamada de leitura (Custo Zero / Otimizado)
   useEffect(() => {
     if (!uid) return;
     const carregarDadosCloudFunction = async () => {
       setLoadingCloud(true);
       try {
-        // Documento de sumário de devoluções: lojistas/{lojistaId}/dashboard_stats/devolucoes_{chave}
+        // Documento único de sumário de devoluções: lojistas/{lojistaId}/dashboard_stats/devolucoes_{chave}
         const docRef = doc(db, "lojistas", uid, "dashboard_stats", `devolucoes_${chaveMesAtual}`);
         const snap = await getDoc(docRef);
         if (snap.exists()) {
@@ -61,13 +60,6 @@ export const TabDevolucoes = ({
         } else {
           setEstatisticasDevolucoes(null);
         }
-
-        // Subcoleção de itens devolvidos: lojistas/{lojistaId}/dashboard_stats/devolucoes_{chave}/itens_devolvidos
-        const itensRef = collection(db, "lojistas", uid, "dashboard_stats", `devolucoes_${chaveMesAtual}`, "itens_devolvidos");
-        const itensSnap = await getDocs(itensRef);
-        const listaItens = itensSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setItensRankConsolidado(listaItens);
-
       } catch (err) {
         console.error("Erro ao buscar estatísticas de devolução da Cloud Function:", err);
       } finally {
@@ -111,6 +103,13 @@ export const TabDevolucoes = ({
       motivo,
       quantidade: Number(qtd),
     })).sort((a, b) => b.quantidade - a.quantidade);
+  }, [estatisticasDevolucoes]);
+
+  // Extrai o array de itens devolvidos diretamente do documento central
+  const itensRankConsolidado = useMemo(() => {
+    if (!estatisticasDevolucoes?.itensDevolvidos || !Array.isArray(estatisticasDevolucoes.itensDevolvidos)) return [];
+    // Ordena do maior prejuízo/quantidade para o menor
+    return [...estatisticasDevolucoes.itensDevolvidos].sort((a, b) => b.total - a.total);
   }, [estatisticasDevolucoes]);
 
   const formatarNomeMotivo = (motivo: string) => {
@@ -323,7 +322,7 @@ export const TabDevolucoes = ({
                   )}
                 </div>
 
-                {/* PRODUTOS DEVOLVIDOS DA SUBCOLEÇÃO */}
+                {/* PRODUTOS DEVOLVIDOS VINDO DO ARRAY DO DOCUMENTO */}
                 <div style={{ padding: '16px', borderRadius: '14px', background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
                   <h4 style={{ margin: '0 0 14px 0', fontSize: '14px', fontWeight: '700', color: theme.textMain }}>
                     ⚠️ Produtos com Maior Taxa de Retorno
@@ -345,7 +344,7 @@ export const TabDevolucoes = ({
                       ))}
                     </div>
                   ) : (
-                    <p style={{ fontSize: '12px', color: theme.textSec, margin: 0, padding: '20px 0', textAlign: 'center' }}>Nenhum produto na subcoleção.</p>
+                    <p style={{ fontSize: '12px', color: theme.textSec, margin: 0, padding: '20px 0', textAlign: 'center' }}>Nenhum produto registrado no mês.</p>
                   )}
                 </div>
 

@@ -64,10 +64,14 @@ export default function TabPedidosConcluidos({
     const pedidosConcluidos = useMemo(() => {
         return pedidos.filter(p => {
             if (!p) return false;
+            
+            // ✨ Filtragem baseada no novo booleano estrito isStatusPedidoConcluido
+            const isConcluidoBooleano = (p as any).isStatusPedidoConcluido === true;
+
             const statusGeral = String(p.status || '').trim().toLowerCase();
             const statusProd = String((p as any).StatusProducao?.dsStatusProducao || '').trim().toLowerCase();
 
-            const isConcluido =
+            const isConcluidoLegado =
                 statusGeral === 'concluído' ||
                 statusGeral === 'concluido' ||
                 statusGeral === 'enviado' ||
@@ -75,7 +79,7 @@ export default function TabPedidosConcluidos({
                 statusProd === 'concluido' ||
                 (p as any).enviado === true;
 
-            return isConcluido;
+            return isConcluidoBooleano || isConcluidoLegado;
         });
     }, [pedidos]);
 
@@ -296,9 +300,7 @@ export default function TabPedidosConcluidos({
                                         <ItemResumido
                                             key={idx}
                                             item={item}
-                                            lojistaId={lojistaIdApp}
                                             pedidoLogistica={pedidoLogistica}
-                                            db={db}
                                             pedido={pedido}
                                             isFirstItem={idx === 0}
                                         />
@@ -306,21 +308,22 @@ export default function TabPedidosConcluidos({
                                 </div>
 
                                 {expandido && (() => {
+                                    // 📦 Tratamento padronizado para as embalagens
                                     const embalagemData = (pedido as any).Embalagem || (pedido as any).embalagemRecomendada || {};
 
                                     const recomendada = embalagemData.recomendada || embalagemData;
                                     const escolhida = embalagemData.escolhida || null;
 
-                                    const modeloRecomendado = recomendada.dsModeloEmbalagemRecomendado || recomendada.nomeInsumo || recomendada.nome || "Não calculada";
+                                    const modeloRecomendado = recomendada.dsModeloEmbalagemRecomendado || recomendada.dsModeloEmbalagemEscolhida || recomendada.nomeInsumo || recomendada.nome || "Não calculada";
                                     const tipoRecomendado = recomendada.dsTipoEmbalagem || recomendada.tipo || "-";
-                                    const custoRecomendado = Number(recomendada.vlCustoEmbalagemRecomendado || recomendada.custo || 0);
 
                                     const modeloEscolhido = escolhida?.dsModeloEmbalagemEscolhida || escolhida?.dsModeloEmbalagemRecomendado || escolhida?.nome || "";
                                     const tipoEscolhido = escolhida?.dsTipoEmbalagem || escolhida?.tipo || "";
-                                    const custoEscolhido = Number(escolhida?.vlCustoEmbalagemEscolhida || escolhida?.vlCustoEmbalagemRecomendado || escolhida?.custo || 0);
 
                                     return (
                                         <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
+                                            
+                                            {/* 📦 BARRA DE EMBALAGEM PADRONIZADA (Sem valores em dinheiro) */}
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: '15px' }}>📦</span>
@@ -339,6 +342,7 @@ export default function TabPedidosConcluidos({
                                                     )}
                                                 </div>
                                             </div>
+
                                             <div className="grid-expandido" style={localStyles.gridExpandido}>
                                                 <div style={{ ...localStyles.caixaPersonalizacao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                     <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
@@ -366,7 +370,7 @@ export default function TabPedidosConcluidos({
                                                 </div>
 
                                                 <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
+                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de Entrega</div>
                                                     <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
                                                         <strong>Rua:</strong> {(endereco as any).dsRuaCliente || (endereco as any).rua || '-'}<br />
                                                         <strong>Número:</strong> {(endereco as any).dsNumeroCliente || (endereco as any).numero || '-'}<br />
@@ -383,6 +387,7 @@ export default function TabPedidosConcluidos({
                                                         <div><strong>Método de Pagamento:</strong> {fin.dsMetodoPagamento || fin.metodo || 'PIX'}</div>
                                                         <div><strong>Transportadora ID:</strong> {fin.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || '-'}</div>
                                                         <div><strong>Serviço:</strong> {(pedido as any)?.logistica?.dsServico || etiquetaData.servicoVinculado || pedido.servicoVinculado || 'Retirar na Loja'}</div>
+                                                        <div><strong>Valor:</strong> R$ {Number(etiquetaData.valorCobrado ?? etiquetaData.vlValorCobrado ?? 0).toFixed(2).replace('.', ',')}</div>
                                                     </div>
                                                 </div>
 
@@ -396,7 +401,6 @@ export default function TabPedidosConcluidos({
                                                 <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
                                                     <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
                                                     <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-
                                                         <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                             <strong>Forma de Pagamento:</strong> {
                                                                 fin.dsFormaPagamentoCarrinho
@@ -404,15 +408,14 @@ export default function TabPedidosConcluidos({
                                                                     : 'PIX'
                                                             }
                                                         </div>
-
                                                         <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
-                                                            <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
+                                                            <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}
+                                                        </div>
                                                         <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
                                                         <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
                                                             <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
                                                         </div>
                                                         <div><strong>Cupom:</strong> {cupomStr}</div>
-
                                                         <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
                                                             <strong>Total:</strong> <span style={{ color: theme.primary, fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
                                                         </div>
@@ -485,11 +488,9 @@ const ItemResumido = React.memo(({ item, pedidoLogistica }: any) => {
     const selo = obterSeloItem(item, pedidoLogistica);
     const qtd = item.nrQuantidadeProduto || item.quantidade || item.qty || 1;
 
-    // 🌟 Captura o preço unitário do item padronizado
     const precoUnitario = Number(item.vlPrecoProduto || item.preco || item.valor || item.valorUnitario || 0);
     const valorTotalItem = precoUnitario * qtd;
 
-    // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido
     const fotoUrl = useMemo(() => {
         return extrairFotoDoItem(item);
     }, [item]);
@@ -514,7 +515,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica }: any) => {
                                 Variação: {item.dsVariacaoProduto}
                             </span>
                         )}
-                        {/* 🌟 Exibição padronizada do valor unitário e total do item */}
                         <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary }}>
                             R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
                         </span>
@@ -524,11 +524,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica }: any) => {
         </div>
     );
 });
-
-const styles: { [key: string]: React.CSSProperties } = {
-    paginationContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', marginTop: '10px' },
-    pageBtn: { padding: '8px 16px', cursor: 'pointer', border: '1px solid', borderRadius: '4px', fontWeight: 'bold' }
-};
 
 const localStyles: { [key: string]: React.CSSProperties } = {
     cardContainer: { borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },

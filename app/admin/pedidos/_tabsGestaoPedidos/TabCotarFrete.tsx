@@ -247,29 +247,29 @@ export default function TabCotarFrete({
         }
     }, [selecionados, pedidosParaCotar]);
 
-    const selecionarEtiquetaManual = async (opcaoFrete: any) => {
+   const selecionarEtiquetaManual = async (opcaoFrete: any) => {
         if (!pedidoSelecionadoParaFrete) return;
 
         try {
             const valorFreteNum = Number(opcaoFrete.price || 0);
             const prazoEntregaNum = Number(opcaoFrete.delivery_time || opcaoFrete.prazo || 0);
-            const transportadoraIdStr = String(opcaoFrete.id || "");
+            const transportadoraIdNum = Number(opcaoFrete.id || 0); // 🌟 Declarada corretamente aqui
             const nomeTransportadora = String(opcaoFrete.name || "");
 
             await fetch(`/api/frete/selecionar`, {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lojistaId: lojistaIdApp, pedidoId: pedidoSelecionadoParaFrete.id, transportadoraId: opcaoFrete.id, nome: nomeTransportadora })
+                body: JSON.stringify({ lojistaId: lojistaIdApp, pedidoId: pedidoSelecionadoParaFrete.id, transportadoraId: transportadoraIdNum, nome: nomeTransportadora })
             });
 
             await alterarStatusPedido(pedidoSelecionadoParaFrete.id, "pronto", {
                 "Cotacao.dsMetodoPagamentoCotado": nomeTransportadora,
                 "Cotacao.dsServicoCotado": nomeTransportadora,
                 "Cotacao.dsFormaPagamentoEtiquetaCotado": nomeTransportadora,
-                "Cotacao.dsTransportadoraIdCotado": transportadoraIdStr,
+                "Cotacao.dsTransportadoraIdCotado": transportadoraIdNum,
                 "Cotacao.prazoEntregaCotado": prazoEntregaNum,
                 "Cotacao.vlFreteCotado": valorFreteNum,
-                "logistica.dsTransportadoraId": transportadoraIdStr,
+                "logistica.dsTransportadoraId": transportadoraIdNum,
                 "logistica.servico": nomeTransportadora
             });
 

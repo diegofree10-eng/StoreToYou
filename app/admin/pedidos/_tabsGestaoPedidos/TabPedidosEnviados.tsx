@@ -1,8 +1,8 @@
 // components/_tabsGestaoPedidos/TabEnviados.tsx
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Pedido } from '@/types/pedido';
-
+import { doc, updateDoc, increment } from 'firebase/firestore'; // 🌟 1. Importado o 'increment' aqui
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
@@ -61,11 +61,14 @@ export default function TabPedidosEnviados({
         return (pedidos || []).filter(p => {
             if (!p) return false;
 
+            // ✨ Filtro estrito baseado no booleano isStatusPedidoConcluido (se já concluído, sai desta aba)
+            const isConcluido = (p as any).isStatusPedidoConcluido === true;
+            if (isConcluido) return false;
+
             const statusGeral = String(p.dsStatusPedido || p.status || '').trim().toLowerCase();
             const statusProd = String((p as any).StatusProducao?.dsStatusProducao || '').trim().toLowerCase();
             const isConcluidoFlag = (p as any).enviado === true && statusGeral === 'concluído';
 
-            // 🛑 Bloqueio absoluto: Se o pedido estiver concluído por qualquer via, remove imediatamente da aba de enviados
             if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusProd === 'concluído' || statusProd === 'concluido' || isConcluidoFlag) {
                 return false;
             }
@@ -101,46 +104,58 @@ export default function TabPedidosEnviados({
         alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
     };
 
-    const executarConclusao = (pedidoAlvo: Pedido) => {
-        mudarStatusDireto(pedidoAlvo, 'Concluído');
+    const executarConclusao = async (pedidoAlvo: Pedido) => {
+        try {
+            if (db && lojistaIdApp && pedidoAlvo?.id) {
+                const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", pedidoAlvo.id);
+                // ✨ Atualização utilizando o booleano restrito e incrementando o contador atômico
+                await updateDoc(pedidoRef, {
+                    isStatusPedidoConcluido: true,
+                    "StatusProducao.dsStatusProducao": "Concluído",
+                    nrContadorMudancas: increment(1) // 🌟 2. Adicionado o contador incrementando +1
+                });
+            }
 
-        if (setLocalPedidos) {
-            setLocalPedidos(prev => prev.map(p => {
-                if (p.id === pedidoAlvo.id) {
-                    return {
-                        ...p,
-                        dsStatusPedido: 'Concluído',
-                        enviado: true,
-                        StatusProducao: {
-                            ...(p as any).StatusProducao,
-                            dsStatusProducao: 'Concluído',
-                            isConcluido: true
-                        }
-                    };
-                }
-                return p;
-            }));
+            if (setLocalPedidos) {
+                setLocalPedidos(prev => prev.map(p => {
+                    if (p.id === pedidoAlvo.id) {
+                        return {
+                            ...p,
+                            isStatusPedidoConcluido: true,
+                            nrContadorMudancas: ((p as any).nrContadorMudancas || 0) + 1
+                        };
+                    }
+                    return p;
+                }));
+            }
+        } catch (e: any) {
+            alert("Erro ao concluir pedido: " + e.message);
         }
     };
 
-    const confirmarRecebimentoEmLote = () => {
+    const confirmarRecebimentoEmLote = useCallback(async () => {
         const aptos = pedidosEnviados.filter(p => (selecionados || []).includes(p.id));
         if (aptos.length === 0) return alert("Nenhum pedido selecionado.");
 
         if (!confirm(`Deseja realmente marcar ${aptos.length} pedido(s) como entregue/concluído?`)) return;
 
-        for (const pedido of aptos) {
-            executarConclusao(pedido);
-        }
+        try {
+            for (const pedido of aptos) {
+                await executarConclusao(pedido);
+            }
 
-        setSelecionados(prev => prev.filter(id => !idsVisiveisNestaAba.includes(id)));
-    };
+            setSelecionados(prev => (prev || []).filter(id => !idsVisiveisNestaAba.includes(id)));
+            alert("✅ Pedidos enviados concluídos com sucesso!");
+        } catch (e: any) {
+            alert("Erro ao concluir pedidos em lote: " + e.message);
+        }
+    }, [pedidosEnviados, selecionados, idsVisiveisNestaAba, db, lojistaIdApp, setLocalPedidos, setSelecionados]);
 
     useEffect(() => {
         if (registrarFuncaoConfirmarRecebimento) {
             registrarFuncaoConfirmarRecebimento(confirmarRecebimentoEmLote);
         }
-    }, [selecionados, pedidosEnviados]);
+    }, [registrarFuncaoConfirmarRecebimento, confirmarRecebimentoEmLote]);
 
     return (
         <div style={{ background: theme.bgCard, color: theme.textMain, padding: '16px', borderRadius: '12px', border: `1px solid ${theme.border}` }}>
@@ -348,133 +363,165 @@ export default function TabPedidosEnviados({
                                     ))}
                                 </div>
 
-                                {expandido && (
-                                    <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
-                                        <div className="grid-expandido" style={localStyles.gridExpandido}>
-                                            <div style={{ ...localStyles.caixaPersonalizacao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                                                <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
-                                                    ✨ Personalização:
-                                                </div>
-                                                {temPersonalizacao ? (
-                                                    pedido.itens.map((item: any, idx: number) => {
-                                                        const resp = item.dsRespostasPersonalizadasProduto || item.respostasFormatadas || item.personalizacao;
-                                                        if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
-                                                        return (
-                                                            <div key={idx} style={{ fontSize: '12px', color: theme.textMain, lineHeight: '1.4', marginBottom: '4px' }}>
-                                                                {typeof resp === 'object' ? (
-                                                                    Object.entries(resp).map(([k, v]) => (
-                                                                        <div key={k}>{k}: <strong>{String(v)}</strong></div>
-                                                                    ))
-                                                                ) : (
-                                                                    <div>{String(resp)}</div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <div style={{ fontSize: '12px', color: theme.textSec, fontStyle: 'italic' }}>Este pedido não tem personalização.</div>
-                                                )}
-                                            </div>
+                                {expandido && (() => {
+                                    const embalagemData = (pedido as any).Embalagem || (pedido as any).embalagemRecomendada || {};
 
-                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
-                                                <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-                                                    <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
-                                                    <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
-                                                    <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
-                                                    <strong>Cidade:</strong> {endereco.dsCidadeCliente || endereco.cidade || '-'}&nbsp;&nbsp;<strong>UF:</strong> {endereco.dsUfCliente || endereco.uf || '-'}<br />
-                                                    <strong>CEP:</strong> {endereco.dsCepCliente || endereco.cep || '-'}
-                                                </div>
-                                            </div>
+                                    const recomendada = embalagemData.recomendada || embalagemData;
+                                    const escolhida = embalagemData.escolhida || null;
 
-                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
-                                                <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-                                                    {!precisaFrete ? (
-                                                        <div style={{ color: theme.textSec, fontStyle: 'italic' }}>Pedido sem Frete</div>
-                                                    ) : isRetirada ? (
-                                                        <div>
-                                                            <div><strong>Forma:</strong> Retirada na Loja</div>
-                                                            <div><strong>Status:</strong> {pedidoLogistica.dsServico || pedidoLogistica.dsMetodoPagamento || "Retirar na Loja (Grátis)"}</div>
-                                                        </div>
-                                                    ) : isDigital ? (
-                                                        <div>
-                                                            <div><strong>Forma:</strong> Digital</div>
-                                                            <div><strong>Status:</strong> Envio por E-mail</div>
-                                                        </div>
-                                                    ) : (pedido.financeiro?.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || etiquetaData.isEtiquetaGerada) ? (
-                                                        <div>
-                                                            <div><strong>Método:</strong> {cotacao.dsServicoCotado || pedidoLogistica.dsServico || "Definida"}</div>
-                                                            <div><strong>Valor:</strong> R$ {Number(cotacao.vlFreteCotado ?? pedido.financeiro?.vlFrete ?? 0).toFixed(2).replace('.', ',')}</div>
-                                                            <div><strong>Prazo:</strong> {cotacao.nrPrazoEntregaCotado ?? 0} dias</div>
-                                                        </div>
-                                                    ) : (
-                                                        <div>
-                                                            <div style={{ color: '#d97706', marginBottom: '6px' }}>Precisa Cotar Frete</div>
-                                                        </div>
+                                    const modeloRecomendado = recomendada.dsModeloEmbalagemRecomendado || recomendada.dsModeloEmbalagemEscolhida || recomendada.nomeInsumo || recomendada.nome || "Não calculada";
+                                    const tipoRecomendado = recomendada.dsTipoEmbalagem || recomendada.tipo || "-";
+
+                                    const modeloEscolhido = escolhida?.dsModeloEmbalagemEscolhida || escolhida?.dsModeloEmbalagemRecomendado || escolhida?.nome || "";
+                                    const tipoEscolhido = escolhida?.dsTipoEmbalagem || escolhida?.tipo || "";
+
+                                    return (
+                                        <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
+                                            
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <span style={{ fontSize: '15px' }}>📦</span>
+                                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textMain }}>Embalagem Recomendada:</span>
+                                                    <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary, backgroundColor: theme.inputBg, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border}` }}>
+                                                        {modeloRecomendado} ({String(tipoRecomendado).replace('_', ' ')})
+                                                    </span>
+
+                                                    {modeloEscolhido && modeloEscolhido !== modeloRecomendado && (
+                                                        <>
+                                                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.textSec, marginLeft: '8px' }}>| Escolhida:</span>
+                                                            <span style={{ fontSize: '12px', fontWeight: '600', color: '#16a34a', backgroundColor: '#e6f4ea', padding: '2px 8px', borderRadius: '4px', border: '1px solid #34a853' }}>
+                                                                {modeloEscolhido} ({String(tipoEscolhido).replace('_', ' ')})
+                                                            </span>
+                                                        </>
                                                     )}
                                                 </div>
                                             </div>
 
-                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🏷️ Rastreio e Ação</div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                    <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
-                                                        <div><b>Código Rastreio:</b> {codigoRastreio}</div>
-                                                        {codigoRastreio !== "Indisponível" && (
-                                                            <a href={linkRastreio} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px', fontWeight: 'bold' }}>
-                                                                🔍 Rastrear Envio
-                                                            </a>
-                                                        )}
-                                                        {etiquetaData.urlEtiqueta || (pedido as any).urlEtiqueta ? (
-                                                            <a href={etiquetaData.urlEtiqueta || (pedido as any).urlEtiqueta} target="_blank" rel="noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px' }}>
-                                                                Ver Etiqueta PDF
-                                                            </a>
-                                                        ) : null}
+                                            <div className="grid-expandido" style={localStyles.gridExpandido}>
+                                                <div style={{ ...localStyles.caixaPersonalizacao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                    <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '6px', fontSize: '13px' }}>
+                                                        ✨ Personalização:
                                                     </div>
+                                                    {temPersonalizacao ? (
+                                                        pedido.itens.map((item: any, idx: number) => {
+                                                            const resp = item.dsRespostasPersonalizadasProduto || item.respostasFormatadas || item.personalizacao;
+                                                            if (!resp || (typeof resp === 'object' && Object.keys(resp).length === 0)) return null;
+                                                            return (
+                                                                <div key={idx} style={{ fontSize: '12px', color: theme.textMain, lineHeight: '1.4', marginBottom: '4px' }}>
+                                                                    {typeof resp === 'object' ? (
+                                                                        Object.entries(resp).map(([k, v]) => (
+                                                                            <div key={k}>{k}: <strong>{String(v)}</strong></div>
+                                                                        ))
+                                                                    ) : (
+                                                                        <div>{String(resp)}</div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <div style={{ fontSize: '12px', color: theme.textSec, fontStyle: 'italic' }}>Este pedido não tem personalização.</div>
+                                                    )}
+                                                </div>
 
-                                                    <div style={{ marginTop: '6px' }}>
-                                                        <button onClick={() => executarConclusao(pedido)} style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>
-                                                            ✅ Marcar como Entregue
-                                                        </button>
+                                                <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>📍 Endereço de entrega </div>
+                                                    <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
+                                                        <strong>Rua:</strong> {endereco.dsRuaCliente || endereco.rua || '-'}<br />
+                                                        <strong>Número:</strong> {endereco.dsNumeroCliente || endereco.numero || '-'}<br />
+                                                        <strong>Bairro:</strong> {endereco.dsBairroCliente || endereco.bairro || '-'}<br />
+                                                        <strong>Cidade:</strong> {endereco.dsCidadeCliente || endereco.cidade || '-'}&nbsp;&nbsp;<strong>UF:</strong> {endereco.dsUfCliente || endereco.uf || '-'}<br />
+                                                        <strong>CEP:</strong> {endereco.dsCepCliente || endereco.cep || '-'}
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
-                                                <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
-                                                <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
-                                                    <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
-                                                        <strong>Forma de Pagamento:</strong> {
-                                                            fin.dsFormaPagamentoCarrinho
-                                                                ? fin.dsFormaPagamentoCarrinho.replace('_', ' ').toUpperCase()
-                                                                : 'PIX'
-                                                        }
+                                                <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🚚 Logística</div>
+                                                    <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
+                                                        {!precisaFrete ? (
+                                                            <div style={{ color: theme.textSec, fontStyle: 'italic' }}>Pedido sem Frete</div>
+                                                        ) : isRetirada ? (
+                                                            <div>
+                                                                <div><strong>Forma:</strong> Retirada na Loja</div>
+                                                                <div><strong>Status:</strong> {pedidoLogistica.dsServico || pedidoLogistica.dsMetodoPagamento || "Retirar na Loja (Grátis)"}</div>
+                                                            </div>
+                                                        ) : isDigital ? (
+                                                            <div>
+                                                                <div><strong>Forma:</strong> Digital</div>
+                                                                <div><strong>Status:</strong> Envio por E-mail</div>
+                                                            </div>
+                                                        ) : (pedido.financeiro?.dsTransportadoraId || cotacao.dsTransportadoraIdCotado || etiquetaData.isEtiquetaGerada) ? (
+                                                            <div>
+                                                                <div><strong>Método:</strong> {cotacao.dsServicoCotado || pedidoLogistica.dsServico || "Definida"}</div>
+                                                                <div><strong>Valor:</strong> R$ {Number(etiquetaData.valorCobrado ?? etiquetaData.vlValorCobrado ?? 0).toFixed(2).replace('.', ',')}</div>
+                                                                <div><strong>Prazo:</strong> {cotacao.nrPrazoEntregaCotado ?? 0} dias</div>
+                                                            </div>
+                                                        ) : (
+                                                            <div>
+                                                                <div style={{ color: '#d97706', marginBottom: '6px' }}>Precisa Cotar Frete</div>
+                                                            </div>
+                                                        )}
                                                     </div>
+                                                </div>
 
-                                                    <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
-                                                        <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
-                                                    <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
-                                                    <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
-                                                        <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+                                                <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '4px', fontSize: '12px' }}>🏷️ Rastreio e Ação</div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                        <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
+                                                            <div><b>Código Rastreio:</b> {codigoRastreio}</div>
+                                                            {codigoRastreio !== "Indisponível" && (
+                                                                <a href={linkRastreio} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px', fontWeight: 'bold' }}>
+                                                                    🔍 Rastrear Envio
+                                                                </a>
+                                                            )}
+                                                            {etiquetaData.urlEtiqueta || (pedido as any).urlEtiqueta ? (
+                                                                <a href={etiquetaData.urlEtiqueta || (pedido as any).urlEtiqueta} target="_blank" rel="noreferrer" style={{ color: '#2563eb', display: 'block', marginTop: '2px' }}>
+                                                                    Ver Etiqueta PDF
+                                                                </a>
+                                                            ) : null}
+                                                        </div>
+
+                                                        <div style={{ marginTop: '6px' }}>
+                                                            <button onClick={() => executarConclusao(pedido)} style={{ width: '100%', padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>
+                                                                ✅ Marcar como Entregue
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <div><strong>Cupom:</strong> {cupomStr}</div>
+                                                </div>
 
-                                                    <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
-                                                        <strong>Total:</strong> <span style={{ color: theme.primary, fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
+                                                <div style={{ ...localStyles.caixaBlocoPadrao, backgroundColor: theme.bgCard, borderColor: theme.border }}>
+                                                    <div style={{ fontWeight: 'bold', color: theme.textMain, marginBottom: '6px', fontSize: '13px' }}>💳 Pagamento</div>
+                                                    <div style={{ fontSize: '11px', color: theme.textSec, lineHeight: '1.4' }}>
+                                                        <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
+                                                            <strong>Forma de Pagamento:</strong> {
+                                                                fin.dsFormaPagamentoCarrinho
+                                                                    ? fin.dsFormaPagamentoCarrinho.replace('_', ' ').toUpperCase()
+                                                                    : 'PIX'
+                                                            }
+                                                        </div>
+
+                                                        <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
+                                                            <strong>Subtotal:</strong> R$ {subtotalVal.toFixed(2).replace('.', ',')}</div>
+                                                        <div><strong>Frete:</strong> R$ {freteVal.toFixed(2).replace('.', ',')}</div>
+                                                        <div style={{ color: descontoVal > 0 ? '#16a34a' : 'inherit' }}>
+                                                            <strong>Desconto:</strong> {descontoVal > 0 ? `-R$ ${descontoVal.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+                                                        </div>
+                                                        <div><strong>Cupom:</strong> {cupomStr}</div>
+
+                                                        <div style={{ marginTop: '3px', borderTop: `1px solid ${theme.border}`, paddingTop: '3px' }}>
+                                                            <strong>Total:</strong> <span style={{ color: theme.primary, fontWeight: 'bold' }}>R$ {totalVal.toFixed(2).replace('.', ',')}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
                             </div>
                         );
                     })
                 )}
             </div>
 
-            {/* CONTROLES DE PAGINAÇÃO (RODAPÉ PADRONIZADO COM ANTERIOR E PRÓXIMA) */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${theme.border}`, fontSize: "12px" }}>
                 <span style={{ color: theme.textSec }}>
                     Página <strong>{paginaAtual}</strong> de <strong>{totalPaginas}</strong> (Total: {pedidosEnviados.length} pedidos)
@@ -524,18 +571,15 @@ export default function TabPedidosEnviados({
     );
 }
 
-const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }: any) => {
-    // 🌟 CONSUMINDO O TEMA GLOBALMENTE NO ITEM RESUMIDO
+const ItemResumido = React.memo(({ item, pedidoLogistica }: any) => {
     const { theme } = useTheme();
 
     const selo = obterSeloItem(item, pedidoLogistica);
     const qtd = item.nrQuantidadeProduto || item.quantidade || item.qty || 1;
 
-    // 🌟 Captura o preço unitário do item padronizado (compatível com 'vlPrecoProduto', 'preco', etc.)
     const precoUnitario = Number(item.vlPrecoProduto ?? item.preco ?? item.valor ?? item.valorUnitario ?? 0);
     const valorTotalItem = precoUnitario * qtd;
 
-    // 🚀 Lógica otimizada: Consome a foto diretamente do item salvo no pedido, sem consultas ao Firebase
     const fotoUrl = useMemo(() => {
         return extrairFotoDoItem(item);
     }, [item]);
@@ -560,7 +604,6 @@ const ItemResumido = React.memo(({ item, pedidoLogistica, pedido, isFirstItem }:
                                 Variação: {item.dsVariacaoProduto || item.variacao}
                             </span>
                         )}
-                        {/* 🌟 Exibição padronizada do valor unitário e total do item */}
                         <span style={{ fontSize: '12px', fontWeight: '600', color: theme.primary }}>
                             R$ {precoUnitario.toFixed(2).replace('.', ',')} un {qtd > 1 ? `(Total: R$ ${valorTotalItem.toFixed(2).replace('.', ',')})` : ''}
                         </span>

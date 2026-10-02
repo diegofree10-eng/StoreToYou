@@ -5,11 +5,12 @@ import { useTheme } from "@/context/ThemeContext";
 export default function PagamentosTab({
   config,
   setConfig,
-  masterLiberouMeioPagamento
+  masterLiberouMeioPagamento,
+  uid // 🚀 Adicionado para capturar o ID real do lojista vindo do componente pai
 }: any) {
   const { theme, isModoNoturno } = useTheme();
 
-  // Função auxiliar para atualizar o tipo de chave ou o valor da chave mantendo a estrutura
+  // Função auxiliar para atualizar o tipo de chave ou o valor da chave mantendo a estrutura Pix
   const handleChavePixChange = (campo: "tipo" | "valor", valor: string) => {
     const pagamentosAtual = config.pagamentos || {};
     
@@ -31,6 +32,55 @@ export default function PagamentosTab({
   const pixObj = typeof config.pagamentos?.dsChavePix === 'object' 
     ? config.pagamentos.dsChavePix 
     : { tipo: "telefone", valor: config.pagamentos?.dsChavePix || "" };
+
+  // Função que inicia o fluxo do Stripe Connect usando o uid correto
+  const iniciarConexaoStripe = async () => {
+    try {
+      // Prioriza o uid recebido por props; caso contrário, tenta extrair da URL
+      const lojistaId = uid || config?.id || config?.slug || window.location.pathname.split('/')[2]; 
+
+      if (!lojistaId) {
+        alert("Erro: ID da loja não encontrado para iniciar a conexão.");
+        return;
+      }
+
+      const response = await fetch('/api/checkout/stripe', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lojistaId })
+      });
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        alert("Erro no servidor ao gerar link da Stripe.");
+        return;
+      }
+
+      const data = await response.json();
+      
+      if (data.url) {
+        window.location.href = data.url; 
+      } else {
+        alert(data.error || "Erro ao iniciar conexão com a Stripe.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Erro de conexão com o servidor.");
+    }
+  };
+
+  const desconectarStripe = () => {
+    setConfig({
+      ...config,
+      pagamentos: {
+        ...config.pagamentos,
+        stripeConnectedAccountId: null,
+        dsStripe: { ...config.pagamentos?.dsStripe, ativo: false }
+      }
+    });
+  };
+
+  const isStripeConectado = !!config.pagamentos?.stripeConnectedAccountId;
 
   return (
     <section>
@@ -67,117 +117,58 @@ export default function PagamentosTab({
         </span>
       </div>
 
-      <h3 style={{ ...styles.h3, color: theme.textMain }}>Gateways de Checkout Ativos</h3>
+      <h3 style={{ ...styles.h3, color: theme.textMain }}>Gateway de Checkout Online</h3>
       <p style={{ ...styles.helpText, background: isModoNoturno ? theme.bgApp : '#f1f5f9', color: theme.textSec, borderLeft: `4px solid ${theme.primary}` }}>
-        Habilite as chaves do intermediador que você possui conta ativa. O recebimento online depende do seu plano contratado.
+        Conecte sua conta Stripe em poucos cliques para aceitar Cartão de Crédito e Google Pay de forma segura e automatizada.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {masterLiberouMeioPagamento("mercado_pago") && (
+        {masterLiberouMeioPagamento("stripe") && (
           <div style={{
-            background: config.pagamentos.dsMercadoPago?.ativo ? (isModoNoturno ? '#0c4a6e' : '#f0f9ff') : (isModoNoturno ? theme.bgApp : '#f8fafc'),
-            padding: '20px',
+            background: isStripeConectado ? (isModoNoturno ? '#31103f' : '#f5f3ff') : (isModoNoturno ? theme.bgApp : '#f8fafc'),
+            padding: '24px',
             borderRadius: '15px',
-            border: config.pagamentos.dsMercadoPago?.ativo ? '1px solid #009ee3' : `1px solid ${theme.border}`
+            border: isStripeConectado ? '1px solid #635bff' : `1px solid ${theme.border}`,
+            textAlign: 'center'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <b style={{ color: '#009ee3', fontSize: '13px' }}>MERCADO PAGO Checkout</b>
-              <input
-                type="checkbox"
-                checked={!!config.pagamentos.dsMercadoPago?.ativo}
-                onChange={e => setConfig({
-                  ...config,
-                  pagamentos: {
-                    ...config.pagamentos,
-                    dsMercadoPago: { ...config.pagamentos.dsMercadoPago, ativo: e.target.checked }
-                  }
-                })}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '15px' }}>
+              <b style={{ color: '#635bff', fontSize: '15px' }}>STRIPE CONNECT</b>
             </div>
 
-            {config.pagamentos.dsMercadoPago?.ativo && (
-              <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ ...styles.label, color: theme.textSec }}>Public Key</label>
-                <input
-                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                  value={config.pagamentos.dsMercadoPago.publicKey || ""}
-                  onChange={e => setConfig({
-                    ...config,
-                    pagamentos: {
-                      ...config.pagamentos,
-                      dsMercadoPago: { ...config.pagamentos.dsMercadoPago, publicKey: e.target.value }
-                    }
-                  })}
-                />
-                <label style={{ ...styles.label, color: theme.textSec }}>Access Token</label>
-                <input
-                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                  type="password"
-                  value={config.pagamentos.dsMercadoPago.accessToken || ""}
-                  onChange={e => setConfig({
-                    ...config,
-                    pagamentos: {
-                      ...config.pagamentos,
-                      dsMercadoPago: { ...config.pagamentos.dsMercadoPago, accessToken: e.target.value }
-                    }
-                  })}
-                />
+            {isStripeConectado ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+                <div style={{ background: '#ecfdf5', color: '#065f46', padding: '8px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 'bold' }}>
+                  ✅ Conta Conectada com Sucesso!
+                </div>
+                <span style={{ fontSize: '12px', color: theme.textSec }}>
+                  ID da Conta: <b>{config.pagamentos?.stripeConnectedAccountId}</b>
+                </span>
+                <button
+                  onClick={desconectarStripe}
+                  style={{
+                    background: '#fef2f2', color: '#ef4444', border: '1px solid #fee2e2',
+                    padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'
+                  }}
+                >
+                  Desconectar Conta
+                </button>
               </div>
-            )}
-          </div>
-        )}
-
-        {masterLiberouMeioPagamento("pagseguro") && (
-          <div style={{
-            background: config.pagamentos.dsPagSeguro?.ativo ? (isModoNoturno ? '#431407' : '#fdf8f5') : (isModoNoturno ? theme.bgApp : '#f8fafc'),
-            padding: '20px',
-            borderRadius: '15px',
-            border: config.pagamentos.dsPagSeguro?.ativo ? '1px solid #ff6c00' : `1px solid ${theme.border}`
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <b style={{ color: '#ff6c00', fontSize: '13px' }}>PAGSEGURO Checkout Transparente</b>
-              <input
-                type="checkbox"
-                checked={!!config.pagamentos.dsPagSeguro?.ativo}
-                onChange={e => setConfig({
-                  ...config,
-                  pagamentos: {
-                    ...config.pagamentos,
-                    dsPagSeguro: { ...config.pagamentos.dsPagSeguro, ativo: e.target.checked }
-                  }
-                })}
-              />
-            </div>
-
-            {config.pagamentos.dsPagSeguro?.ativo && (
-              <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ ...styles.label, color: theme.textSec }}>E-mail da Conta PagSeguro</label>
-                <input
-                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                  placeholder="exemplo@loja.com.br"
-                  value={config.pagamentos.dsPagSeguro.email || ""}
-                  onChange={e => setConfig({
-                    ...config,
-                    pagamentos: {
-                      ...config.pagamentos,
-                      dsPagSeguro: { ...config.pagamentos.dsPagSeguro, email: e.target.value }
-                    }
-                  })}
-                />
-                <label style={{ ...styles.label, color: theme.textSec }}>Token de Production PagSeguro</label>
-                <input
-                  style={{ ...styles.input, background: theme.bgApp, color: theme.textMain, border: `1px solid ${theme.border}` }}
-                  type="password"
-                  placeholder="Cole o token de contingência"
-                  value={config.pagamentos.dsPagSeguro.token || ""}
-                  onChange={e => setConfig({
-                    ...config,
-                    pagamentos: {
-                      ...config.pagamentos,
-                      dsPagSeguro: { ...config.pagamentos.dsPagSeguro, token: e.target.value }
-                    }
-                  })}
-                />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+                <p style={{ fontSize: '13px', color: theme.textSec, margin: 0 }}>
+                  Nenhuma conta vinculada no momento. Clique no botão abaixo para autorizar de forma segura.
+                </p>
+                <button
+                  onClick={iniciarConexaoStripe}
+                  style={{
+                    background: '#635bff', color: '#fff', border: 'none',
+                    padding: '12px 24px', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                    boxShadow: '0 4px 12px rgba(99, 91, 255, 0.3)'
+                  }}
+                >
+                  Conectar com a Stripe 🚀
+                </button>
               </div>
             )}
           </div>

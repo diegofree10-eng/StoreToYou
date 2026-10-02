@@ -1,7 +1,7 @@
 // app/admin/Sidebar.tsx
 "use client";
 import React, { useEffect, useState, useMemo } from "react";
-import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX, FiArchive, FiDollarSign, FiUsers, FiBarChart2, FiStar } from "react-icons/fi";
+import { FiPieChart, FiPackage, FiShoppingCart, FiSettings, FiLogOut, FiShield, FiX, FiArchive, FiDollarSign, FiUsers, FiBarChart2, FiStar, FiRefreshCw } from "react-icons/fi";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot, getDoc, updateDoc } from "firebase/firestore";
@@ -19,6 +19,11 @@ interface SidebarProps {
 
 export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobile, onCloseMobile, planoEfetivo, masterLiberou }: SidebarProps) {
   const [role, setRole] = useState<string | null>(null);
+  
+  // 🌟 Estados para identificar o perfil pelas novas flags booleanas
+  const [isMasterFlag, setIsMasterFlag] = useState(false);
+  const [isLojistaFlag, setIsLojistaFlag] = useState(false);
+
   const [lojistaId, setLojistaId] = useState<string | null>(null);
   const [novosPedidosCount, setNovosPedidosCount] = useState<number>(0);
   const [permissoesColaborador, setPermissoesColaborador] = useState<any | null>(null);
@@ -67,6 +72,10 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
 
         const userData = userDoc.data();
         setRole(userData.role);
+
+        // 🌟 Identificação precisa utilizando as novas flags booleanas (com fallback para role)
+        setIsMasterFlag(userData.isTipoContaMaster === true || userData.role === 'master');
+        setIsLojistaFlag(userData.isTipoContaLogista === true || userData.role === 'admin' || userData.role === 'lojista');
 
         const lojaIdReal = userData.lojaId;
         if (!lojaIdReal) return;
@@ -200,14 +209,30 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
     );
   }, [planoEfetivo, masterLiberou]);
 
-  // 🌟 Filtragem inteligente combinando Regras de Plano + Permissões do Colaborador
+  // 🌟 Validação reativa e blindada de Devoluções (baseada no plano configurado em TabPlanos)
+  const devolucoesLiberado = useMemo(() => {
+    if (typeof masterLiberou === "function") {
+      return masterLiberou("devolucoes");
+    }
+    return Boolean(
+      planoEfetivo?.devolucoes ??
+      planoEfetivo?.configs?.devolucoes ??
+      planoEfetivo?.dadosPlano?.devolucoes ??
+      false
+    );
+  }, [planoEfetivo, masterLiberou]);
+
+  // 🌟 Filtragem inteligente combinando Regras de Plano + Permissões do Colaborador (usando as novas flags)
   const menuItens = useMemo(() => {
     const itensBase = [
       { id: 'dash', label: 'Dashboard', icon: <FiPieChart />, permissaoKey: 'dash' },
       { id: 'produtos', label: 'Produtos', icon: <FiPackage />, permissaoKey: 'produtos' },
       { id: 'pedidos', label: 'Pedidos', icon: <FiShoppingCart />, badge: novosPedidosCount, permissaoKey: 'pedidos' },
       ...(pdvLiberado ? [{ id: 'pdv', label: 'PDV (Caixa)', icon: <FiDollarSign />, permissaoKey: 'pdv' }] : []),
-      { id: 'despesas', label: 'Despesas & Custos', icon: <FiDollarSign />, permissaoKey: 'despesas' },
+      
+      // 🌟 Exibe a opção de devoluções apenas se o plano do lojista contemplar o recurso
+      ...(devolucoesLiberado ? [{ id: 'devolucoes', label: 'Devoluções', icon: <FiRefreshCw />, permissaoKey: 'devolucoes' }] : []),
+
       ...(financeiroLiberado ? [{ id: 'financeiro', label: 'Financeiro', icon: <FiDollarSign />, permissaoKey: 'financeiro' }] : []),
       ...(colaboradoresLiberado ? [{ id: 'colaboradores', label: 'Colaboradores', icon: <FiUsers />, permissaoKey: 'colaboradores' }] : []),
       { id: 'estoque', label: 'Estoque', icon: <FiArchive />, permissaoKey: 'estoque' },
@@ -216,9 +241,9 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
       { id: 'config', label: 'Configurações', icon: <FiSettings />, permissaoKey: 'config' },
     ];
 
-    // Se for o dono/master ou admin do sistema, exibe tudo o que o plano libera
-    const isMasterOuAdmin = role === 'master' || role === 'admin' || !role;
-    if (isMasterOuAdmin && !isColaboradorLogado) {
+    // Se for o lojista dono da conta, master ou admin do sistema, exibe tudo o que o plano libera
+    const isDonoOuAdminPrincipal = isLojistaFlag || isMasterFlag || role === 'master' || role === 'admin' || !role;
+    if (isDonoOuAdminPrincipal && !isColaboradorLogado) {
       return itensBase;
     }
 
@@ -229,7 +254,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
       // Converte explicitamente para booleano para garantir que undefined/false bloqueiem o acesso
       return Boolean(permissoesColaborador[item.permissaoKey]) === true;
     });
-  }, [role, isColaboradorLogado, permissoesColaborador, pdvLiberado, colaboradoresLiberado, relatoriosLiberado, suporteLiberado, financeiroLiberado, novosPedidosCount]);
+  }, [role, isLojistaFlag, isMasterFlag, isColaboradorLogado, permissoesColaborador, pdvLiberado, devolucoesLiberado, colaboradoresLiberado, relatoriosLiberado, suporteLiberado, financeiroLiberado, novosPedidosCount]);
 
   const handleMudarTela = (id: string) => {
     if (typeof setTelaAtiva === 'function') {
@@ -284,7 +309,7 @@ export default function Sidebar({ telaAtiva, setTelaAtiva, onLogout, isOpenMobil
             </button>
           ))}
 
-          {role === 'master' && !isColaboradorLogado && (
+          {(isMasterFlag || role === 'master') && !isColaboradorLogado && (
             <button onClick={() => handleMudarTela('gestao-geral')} style={{
               ...styles.navBtn,
               marginTop: '10px',

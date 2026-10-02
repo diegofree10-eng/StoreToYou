@@ -17,10 +17,11 @@ import TabDenuncias from "./TabDenuncias";
 import TabFinanceiro from "./TabFinanceiro";
 import TabAparenciaLandPage from "./TabAparenciaLandPage";
 import TabHistoricoVersao from "./TabHistoricoVersao";
+import { TabSuporteMaster } from "./TabSuporteMaster"; // 🌟 Importando a aba de Suporte Master
 
 import {
   FiAward, FiUsers, FiTrendingUp, FiSettings,
-  FiMessageSquare, FiAlertTriangle, FiDollarSign, FiLayout, FiGitCommit
+  FiMessageSquare, FiAlertTriangle, FiDollarSign, FiLayout, FiGitCommit, FiHelpCircle
 } from "react-icons/fi";
 
 export default function PainelMasterFesta() {
@@ -152,6 +153,7 @@ export default function PainelMasterFesta() {
           { id: "FINANCEIRO", icon: <FiDollarSign />, label: "FINANCEIRO" },
           { id: "PLANOS", icon: <FiSettings />, label: "CONFIG PLANOS" },
           { id: "ASSINATURAS", icon: <FiAward />, label: "ASSINATURAS" },
+          { id: "SUPORTE", icon: <FiHelpCircle />, label: "SUPORTE" }, // 🌟 Adicionado aqui na navegação
           { id: "APARENCIA", icon: <FiLayout />, label: "APARÊNCIA LANDPAGE" },
           { id: "VERSOES", icon: <FiGitCommit />, label: "VERSÕES" },
           { id: "AVISOS", icon: <FiMessageSquare />, label: "AVISOS" },
@@ -182,7 +184,7 @@ export default function PainelMasterFesta() {
             lojistas={lojistas}
             denuncias={denuncias}
             planos={planos}
-            versaoSistemaGlobal={versaoAtualMaster} // 🌟 Adicionado aqui com Custo Zero!
+            versaoSistemaGlobal={versaoAtualMaster}
           />
         )}
 
@@ -196,6 +198,10 @@ export default function PainelMasterFesta() {
 
         {activeTab === "ASSINATURAS" && (
           <TabAssinaturas lojistas={lojistas} planos={planos} mostrarAviso={mostrarAviso} />
+        )}
+
+        {activeTab === "SUPORTE" && (
+          <TabSuporteMaster /> // 🌟 Renderização da nova aba de Suporte Master
         )}
 
         {activeTab === "APARENCIA" && (

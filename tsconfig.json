@@ -36,7 +36,7 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "hooks/**/*"
-, "middleware.ts"  ],
+, "middleware.ts", "app/admin/despesas/_tabsGestaoDespesas"  ],
   "exclude": [
     "node_modules"
   ]

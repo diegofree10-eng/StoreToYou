@@ -1,8 +1,8 @@
 // components/_tabsGestaoPedidos/EntregaLocal.tsx
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Pedido } from '@/types/pedido';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, increment } from 'firebase/firestore'; // 🌟 1. Importado o 'increment' aqui
 
 // 🌟 Importando o hook do tema global (ThemeContext)
 import { useTheme } from "@/context/ThemeContext";
@@ -85,8 +85,16 @@ export default function TabRetirarLocal({
     const pedidosEntregaLocal = useMemo(() => {
         return pedidos.filter(p => {
             if (!p) return false;
+
+            // ✨ Filtragem baseada no novo booleano isStatusPedidoConcluido (se já concluído, oculta da aba)
+            const isConcluido = (p as any).isStatusPedidoConcluido === true;
+            if (isConcluido) return false;
+
             const statusGeral = String(p.status || '').trim().toLowerCase();
-            if (statusGeral === 'concluído' || statusGeral === 'enviado' || (p as any).enviado === true) return false;
+            const statusProd = String((p as any).StatusProducao?.dsStatusProducao || '').trim().toLowerCase();
+            const isConcluidoFlag = (p as any).enviado === true && (statusGeral === 'concluído' || statusGeral === 'concluido' || statusProd === 'concluído' || statusProd === 'concluido');
+
+            if (statusGeral === 'concluído' || statusGeral === 'concluido' || statusGeral === 'enviado' || isConcluidoFlag) return false;
 
             const isPagoReal = (p as any).pago === true || (p as any).StatusProducao?.isPago === true || String((p as any).statusPagamento || '').toLowerCase() === 'pago';
             if (!isPagoReal) return false;
@@ -131,7 +139,7 @@ export default function TabRetirarLocal({
         alert(`📋 ID do pedido copiado com sucesso!\n\n${id}`);
     };
 
-    const concluirEntregaLocalEmLote = async () => {
+    const concluirEntregaLocalEmLote = useCallback(async () => {
         const selecionadosAtuais = (selecionados || []).filter(id => idsVisiveisNestaAba.includes(id));
         if (selecionadosAtuais.length === 0) return alert("Nenhum pedido selecionado para concluir a entrega local.");
         if (!db || !lojistaIdApp) return;
@@ -144,17 +152,18 @@ export default function TabRetirarLocal({
         try {
             for (const idPedido of selecionadosAtuais) {
                 const pedidoRef = doc(db, "lojistas", lojistaIdApp, "pedidos", idPedido);
+                // ✨ Atualização estrita utilizando o novo booleano isStatusPedidoConcluido e o contador atômico
                 await updateDoc(pedidoRef, {
-                    status: 'Concluído',
-                    enviado: true,
-                    "StatusProducao.dsStatusProducao": "Concluído"
+                    isStatusPedidoConcluido: true,
+                    "StatusProducao.dsStatusProducao": "Concluído",
+                    nrContadorMudancas: increment(1) // 🌟 2. Adicionado o contador incrementando +1
                 });
             }
 
             setLocalPedidos(prev => prev.map(p => selecionadosAtuais.includes(p.id) ? {
                 ...p,
-                status: 'Concluído',
-                enviado: true
+                isStatusPedidoConcluido: true,
+                nrContadorMudancas: ((p as any).nrContadorMudancas || 0) + 1
             } : p));
 
             setSelecionados(prev => prev.filter(id => !selecionadosAtuais.includes(id)));
@@ -164,13 +173,13 @@ export default function TabRetirarLocal({
         } finally {
             setProcessandoMassa(false);
         }
-    };
+    }, [selecionados, idsVisiveisNestaAba, db, lojistaIdApp, setLocalPedidos, setSelecionados]);
 
     useEffect(() => {
         if (registrarFuncaoConcluirEntregaLocal) {
             registrarFuncaoConcluirEntregaLocal(concluirEntregaLocalEmLote);
         }
-    }, [selecionados, pedidosEntregaLocal, processandoMassa]);
+    }, [registrarFuncaoConcluirEntregaLocal, concluirEntregaLocalEmLote]);
 
     return (
         <div style={{ background: theme.bgCard, color: theme.textMain, padding: '16px', borderRadius: '12px', border: `1px solid ${theme.border}` }}>
@@ -277,10 +286,7 @@ export default function TabRetirarLocal({
                         const idEncurtadoMobile = idPedidoExibicao.length > 10 ? `${idPedidoExibicao.slice(0, 6)}...${idPedidoExibicao.slice(-4)}` : idPedidoExibicao;
 
                         const pedidoLogistica = (pedido as any).logistica || {};
-                        const cotacao = (pedido as any).Cotacao || {};
                         const endereco = (pedido as any).dsEndereco || pedido.endereco || (pedido as any).cliente?.endereco || {};
-
-                        const isRetirada = pedidoLogistica.isRetirada || pedidoLogistica.dsFormaEntrega === 'retirada';
 
                         const temPersonalizacao = pedido.itens?.some((i: any) => {
                             const resp = i.dsRespostasPersonalizadasProduto || i.respostasFormatadas || i.personalizacao;

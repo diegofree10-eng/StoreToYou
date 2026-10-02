@@ -301,4 +301,5 @@ export default function PaginaEstoqueContainer() {
 
         </div>
     );
-}
+}// ao criar um insumo, pelo ModalCriarInsumos.tsx, na tabEstoqueInsumos.tsx
+// ele é criado em insumos_composicao no firebase.

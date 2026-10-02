@@ -37,7 +37,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Preencha todos os campos obrigatórios." }, { status: 400 });
         }
 
-        // ✨ Garante que a senha atenda à exigência mínima do Firebase Auth (mínimo de 6 caracteres)
         const senhaValida = senhaBruta.length < 6 ? senhaBruta.padEnd(6, '0') : senhaBruta;
 
         const adminAuth = getAuth();
@@ -57,14 +56,16 @@ export async function POST(req: Request) {
 
         const uid = userRecord.uid;
 
+        // 🌟 Salvando na coleção "usuarios" com flags booleanas padronizadas
         await adminDb.collection("usuarios").doc(uid).set({
             email,
             dsEmailColaborador: email,
             dsLojaId: lojistaId,
             lojaId: lojistaId,
             role: "colaborador",
-            dsRole: "colaborador",
-            dsTipoConta: "colaborador",
+            isTipoContaColaborador: true,  // ✅ Flag exata de colaborador
+            isTipoContaLogista: false,     // ✅ Garante que não é lojista
+            isTipoContaMaster: false,      // ✅ Garante que não é master
             dsNomeColaborador: nome,
             dsCargoColaborador: cargo || "Caixa / Operador",
             permissoes: permissoes || {},

@@ -417,7 +417,7 @@ export default function TabEmitirEtiquetas({
                                     const recomendada = embalagemData.recomendada || embalagemData;
                                     const escolhida = embalagemData.escolhida || null;
 
-                                    const modeloRecomendado = recomendada.dsModeloEmbalagemRecomendado || recomendada.nomeInsumo || recomendada.nome || "Não calculada";
+                                    const modeloRecomendado = recomendada.dsModeloEmbalagemRecomendado || recomendada.dsModeloEmbalagemEscolhida || recomendada.nomeInsumo || recomendada.nome || "Não calculada";
                                     const tipoRecomendado = recomendada.dsTipoEmbalagem || recomendada.tipo || "-";
 
                                     const modeloEscolhido = escolhida?.dsModeloEmbalagemEscolhida || escolhida?.dsModeloEmbalagemRecomendado || escolhida?.nome || "";
@@ -425,6 +425,7 @@ export default function TabEmitirEtiquetas({
 
                                     return (
                                         <div style={{ ...localStyles.conteudoExpandido, backgroundColor: theme.inputBg, borderColor: theme.border }}>
+                                            
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.bgCard, border: `1px solid ${theme.border}`, padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: '15px' }}>📦</span>

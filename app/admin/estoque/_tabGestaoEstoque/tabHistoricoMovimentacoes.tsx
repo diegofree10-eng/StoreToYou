@@ -1,7 +1,7 @@
 // app/admin/estoque/_tabGestaoEstoque/tabHistoricoMovimentacoes.tsx
 "use client";
 import React, { useEffect, useState } from "react";
-import { collection, query, orderBy, limit, startAfter, endBefore, limitToLast, getDocs, queryEqual, DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, limit, startAfter, endBefore, limitToLast, getDocs, where, DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { FiClock, FiFilter, FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
@@ -18,37 +18,57 @@ export function tabHistoricoMovimentacoes({ uid, theme, buscaExterna }: any) {
 
     // Estados locais para os filtros
     const [tipoFiltro, setTipoFiltro] = useState<"todos" | "produto" | "insumo" | "embalagem">("todos");
+    const [movimentacaoFiltro, setMovimentacaoFiltro] = useState<"todos" | "ENTRADA" | "SAIDA">("todos"); // 🌟 Novo filtro de Entrada/Saída
     const [dataInicio, setDataInicio] = useState("");
     const [dataFim, setDataFim] = useState("");
 
-    // Função Otimizada para Buscar Dados com Cursor do Firestore
+    // Função Otimizada para Buscar Dados com Filtros e Cursor do Firestore
     const carregarMovimentacoes = async (direcao: "inicial" | "proxima" | "anterior", docRefState: any = null) => {
         if (!uid) return;
         setLoading(true);
 
         try {
-            let q = query(
-                collection(db, "lojistas", uid, "movimentacoes_estoque"),
-                orderBy("dataMovimentacao", "desc"),
-                limit(itensPorPagina)
-            );
+            const colRef = collection(db, "lojistas", uid, "movimentacoes_estoque");
+            let constraints: any[] = [orderBy("dataMovimentacao", "desc")];
 
-            if (direcao === "proxima" && docRefState) {
-                q = query(
-                    collection(db, "lojistas", uid, "movimentacoes_estoque"),
-                    orderBy("dataMovimentacao", "desc"),
-                    startAfter(docRefState),
-                    limit(itensPorPagina)
-                );
-            } else if (direcao === "anterior" && docRefState) {
-                q = query(
-                    collection(db, "lojistas", uid, "movimentacoes_estoque"),
-                    orderBy("dataMovimentacao", "desc"),
-                    endBefore(docRefState),
-                    limitToLast(itensPorPagina)
-                );
+            // 🔍 Filtro por Tipo de Item no Banco
+            if (tipoFiltro !== "todos") {
+                constraints.push(where("tipoItem", "==", tipoFiltro));
             }
 
+            // 🔍 Filtro por Tipo de Movimentação no Banco (ENTRADA / SAIDA)
+            if (movimentacaoFiltro !== "todos") {
+                constraints.push(where("tipoMovimentacao", "==", movimentacaoFiltro));
+            }
+
+            // 📅 Filtro por Data Início (ISO String format)
+            if (dataInicio) {
+                const isoInicio = new Date(`${dataInicio}T00:00:00.000Z`).toISOString();
+                constraints.push(where("dataMovimentacao", ">=", isoInicio));
+            }
+
+            // 📅 Filtro por Data Fim (ISO String format)
+            if (dataFim) {
+                const isoFim = new Date(`${dataFim}T23:59:59.999Z`).toISOString();
+                constraints.push(where("dataMovimentacao", "<=", isoFim));
+            }
+
+            // 📄 Controle de Paginação (Cursores)
+            if (direcao === "proxima" && docRefState) {
+                constraints.push(startAfter(docRefState));
+            } else if (direcao === "anterior" && docRefState) {
+                constraints.push(endBefore(docRefState));
+                constraints.push(limitToLast(itensPorPagina));
+            } else {
+                constraints.push(limit(itensPorPagina));
+            }
+
+            // Se não usou limitToLast, aplica o limit normal
+            if (direcao !== "anterior") {
+                constraints.push(limit(itensPorPagina));
+            }
+
+            const q = query(colRef, ...constraints);
             const snapshot = await getDocs(q);
 
             if (!snapshot.empty) {
@@ -70,11 +90,13 @@ export function tabHistoricoMovimentacoes({ uid, theme, buscaExterna }: any) {
         }
     };
 
-    // Recarrega sempre que mudar o item por página ou o UID
+    // Recarrega sempre que mudar itens por página, filtros ou UID
     useEffect(() => {
         setPaginaAtual(1);
+        setPrimeiroDoc(null);
+        setUltimoDoc(null);
         carregarMovimentacoes("inicial");
-    }, [uid, itensPorPagina]);
+    }, [uid, itensPorPagina, tipoFiltro, movimentacaoFiltro, dataInicio, dataFim]);
 
     const proximaPagina = () => {
         if (!ultimoDoc) return;
@@ -88,36 +110,15 @@ export function tabHistoricoMovimentacoes({ uid, theme, buscaExterna }: any) {
         carregarMovimentacoes("anterior", primeiroDoc);
     };
 
-    // Filtros aplicados localmente sobre o bloco carregado da página atual
+    // Filtro global rápido de texto sobre os dados da página carregada
     const historicoFiltrado = historico.filter((item) => {
-        if (tipoFiltro !== "todos" && String(item.tipoItem || "").toLowerCase() !== tipoFiltro) {
-            return false;
-        }
-
         const termoGlobal = (buscaExterna || "").toLowerCase();
-        if (termoGlobal) {
-            const nome = String(item.nomeItem || "").toLowerCase();
-            const origem = String(item.origem || "").toLowerCase();
-            const operador = String(item.operador || "").toLowerCase();
-            const atendeGlobal = nome.includes(termoGlobal) || origem.includes(termoGlobal) || operador.includes(termoGlobal);
-            if (!atendeGlobal) return false;
-        }
+        if (!termoGlobal) return true;
 
-        if (item.dataMovimentacao) {
-            const dataMov = new Date(item.dataMovimentacao).setHours(0, 0, 0, 0);
-
-            if (dataInicio) {
-                const timestampInicio = new Date(dataInicio).setHours(0, 0, 0, 0);
-                if (dataMov < timestampInicio) return false;
-            }
-
-            if (dataFim) {
-                const timestampFim = new Date(dataFim).setHours(23, 59, 59, 999);
-                if (dataMov > timestampFim) return false;
-            }
-        }
-
-        return true;
+        const nome = String(item.nomeItem || "").toLowerCase();
+        const origem = String(item.origem || "").toLowerCase();
+        const operador = String(item.operador || "").toLowerCase();
+        return nome.includes(termoGlobal) || origem.includes(termoGlobal) || operador.includes(termoGlobal);
     });
 
     return (
@@ -131,7 +132,7 @@ export function tabHistoricoMovimentacoes({ uid, theme, buscaExterna }: any) {
                     <h3 style={{ fontSize: "15px", margin: 0, color: theme.textMain }}>Extrato e Auditoria de Movimentações de Estoque</h3>
                 </div>
 
-                {/* CONTROLES EXTRAS: Limite, Tipo e Período */}
+                {/* CONTROLES EXTRAS: Limite, Tipo, Movimentação e Período */}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
 
                     {/* Seletor de Registros por Página */}
@@ -148,7 +149,7 @@ export function tabHistoricoMovimentacoes({ uid, theme, buscaExterna }: any) {
                         </select>
                     </div>
 
-                    {/* Select de Categoria */}
+                    {/* Select de Categoria (Produto, Insumo, Embalagem) */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: theme.inputBg, padding: '5px 8px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
                         <FiFilter color={theme.textSec} size={13} />
                         <select
@@ -156,10 +157,23 @@ export function tabHistoricoMovimentacoes({ uid, theme, buscaExterna }: any) {
                             onChange={(e: any) => setTipoFiltro(e.target.value)}
                             style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '11px', color: theme.textMain, cursor: 'pointer' }}
                         >
-                            <option value="todos" style={{ background: theme.bgCard }}>Todos os Tipos</option>
+                            <option value="todos" style={{ background: theme.bgCard }}>Todos os Itens</option>
                             <option value="produto" style={{ background: theme.bgCard }}>Produtos</option>
                             <option value="insumo" style={{ background: theme.bgCard }}>Insumos</option>
                             <option value="embalagem" style={{ background: theme.bgCard }}>Embalagens</option>
+                        </select>
+                    </div>
+
+                    {/* 🌟 Select de Movimentação (Entrada / Saída) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: theme.inputBg, padding: '5px 8px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                        <select
+                            value={movimentacaoFiltro}
+                            onChange={(e: any) => setMovimentacaoFiltro(e.target.value)}
+                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '11px', color: theme.textMain, cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            <option value="todos" style={{ background: theme.bgCard }}>Entradas e Saídas</option>
+                            <option value="ENTRADA" style={{ background: theme.bgCard }}>Apenas Entradas</option>
+                            <option value="SAIDA" style={{ background: theme.bgCard }}>Apenas Saídas</option>
                         </select>
                     </div>
 
@@ -193,10 +207,10 @@ export function tabHistoricoMovimentacoes({ uid, theme, buscaExterna }: any) {
 
             {/* TABELA DE RESULTADOS */}
             {loading ? (
-                <div style={{ padding: "30px", textAlign: "center", color: theme.textSec, fontSize: "13px" }}>Carregando dados da página...</div>
+                <div style={{ padding: "30px", textAlign: "center", color: theme.textSec, fontSize: "13px" }}>Carregando dados do extrato...</div>
             ) : historicoFiltrado.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px", color: theme.textSec, fontSize: "13px" }}>
-                    Nenhuma movimentação encontrada nesta página com os filtros aplicados.
+                    Nenhuma movimentação encontrada com os filtros aplicados.
                 </div>
             ) : (
                 <div style={{ overflowX: "auto" }}>

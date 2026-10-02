@@ -15,26 +15,26 @@ import { sincronizarNovosCamposLojista, obterModeloPadrao } from "@/utils/atuali
 
 const PALAVRAS_PROIBIDAS = ["admin", "master", "suporte", "root", "config", "sistema", "teste"];
 
-// 🚀 Componente Interno que usa o useSearchParams
 function AuthFormContent() {
     const searchParams = useSearchParams();
     const refCode = searchParams.get("ref");
     const nomeIndicadorUrl = searchParams.get("nome");
 
-    const [isLogin, setIsLogin] = useState(!refCode);
+    const [isLogin, setIsLogin] = useState(!refCode); // Se tiver ref, já abre direto na tela de cadastro/teste grátis!
     const [email, setEmail] = useState("");
     const [senha, setSenha] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [nomeLoja, setNomeLoja] = useState("");
     const [loading, setLoading] = useState(false);
     const [logoSistema, setLogoSistema] = useState("/logo.png");
-    
+
     const [nomeLojaIndicadora] = useState<string | null>(
         nomeIndicadorUrl ? decodeURIComponent(nomeIndicadorUrl) : null
     );
-    
+
     const router = useRouter();
 
+    // Salva o código de indicação no localStorage assim que a página carrega com o ?ref=
     useEffect(() => {
         if (refCode) {
             localStorage.setItem("indicadoPor", refCode);
@@ -76,7 +76,8 @@ function AuthFormContent() {
 
                 const userData = userDocSnap.data();
 
-                if (userData.dsTipoConta === "colaborador" || userData.role === "colaborador") {
+                // 🌟 Verificação baseada na nova flag booleana de colaborador
+                if (userData.isTipoContaColaborador === true) {
                     const lojaId = userData.dsLojaId || userData.lojaId;
                     if (!lojaId) {
                         await signOut(auth);
@@ -154,6 +155,7 @@ function AuthFormContent() {
                     throw new Error("Já existe uma loja com este nome.");
                 }
 
+                // Recupera quem indicou priorizando a URL atual ou o localStorage
                 const codigoIndicador = refCode || localStorage.getItem("indicadoPor") || null;
 
                 const userCredential = await createUserWithEmailAndPassword(auth, email, senha);
@@ -164,22 +166,42 @@ function AuthFormContent() {
                     .replace(/[^a-z0-9]/g, "-")
                     .replace(/-+/g, "-");
 
+                const isMasterUser = email === "diegofree10@gmail.com";
+
+                // 🌟 Criação do usuário estritamente com as flags booleanas (sem strings de cargo)
                 await setDoc(doc(db, "usuarios", user.uid), {
                     lojaId: user.uid,
                     email: email,
-                    role: email === "diegofree10@gmail.com" ? "master" : "admin",
-                    dsTipoConta: "logista",
+                    isTipoContaLogista: !isMasterUser,
+                    isTipoContaMaster: isMasterUser,
+                    isTipoContaColaborador: false,
+                    indicadoPor: codigoIndicador,
                     criadoEm: Date.now()
                 }, { merge: true });
 
+                // 🌟 Salva o cadastro novo do lojista utilizando exclusivamente o novo padrão booleano
                 await setDoc(doc(db, "lojistas", user.uid), {
                     uid: user.uid,
                     email: email,
-                    dsTipoConta: "logista",
+                    isTipoContaLogista: !isMasterUser,
+                    isTipoContaMaster: isMasterUser,
                     indicadoPor: codigoIndicador,
                     dataCadastro: Date.now(),
                     ultimoLogin: serverTimestamp(),
                     sistema: obterModeloPadrao(),
+                    dadosPessoais: {
+                        dsNomeResponsavel: "",
+                        dsRuaResponsavel: "",
+                        nrNumeroResponsavel: "",
+                        dsCepResponsavel: "",
+                        dsBairroResponsavel: "",
+                        dsCidadeResponsavel: "",
+                        dsUfResponsavel: "",
+                        dsTelResponsavel: "",
+                        dsEmailResponsavel: email,
+                        isTipoContaLogista: !isMasterUser,
+                        isTipoContaMaster: isMasterUser
+                    },
                     dadosLoja: {
                         dsNomeLoja: nomeLimpo,
                         dsSlug: slugGerado,
@@ -191,12 +213,13 @@ function AuthFormContent() {
                     }
                 }, { merge: true });
 
+                // Se houver indicação, registra na subcoleção do padrinho com o nome real digitado
                 if (codigoIndicador && codigoIndicador !== user.uid) {
                     try {
                         await setDoc(doc(db, "lojistas", codigoIndicador, "indicacoes", user.uid), {
                             uidIndicado: user.uid,
                             emailIndicado: email,
-                            nomeIndicado: nomeLimpo,
+                            nomeIndicado: nomeLimpo || "Loja sem Nome",
                             dataCadastro: new Date().toISOString(),
                             status: "pendente"
                         });
@@ -355,7 +378,6 @@ function AuthFormContent() {
     );
 }
 
-// 🚀 Componente Principal Envolvido em Suspense (Exigido pelo Next.js com useSearchParams)
 export default function AuthPage() {
     return (
         <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100dvh', background: '#f0f2f5' }}>Carregando...</div>}>
@@ -373,7 +395,7 @@ const styles: any = {
     bannerDecoration: { position: 'absolute', bottom: '-100px', left: '-100px', width: '400px', height: '400px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%', zIndex: 1 },
     loginArea: { flex: '1', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', overflow: 'hidden' },
     card: { background: '#fff', padding: '35px', borderRadius: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', width: '100%', maxWidth: '420px', boxSizing: 'border-box' },
-    header: { textAlign: 'center', marginBottom: '20px' },
+    header: { textAlign: 'center', marginBottom: '25px' },
     titleText: { margin: 0, fontSize: '22px', color: '#1a1a1a' },
     subtitleText: { fontSize: '13px', color: '#64748b', marginTop: '4px' },
     badgeIndicacao: { background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', textAlign: 'center', marginBottom: '15px', fontWeight: '500' },

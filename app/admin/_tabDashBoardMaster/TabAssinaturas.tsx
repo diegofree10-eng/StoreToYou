@@ -1,10 +1,11 @@
+// app/admin/configuracoes/_tabs/AssinaturaTab.tsx
 "use client";
 import React, { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
-import { doc, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, collection } from "firebase/firestore";
+import { doc, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, collection, getDocs, setDoc } from "firebase/firestore";
 import {
   FiSearch, FiUser, FiPauseCircle, FiPlayCircle,
-  FiRefreshCw, FiTrash2, FiClock, FiX, FiStar, FiCalendar
+  FiRefreshCw, FiTrash2, FiClock, FiX, FiStar, FiCalendar, FiAlertCircle
 } from "react-icons/fi";
 import { buscarLojistas } from "@/hooks/useLojistas";
 import ModalPerfilLojista from "@/app/admin/_components/ModalPerfilLojista";
@@ -28,7 +29,9 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
   const [lojaSelecionada, setLojaSelecionada] = useState<any>(null);
   const [confirmacaoTexto, setConfirmacaoTexto] = useState("");
   const [acaoTipo, setAcaoTipo] = useState<"limpar" | "excluir" | null>(null);
-  const [filtroStatus, setFiltroStatus] = useState<"todos" | "vencidos" | "vencer">("todos");
+  
+  // 🚀 Novo filtro "comprovantes" adicionado
+  const [filtroStatus, setFiltroStatus] = useState<"todos" | "vencidos" | "vencer" | "comprovantes">("todos");
   const [lojaParaPerfil, setLojaParaPerfil] = useState<string | null>(null);
 
   // LOGICA DE REVERSÃO AUTOMÁTICA
@@ -54,7 +57,7 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
     return false;
   };
 
-  // CARREGAR DADOS COM VERIFICAÇÃO DE VENCIMENTO
+  // CARREGAR DADOS COM VERIFICAÇÃO DE VENCIMENTO E COMPROVANTES PENDENTES
   const carregarDados = async (termo = "", reset = false) => {
     setLoading(true);
 
@@ -63,9 +66,36 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
     const docsProcessados = await Promise.all(docs.map(async (loja: any) => {
       const houveMudanca = await verificarEReverterPlano(loja);
 
-      return houveMudanca
-        ? { ...loja, sistema: { ...loja.sistema, isTesteOuroAtivo: false, dsPlanoTeste: "" } }
-        : loja;
+      // 🔍 Verifica se a loja possui comprovantes em análise na subcoleção financeira
+     // 🔍 Verifica se a loja possui comprovantes em análise na subcoleção financeira
+      let temComprovantePendente = false;
+      try {
+        const compRef = collection(db, "lojistas", loja.id, "assinaturas", "financeiro", "historicoComprovantes");
+        const compSnap = await getDocs(compRef);
+        temComprovantePendente = compSnap.docs.some(d => {
+          const dataDoc = d.data();
+          const st = (dataDoc.dsStatusPagamentoLojista || "").toLowerCase();
+          const isAnalise = st.includes("análise") || st.includes("analise");
+          
+          // 🚀 REGRA NOVA: Só conta se estiver em análise E POSSUIR URL DE COMPROVANTE OU NÃO FOR UM UPGRADE PURO
+          const temUrlComprovante = Boolean(dataDoc.dsUrlComprovante && dataDoc.dsUrlComprovante.trim() !== "");
+          const naoEhUpgradePuro = dataDoc.tipoRegistro !== "upgrade" && !d.id.startsWith("UPG-");
+
+          return isAnalise && (temUrlComprovante || naoEhUpgradePuro);
+        });
+      } catch (err) {
+        console.warn("Erro ao checar comprovantes da loja:", loja.id);
+      }
+
+      const lojaAtualizada = {
+        ...loja,
+        temComprovantePendente,
+        sistema: houveMudanca
+          ? { ...loja.sistema, isTesteOuroAtivo: false, dsPlanoTeste: "" }
+          : loja.sistema
+      };
+
+      return lojaAtualizada;
     }));
 
     setLojistas(reset ? docsProcessados : [...lojistas, ...docsProcessados]);
@@ -158,23 +188,83 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
 
   async function renovarAssinatura(loja: any) {
     const dataAtual = new Date();
+    const vencimentoAtualSecs = loja.dadosLoja?.tsVencimentoLoja?.seconds;
+    const vencimentoAtual = vencimentoAtualSecs ? new Date(vencimentoAtualSecs * 1000) : null;
+
+    if (vencimentoAtual && vencimentoAtual > dataAtual) {
+      const diffDays = Math.ceil((vencimentoAtual.getTime() - dataAtual.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays > 25) {
+        const confirmarDuplicidade = window.confirm(
+          `⚠️ Atenção! A loja "${loja.dadosLoja?.dsNomeLoja}" já está com o acesso em dia (vence em ${vencimentoAtual.toLocaleDateString('pt-BR')}, daqui a ${diffDays} dias).\n\nDeseja realmente adicionar MAIS um mês por cima?`
+        );
+        if (!confirmarDuplicidade) return;
+      }
+    }
+
+    let vencimentoBase = vencimentoAtual && vencimentoAtual > dataAtual ? vencimentoAtual : dataAtual;
     const ciclo = loja.dadosLoja?.ciclo || "mensal";
 
     if (ciclo === "anual") {
-      dataAtual.setFullYear(dataAtual.getFullYear() + 1);
+      vencimentoBase.setFullYear(vencimentoBase.getFullYear() + 1);
     } else {
-      dataAtual.setMonth(dataAtual.getMonth() + 1);
+      vencimentoBase.setMonth(vencimentoBase.getMonth() + 1);
     }
 
     try {
-      await updateDoc(doc(db, "lojistas", loja.id), {
-        "dadosLoja.tsVencimentoLoja": Timestamp.fromDate(dataAtual),
+      const lojaRef = doc(db, "lojistas", loja.id);
+
+      const idTransacaoUnico = `FAT-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 900 + 100)}`;
+      const nomePlano = loja.dadosLoja?.dsPlanoLoja || "Bronze";
+
+      const planoKeyEncontrada = Object.keys(planos || {}).find(
+        k => k.toLowerCase() === nomePlano.toLowerCase()
+      );
+      const planoInfoMaster = planoKeyEncontrada ? planos[planoKeyEncontrada] : {};
+      
+      const valorPlano = Number(
+        planoInfoMaster?.preco ?? 
+        planoInfoMaster?.vlPreco ?? 
+        planoInfoMaster?.valor ?? 
+        99.90
+      );
+
+      const mesCompetenciaStr = `Ciclo ${dataAtual.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`.toLowerCase();
+      const competenciaFormatada = mesCompetenciaStr.charAt(0).toUpperCase() + mesCompetenciaStr.slice(1);
+
+      const novoLancamentoRef = doc(
+        db,
+        "lojistas",
+        loja.id,
+        "assinaturas",
+        "financeiro",
+        "historicoPagamentos",
+        idTransacaoUnico
+      );
+
+      const dadosLancamento = {
+        id: idTransacaoUnico,
+        dsPlanoLojista: nomePlano,
+        dsMesReferencia: competenciaFormatada,
+        vlAssinaturaLojista: valorPlano,
+        dsStatusPagamentoLojista: "Pago",
+        tsAssinaturaLojista: Timestamp.now(),
+        tsProximoVencimento: Timestamp.fromDate(vencimentoBase),
+        createdAt: Timestamp.now()
+      };
+
+      await setDoc(novoLancamentoRef, dadosLancamento);
+
+      await updateDoc(lojaRef, {
+        "dadosLoja.tsVencimentoLoja": Timestamp.fromDate(vencimentoBase),
         "dadosLoja.dsStatusLoja": "ativo"
       });
-      mostrarAviso(`Assinatura renovada para ${dataAtual.toLocaleDateString()}!`, "sucesso");
+
+      mostrarAviso(`Assinatura renovada e registrada com sucesso!`, "sucesso");
       carregarDados(busca, true);
     } catch (e) {
-      mostrarAviso("Erro ao renovar.", "erro");
+      console.error("Erro ao renovar:", e);
+      mostrarAviso("Erro ao renovar assinatura.", "erro");
     }
   }
 
@@ -187,7 +277,7 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
     try {
       if (acaoTipo === "excluir") {
         await deleteDoc(doc(db, "lojistas", lojaSelecionada.id));
-       mostrarAviso("Lojista excluído com sucesso!", "sucesso");
+        mostrarAviso("Lojista excluído com sucesso!", "sucesso");
       } else if (acaoTipo === "limpar") {
         await updateDoc(doc(db, "lojistas", lojaSelecionada.id), {
           "dadosLoja.dsStatusLoja": "limpo",
@@ -210,6 +300,8 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
     setModalAberto(true);
   }
 
+  const totalComprovantes = lojistas.filter(l => l.temComprovantePendente).length;
+
   const totalVencer = lojistas.filter(l => {
     const status = obterStatusVencimento(l.dadosLoja?.tsVencimentoLoja?.seconds ? new Date(l.dadosLoja.tsVencimentoLoja.seconds * 1000).toISOString() : "");
     return status.texto.includes("Vence em");
@@ -221,6 +313,7 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
 
   const lojistasExibidos = lojistas.filter(loja => {
     const status = obterStatusVencimento(loja.dadosLoja?.tsVencimentoLoja?.seconds ? new Date(loja.dadosLoja.tsVencimentoLoja.seconds * 1000).toISOString() : "");
+    if (filtroStatus === "comprovantes") return loja.temComprovantePendente;
     if (filtroStatus === "vencidos") return status.texto === "VENCIDO";
     if (filtroStatus === "vencer") return status.texto.includes("Vence em");
     return true;
@@ -240,11 +333,11 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
             <p style={{ ...styles.modalText, color: theme.textSec }}>
               Digite o nome da loja: <strong style={{ color: theme.textMain }}>"{lojaSelecionada?.dadosLoja?.dsNomeLoja}"</strong>
             </p>
-            <input 
-              type="text" 
-              value={confirmacaoTexto} 
-              onChange={(e) => setConfirmacaoTexto(e.target.value)} 
-              style={{ ...styles.modalInput, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `2px solid ${theme.border}` }} 
+            <input
+              type="text"
+              value={confirmacaoTexto}
+              onChange={(e) => setConfirmacaoTexto(e.target.value)}
+              style={{ ...styles.modalInput, background: theme.inputBg || theme.bgApp, color: theme.textMain, border: `2px solid ${theme.border}` }}
             />
             <button onClick={executarAcaoSegura} style={{ ...styles.btnConfirmar, backgroundColor: acaoTipo === 'excluir' ? '#ef4444' : '#3b82f6' }}>
               Confirmar
@@ -253,39 +346,82 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
         </div>
       )}
 
+      {/* 🔔 ALERTA GLOBAL NO TOPO DO MASTER */}
+      {totalComprovantes > 0 && (
+        <div 
+          onClick={() => setFiltroStatus("comprovantes")}
+          style={{ 
+            background: isModoNoturno ? '#78350f' : '#fef3c7', 
+            border: '1px solid #f59e0b', 
+            color: isModoNoturno ? '#fcd34d' : '#92400e', 
+            padding: '14px 20px', 
+            borderRadius: '12px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+            transition: 'transform 0.2s'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <FiAlertCircle size={22} style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: '13px', fontWeight: '700' }}>
+              <span>Atenção: Existem </span>
+              <strong style={{ fontSize: '14px', textDecoration: 'underline' }}>{totalComprovantes} lojista(s)</strong>
+              <span> com comprovantes de Pix aguardando validação financeira hoje.</span>
+            </div>
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: '900', background: '#f59e0b', color: '#fff', padding: '4px 10px', borderRadius: '6px' }}>
+            Filtrar Agora →
+          </span>
+        </div>
+      )}
+
       <div style={styles.headerFlex}>
         <div style={styles.headerText}>
           <h3 style={{ ...styles.title, color: theme.textMain }}>Gestão de Assinaturas</h3>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-            <button 
-              onClick={() => setFiltroStatus("todos")} 
-              style={{ 
-                ...styles.btnFilter, 
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setFiltroStatus("todos")}
+              style={{
+                ...styles.btnFilter,
                 backgroundColor: filtroStatus === "todos" ? (isModoNoturno ? '#334155' : '#e2e8f0') : (isModoNoturno ? '#1e293b' : '#f1f5f9'),
-                color: theme.textMain 
+                color: theme.textMain
               }}
             >
               Todos ({lojistas.length})
             </button>
-            <button 
-              onClick={() => setFiltroStatus("vencer")} 
-              style={{ 
-                ...styles.btnFilter, 
-                backgroundColor: filtroStatus === "vencer" ? '#fef3c7' : (isModoNoturno ? '#1e293b' : '#f1f5f9'), 
-                color: '#b45309', 
-                border: filtroStatus === "vencer" ? '1px solid #fcd34d' : 'none' 
+            <button
+              onClick={() => setFiltroStatus("comprovantes")}
+              style={{
+                ...styles.btnFilter,
+                backgroundColor: filtroStatus === "comprovantes" ? '#fef3c7' : (isModoNoturno ? '#1e293b' : '#f1f5f9'),
+                color: '#b45309',
+                border: filtroStatus === "comprovantes" ? '1px solid #fcd34d' : 'none'
+              }}
+            >
+              📁 Comprovantes ({totalComprovantes})
+            </button>
+            <button
+              onClick={() => setFiltroStatus("vencer")}
+              style={{
+                ...styles.btnFilter,
+                backgroundColor: filtroStatus === "vencer" ? '#fef3c7' : (isModoNoturno ? '#1e293b' : '#f1f5f9'),
+                color: '#b45309',
+                border: filtroStatus === "vencer" ? '1px solid #fcd34d' : 'none'
               }}
             >
               A vencer ({totalVencer})
             </button>
-            <button 
-              onClick={() => setFiltroStatus("vencidos")} 
-              style={{ 
-                ...styles.btnFilter, 
-                backgroundColor: filtroStatus === "vencidos" ? '#fee2e2' : (isModoNoturno ? '#1e293b' : '#f1f5f9'), 
-                color: '#ef4444', 
-                border: filtroStatus === "vencidos" ? '1px solid #fecdd3' : 'none' 
+            <button
+              onClick={() => setFiltroStatus("vencidos")}
+              style={{
+                ...styles.btnFilter,
+                backgroundColor: filtroStatus === "vencidos" ? '#fee2e2' : (isModoNoturno ? '#1e293b' : '#f1f5f9'),
+                color: '#ef4444',
+                border: filtroStatus === "vencidos" ? '1px solid #fecdd3' : 'none'
               }}
             >
               Vencidos ({totalVencidos})
@@ -295,12 +431,12 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
 
         <div style={{ ...styles.searchWrapper, background: theme.inputBg || theme.bgApp, border: `2px solid ${theme.border}`, borderRadius: '12px' }}>
           <FiSearch style={{ ...styles.searchIcon, color: theme.textSec }} />
-          <input 
-            type="text" 
-            placeholder="Nome da loja..." 
-            value={busca} 
-            onChange={(e) => setBusca(e.target.value)} 
-            style={{ ...styles.searchInput, background: 'transparent', color: theme.textMain }} 
+          <input
+            type="text"
+            placeholder="Nome da loja..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            style={{ ...styles.searchInput, background: 'transparent', color: theme.textMain }}
           />
         </div>
       </div>
@@ -326,7 +462,7 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
                     <div style={styles.lojaInfo}>
                       <div style={{ ...styles.avatarLoja, background: isModoNoturno ? '#334155' : '#f1f5f9', color: '#3b82f6' }}><FiUser /></div>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <strong
                             style={{ ...styles.nomeLoja, cursor: 'pointer', color: '#3b82f6' }}
                             onClick={() => {
@@ -343,6 +479,23 @@ export default function TabAssinaturas({ planos, mostrarAviso }: TabAssinaturasP
                                 textTransform: 'uppercase', border: '1px solid #d1fae5'
                               }}>
                                 UPGRADE PENDENTE
+                              </span>
+                            )}
+
+                            {/* 📁 SELO DE COMPROVANTE ENVIADO */}
+                            {loja.temComprovantePendente && (
+                              <span style={{
+                                marginLeft: '8px',
+                                background: isModoNoturno ? '#78350f' : '#fef3c7', 
+                                color: '#b45309', 
+                                padding: '2px 6px',
+                                borderRadius: '4px', 
+                                fontSize: '8px', 
+                                fontWeight: '900',
+                                textTransform: 'uppercase', 
+                                border: '1px solid #fcd34d'
+                              }}>
+                                📁 COMPROVANTE ENVIADO
                               </span>
                             )}
                           </strong>

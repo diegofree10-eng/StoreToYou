@@ -22,10 +22,10 @@ import AdminConfig from "./config/page";
 import DashboardMaster from "./_tabDashBoardMaster/DashboardMaster";
 import PaginaColaboradores from "./colaboradores/page";
 
-// 🌟 Importando as páginas de Relatórios, Suporte, Despesas e Financeiro
+// 🌟 Importando as páginas de Relatórios, Suporte, Financeiro e Devoluções
 import RelatoriosPage from "./relatorios/page";
 import SuportePage from "./suporte/page";
-import { TabGestaoDespesas } from "./despesas/page";
+import DevolucaoPage from "./devolucao/page";
 import GestaoFinanceiroPage from "./financeiro/page";
 
 // 🌟 Importando o hook de tema para usar as cores dinâmicas reais
@@ -38,6 +38,12 @@ function AdminLayoutGridDefinitivo() {
 
   const [telaAtiva, setTelaAtiva] = useState('dash');
   const [userRole, setUserRole] = useState<string | null>(null);
+
+  // 🌟 Estados para as novas flags booleanas de perfil
+  const [isMasterFlag, setIsMasterFlag] = useState(false);
+  const [isLojistaFlag, setIsLojistaFlag] = useState(false);
+  const [isColaboradorFlag, setIsColaboradorFlag] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [dadosLojista, setDadosLojista] = useState<any>(null);
@@ -106,9 +112,18 @@ function AdminLayoutGridDefinitivo() {
           setUserRole(userData.role);
           setLojistaIdReal(userData.lojaId);
 
+          // 🌟 Identificação precisa baseada nas flags booleanas com fallback seguro
+          const masterFlag = userData.isTipoContaMaster === true || userData.role === 'master';
+          const lojistaFlag = userData.isTipoContaLogista === true || ['admin', 'lojista'].includes(userData.role);
+          const colaboradorFlag = userData.isTipoContaColaborador === true || userData.role === 'colaborador';
+
+          setIsMasterFlag(masterFlag);
+          setIsLojistaFlag(lojistaFlag);
+          setIsColaboradorFlag(colaboradorFlag);
+
           if (userData.lojaId) {
             // 🌟 Se for colaborador, busca direto pelo UID do Auth na subcoleção da loja
-            if (userData.role === 'colaborador') {
+            if (colaboradorFlag) {
               try {
                 const colabDocRef = doc(db, "lojistas", userData.lojaId, "colaboradores", user.uid);
                 const colabSnap = await getDoc(colabDocRef);
@@ -150,7 +165,6 @@ function AdminLayoutGridDefinitivo() {
             });
 
             if (userData.lojaId) {
-              // 🌟 CORREÇÃO AQUI: Removido o orderBy restrito para garantir que 100% dos documentos de pedidos venham sem falhar
               const qPedidos = query(collection(db, "lojistas", userData.lojaId, "pedidos"));
               unsubPedidosRef.current = onSnapshot(qPedidos, (snapPedidos) => {
                 setPedidos(snapPedidos.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -191,7 +205,6 @@ function AdminLayoutGridDefinitivo() {
     window.location.replace("/login");
   };
 
-  // 🌟 Lógica de Modais unificada com a nova estrutura de versões
   const versaoAtualLojista = dadosLojista?.atualizacao?.nrVersaoSistemaLogista || "0.0.0";
   
   const updatePending = atualizacoesGlobais.find((upd: any) => {
@@ -219,7 +232,6 @@ function AdminLayoutGridDefinitivo() {
   return (
     <div className="admin-layout-wrapper" style={{ backgroundColor: theme.bgApp }}>
 
-      {/* 🚀 MODAIS (Logica injetada sem alterar classes/estilos de layout) */}
       {updatePending && (
         <div style={styles.overlay}>
           <div style={{ ...styles.popupCard, background: theme.bgCard, color: theme.textMain, textAlign: 'left' }}>
@@ -289,12 +301,10 @@ function AdminLayoutGridDefinitivo() {
             <span style={{ fontSize: '15px', fontWeight: 'bold', color: theme.textMain }}>
               {colaboradorSessao ? `Painel - ${colaboradorSessao.dsNomeColaborador || colaboradorSessao.nome}` : 'Painel Administrativo'}
             </span>
-
           </div>
         </div>
 
         <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
-          {/* Validação de acesso por tela para colaboradores */}
           {telaAtiva === 'dash' && planoEfetivo && (
             (!colaboradorSessao || colaboradorSessao.permissoes?.dash !== false) ? (
               planoEfetivo.configs?.tipoDashboard === 'gestao' ? (
@@ -309,21 +319,23 @@ function AdminLayoutGridDefinitivo() {
 
           {telaAtiva === 'produtos' && (!colaboradorSessao || colaboradorSessao.permissoes?.produtos !== false ? <CadastroProdutos /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Produtos.</div>)}
           {telaAtiva === 'pedidos' && lojistaIdReal && (!colaboradorSessao || colaboradorSessao.permissoes?.pedidos !== false ? <Pedidos pedidos={pedidos} db={db} lojistaIdApp={lojistaIdReal} /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Pedidos.</div>)}
-          {telaAtiva === 'despesas' && lojistaIdReal && (!colaboradorSessao || colaboradorSessao.permissoes?.despesas !== false ? <TabGestaoDespesas uid={lojistaIdReal} /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Despesas.</div>)}
           
-          {/* 🌟 Exibindo a página completa de financeiro (app/admin/financeiro/page.tsx) ao clicar na sidebar */}
-          {telaAtiva === 'financeiro' && (!colaboradorSessao || colaboradorSessao.permissoes?.financeiro !== false ? <GestaoFinanceiroPage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Financeiro.</div>)}
+          {/* 🌟 Aba de Devoluções correta e limpa */}
+          {telaAtiva === 'devolucoes' && lojistaIdReal && (!colaboradorSessao || colaboradorSessao.permissoes?.devolucoes !== false ? <DevolucaoPage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Devoluções.</div>)}
 
+          {telaAtiva === 'financeiro' && (!colaboradorSessao || colaboradorSessao.permissoes?.financeiro !== false ? <GestaoFinanceiroPage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Financeiro.</div>)}
           {telaAtiva === 'pdv' && (!colaboradorSessao || colaboradorSessao.permissoes?.pdv !== false ? <PaginaPDV /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao PDV.</div>)}
-          {telaAtiva === 'colaboradores' && (userRole === 'master' || userRole === 'admin' || !colaboradorSessao ? <PaginaColaboradores /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito.</div>)}
-          {telaAtiva === 'estoque' && (!colaboradorSessao || colaboradorSessao.permissoes?.estoque !== false ? <PaginaEstoque /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Estoque.</div>)}
           
-          {/* 🌟 Novas abas de Relatórios e Suporte */}
+          {/* 🌟 Validação blindada usando as flags booleanas para a página de colaboradores */}
+          {telaAtiva === 'colaboradores' && (isMasterFlag || isLojistaFlag || !colaboradorSessao ? <PaginaColaboradores /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito.</div>)}
+          
+          {telaAtiva === 'estoque' && (!colaboradorSessao || colaboradorSessao.permissoes?.estoque !== false ? <PaginaEstoque /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Estoque.</div>)}
           {telaAtiva === 'relatorios' && (!colaboradorSessao || colaboradorSessao.permissoes?.relatorios !== false ? <RelatoriosPage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Relatórios.</div>)}
           {telaAtiva === 'suporte' && (!colaboradorSessao || colaboradorSessao.permissoes?.suporte !== false ? <SuportePage /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito ao Suporte.</div>)}
-
           {telaAtiva === 'config' && (!colaboradorSessao || colaboradorSessao.permissoes?.config !== false ? <AdminConfig /> : <div style={{ padding: "40px", textAlign: "center", color: theme.textSec }}>Acesso restrito a Configurações.</div>)}
-          {telaAtiva === 'gestao-geral' && userRole === 'master' && <DashboardMaster />}
+          
+          {/* 🌟 Validação de Gestão Geral por flag master */}
+          {telaAtiva === 'gestao-geral' && (isMasterFlag || userRole === 'master') && <DashboardMaster />}
         </div>
 
       </main>
@@ -336,7 +348,6 @@ function AdminLayoutGridDefinitivo() {
         .main-content-area { background-color: ${theme.bgApp}; min-height: 100vh; width: 100%; max-width: 100%; padding: 24px; overflow-y: auto; overflow-x: hidden; box-sizing: border-box; }
         .mobile-header-bar { display: none; }
 
-        /* 🌟 Barra de Rolagem Adaptativa ao Tema (Modo Claro / Escuro) */
         * {
           scrollbar-width: thin;
           scrollbar-color: ${isModoNoturno ? '#334155 #1e293b' : '#cbd5e1 #f1f5f9'};
@@ -371,7 +382,6 @@ function AdminLayoutGridDefinitivo() {
   );
 }
 
-// Estilos isolados para não impactar o design original
 const styles: any = {
   overlay: { position: 'fixed', inset:0, background: 'rgba(0,0,0,0.6)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   popupCard: { padding: '24px', borderRadius: '16px', width: '90%', maxWidth: '450px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' },

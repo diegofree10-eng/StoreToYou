@@ -12,6 +12,8 @@
     "geral": "concurrently \"npm run dev\" \"firebase functions:log --only prepararNovoLojista\""
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^7.0.0",
+    "@stripe/stripe-js": "^10.0.0",
     "browser-image-compression": "^2.0.2",
     "firebase": "^10.12.4",
     "firebase-admin": "^14.1.0",
@@ -27,6 +29,7 @@
     "react-icons": "^5.7.0",
     "react-image-crop": "^11.1.2",
     "recharts": "^3.9.0",
+    "stripe": "^23.0.0",
     "swr": "^2.4.1"
   },
   "devDependencies": {

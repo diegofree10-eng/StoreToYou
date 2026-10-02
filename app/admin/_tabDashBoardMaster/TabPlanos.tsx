@@ -9,7 +9,8 @@ import { useTheme } from "@/context/ThemeContext";
 import {
   FiAward, FiUploadCloud, FiZap, FiTruck, FiCreditCard,
   FiStar, FiShoppingBag, FiDollarSign, FiCalendar, FiClock,
-  FiLayers, FiPieChart, FiShield, FiUsers, FiBarChart2
+  FiLayers, FiPieChart, FiShield, FiUsers, FiBarChart2, FiRefreshCw,
+  FiMessageSquare
 } from "react-icons/fi";
 
 interface TabPlanosProps {
@@ -38,7 +39,8 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
     });
   };
 
-  const handleToggleMeioPagamento = (planoKey: string, gateway: "mercado_pago" | "pagseguro") => {
+  // 🔄 Atualizado para aceitar também "stripe" nos meios de pagamento do plano
+  const handleToggleMeioPagamento = (planoKey: string, gateway: "mercado_pago" | "pagseguro" | "stripe") => {
     const meiosAtuais = Array.isArray(planos[planoKey].meios_pagamento)
       ? planos[planoKey].meios_pagamento
       : [];
@@ -223,6 +225,15 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
                   onChange={() => handleToggleMeioPagamento(key, 'pagseguro')}
                 />
               </label>
+              {/* 🌟 STRIPE ADICIONADA AQUI */}
+              <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiCreditCard color="#635bff" /> Stripe Habilitado</div>
+                <input
+                  type="checkbox"
+                  checked={gatewaysLiberados.includes("stripe")}
+                  onChange={() => handleToggleMeioPagamento(key, 'stripe')}
+                />
+              </label>
             </div>
 
             <div style={{ ...styles.recursosSection, background: isModoNoturno ? theme.bgApp : '#f8fafc', border: `1px solid ${theme.border}` }}>
@@ -249,16 +260,26 @@ export default function TabPlanos({ planos, setPlanos, mostrarAviso }: TabPlanos
               </label>
 
               <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ ...styles.checkLabel, color: theme.textMain }}>
+                  <FiMessageSquare color="#22c55e" /> Notificações via WhatsApp
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={!!planos[key].whatsappNotificacoes} 
+                  onChange={() => toggleRecurso(key, 'whatsappNotificacoes')} 
+                />
+              </label>
+
+              <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
                 <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiPieChart /> Canais de Renda (CSV)</div>
                 <input type="checkbox" checked={!!planos[key].temCanaisRenda} onChange={() => toggleRecurso(key, 'temCanaisRenda')} />
               </label>
 
               <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiDollarSign /> Módulo de Despesas</div>
-                <input type="checkbox" checked={!!planos[key].temDespesas} onChange={() => toggleRecurso(key, 'temDespesas')} />
+                <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiRefreshCw color="#f59e0b" /> Módulo de Devoluções</div>
+                <input type="checkbox" checked={!!planos[key].devolucoes} onChange={() => toggleRecurso(key, 'devolucoes')} />
               </label>
 
-              {/* 🌟 Opção Financeiro adicionada seguindo o mesmo padrão */}
               <label style={{ ...styles.checkRow, borderBottom: `1px solid ${theme.border}` }}>
                 <div style={{ ...styles.checkLabel, color: theme.textMain }}><FiDollarSign color="#10b981" /> Módulo Financeiro</div>
                 <input type="checkbox" checked={!!planos[key].financeiro} onChange={() => toggleRecurso(key, 'financeiro')} />

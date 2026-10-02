@@ -70,40 +70,105 @@ export async function POST(request: Request) {
 
       const totalFisico = itensFisicos.reduce(
         (acc: any, item: any) => {
-          const qty = Number(item.qty || item.quantidade || 1);
+          const qty = Number(
+            item.nrQuantidadeProduto ||
+              item.nrQuantidade ||
+              item.quantidade ||
+              item.qty ||
+              1,
+          );
+          const precoUnitario = Number(
+            item.vlPrecoProduto || item.preco || item.price || 0,
+          );
           return {
-            peso: acc.peso + Number(item.peso || item.weight || 0.3) * qty,
+            peso:
+              acc.peso +
+              Number(item.nrPesoProduto || item.peso || item.weight || 0.3) *
+                qty,
             largura: Math.max(
               acc.largura,
-              Number(item.largura || item.width || 15),
+              Number(item.nrLarguraProduto || item.largura || item.width || 15),
             ),
             altura: Math.max(
               acc.altura,
-              Number(item.altura || item.height || 10),
+              Number(item.nrAlturaProduto || item.altura || item.height || 10),
             ),
             comprimento: Math.max(
               acc.comprimento,
-              Number(item.comprimento || item.length || 15),
+              Number(
+                item.nrComprimentoProduto ||
+                  item.comprimento ||
+                  item.length ||
+                  15,
+              ),
             ),
-            valor: acc.valor + Number(item.preco || item.price || 0) * qty,
+            valor: acc.valor + precoUnitario * qty,
           };
         },
         { peso: 0, largura: 0, altura: 0, comprimento: 0, valor: 0 },
       );
 
-      const serviceId = Number(
+      const rawServiceId =
         p.Cotacao?.dsTransportadoraIdCotado ||
-          p.logistica?.dsTransportadoraId ||
-          p.financeiro?.dsTransportadoraId ||
-          p.freteSelecionado?.id ||
-          0,
-      );
+        p.logistica?.dsTransportadoraId ||
+        p.financeiro?.dsTransportadoraId ||
+        p.freteSelecionado?.id;
+
+      const serviceId = Number(rawServiceId);
+
+      if (!serviceId || isNaN(serviceId) || serviceId <= 0) {
+        errors.push({
+          pedido: p.id,
+          message:
+            "Pedido sem transportadora definida. Por favor, vá até a aba 'Cotar Frete' e selecione uma opção antes de emitir a etiqueta.",
+        });
+        continue; // Pula este pedido para não gerar erro na API do Melhor Envio
+      }
 
       const pedidoRef = db
         .collection("lojistas")
         .doc(lojistaId)
         .collection("pedidos")
         .doc(String(p.id));
+
+      // 🔍 LEITURA BLINDADA E RIGOROSA DOS DADOS DE ENDEREÇO SALVOS NO FIRESTORE
+      const end = p.dsEndereco || p.endereco || {};
+      const cli = p.dsCliente || p.cliente || {};
+
+      const ruaCliente = String(
+        end.dsRuaCliente || end.rua || end.logradouro || "",
+      ).trim();
+      const numeroCliente = String(
+        end.dsNumeroCliente || end.numero || "S/N",
+      ).trim();
+      const cepCliente = String(end.dsCepCliente || end.cep || "").replace(
+        /\D/g,
+        "",
+      );
+      const bairroCliente = String(
+        end.dsBairroCliente || end.bairro || "",
+      ).trim();
+      const cidadeCliente = String(
+        end.dsCidadeCliente || end.cidade || "",
+      ).trim();
+      const ufCliente = String(end.dsUfCliente || end.uf || "SP")
+        .toUpperCase()
+        .substring(0, 2);
+      const complementoCliente = String(
+        end.dsComplementoCliente || end.complemento || "",
+      ).trim();
+
+      console.log(`📦 [DEBUG PEDIDO ${p.id}] Dados de Endereço Lidos:`, {
+        rua: ruaCliente || undefined,
+        numero: numeroCliente || undefined,
+        cep: cepCliente || undefined,
+      });
+
+      // 🌟 GARANTE O VALOR DO SEGURO CORRETO E SEMPRE ACIMA DE R$ 1,00
+      const valorSeguroReal = Math.max(
+        1.0,
+        Number(p.financeiro?.vlTotal || p.total || totalFisico.valor || 1.0),
+      );
 
       const payloadCart = {
         service: serviceId,
@@ -149,47 +214,39 @@ export async function POST(request: Request) {
           ).replace(/\D/g, ""),
         },
         to: {
-          name: String(
-            p.cliente?.nmNomeCliente || p.cliente?.nome || "Cliente",
-          ).substring(0, 60),
+          name: String(cli.nmNomeCliente || cli.nome || "Cliente").substring(
+            0,
+            60,
+          ),
           phone: String(
-            p.cliente?.dsTelefoneCliente || p.cliente?.telefone || "0000000000",
+            cli.dsTelefoneCliente || cli.telefone || "0000000000",
           ).replace(/\D/g, ""),
-          email: String(
-            p.cliente?.dsEmailCliente ||
-              p.cliente?.email ||
-              "cliente@email.com",
+          email: String(cli.dsEmailCliente || cli.email || "cliente@email.com"),
+          document: String(cli.dsCpfCliente || cli.cpf || "").replace(
+            /\D/g,
+            "",
           ),
-          document: String(
-            p.cliente?.dsCpfCliente || p.cliente?.cpf || "",
-          ).replace(/\D/g, ""),
-          address: String(
-            p.endereco?.dsRuaCliente ||
-              p.endereco?.dsRua ||
-              p.endereco?.rua ||
-              "",
-          ),
-          number: String(
-            p.endereco?.dsNumeroCliente || p.endereco?.numero || "S/N",
-          ),
-          complement: String(
-            p.endereco?.dsComplementoCliente || p.endereco?.complemento || "",
-          ),
-          district: String(
-            p.endereco?.dsBairroCliente || p.endereco?.bairro || "",
-          ),
-          city: String(p.endereco?.dsCidadeCliente || p.endereco?.cidade || ""),
-          state_abbr: String(p.endereco?.dsUfCliente || p.endereco?.uf || "SP")
-            .toUpperCase()
-            .substring(0, 2),
-          postal_code: String(
-            p.endereco?.dsCepCliente || p.endereco?.cep || "",
-          ).replace(/\D/g, ""),
+          address: ruaCliente,
+          number: numeroCliente,
+          complement: complementoCliente,
+          district: bairroCliente,
+          city: cidadeCliente,
+          state_abbr: ufCliente,
+          postal_code: cepCliente,
         },
         products: itens.map((item: any) => ({
-          name: String(item.dsNome || item.nome || "Produto").substring(0, 40),
-          quantity: Number(item.nrQuantidade || item.quantidade || 1),
-          unitary_value: Number(item.preco || item.price || 0),
+          name: String(
+            item.dsNomeProduto || item.dsNome || item.nome || "Produto",
+          ).substring(0, 40),
+          quantity: Number(
+            item.nrQuantidadeProduto ||
+              item.nrQuantidade ||
+              item.quantidade ||
+              1,
+          ),
+          unitary_value: Number(
+            item.vlPrecoProduto || item.preco || item.price || 0,
+          ),
         })),
         volumes: [
           {
@@ -200,7 +257,7 @@ export async function POST(request: Request) {
           },
         ],
         options: {
-          insurance_value: totalFisico.valor,
+          insurance_value: valorSeguroReal,
           non_commercial: true,
           platform: "FestaEmTopo",
           note: String(p.financeiro?.metodo || "N/A"),
@@ -231,7 +288,9 @@ export async function POST(request: Request) {
 
         const cartItemId = cartData.id || cartData.data?.id;
         if (!cartItemId) {
-          throw new Error("Carrinho do Melhor Envio não retornou o ID do item.");
+          throw new Error(
+            "Carrinho do Melhor Envio não retornou o ID do item.",
+          );
         }
 
         const protocoloOficial =
@@ -327,7 +386,8 @@ export async function POST(request: Request) {
           statusEtiquetaFinal = "pago";
         } else if (
           typeof checkoutErrorMsg === "string" &&
-          (checkoutErrorMsg.toLowerCase().includes("saldo") || checkoutErrorMsg.toLowerCase().includes("insuficiente"))
+          (checkoutErrorMsg.toLowerCase().includes("saldo") ||
+            checkoutErrorMsg.toLowerCase().includes("insuficiente"))
         ) {
           statusEtiquetaFinal = "erro"; // Erro explícito de saldo para o lojista tratar
         } else {
@@ -362,12 +422,14 @@ export async function POST(request: Request) {
         }
       } catch (err: any) {
         console.error(`❌ [ERRO NO LOOP DO PEDIDO ${p.id}]:`, err.message);
-        
+
         // Em caso de exceção de código, salva explicitamente como erro na Etiqueta
-        await pedidoRef.update({
-          "Etiqueta.statusEtiqueta": "erro",
-          "Etiqueta.erroPagamento": err.message,
-        }).catch(() => {});
+        await pedidoRef
+          .update({
+            "Etiqueta.statusEtiqueta": "erro",
+            "Etiqueta.erroPagamento": err.message,
+          })
+          .catch(() => {});
 
         errors.push({ pedido: p.id, message: err.message });
       }

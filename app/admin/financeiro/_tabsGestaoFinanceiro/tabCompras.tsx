@@ -9,7 +9,12 @@ import { useTheme } from "@/context/ThemeContext";
 import { aplicarMascara } from "@/utils/formatters";
 import { converterUnidade } from "@/utils/conversaoUnidades";
 
-export function TabCompras({ uid }: { uid: string }) {
+interface TabComprasProps {
+    uid: string;
+    termoBusca?: string; // 🌟 Tipagem adicionada para evitar erros no build
+}
+
+export function TabCompras({ uid, termoBusca = "" }: TabComprasProps) {
     const { theme } = useTheme();
     const [pedidos, setPedidos] = useState<any[]>([]);
     const [insumosLista, setInsumosLista] = useState<any[]>([]);
@@ -181,6 +186,16 @@ export function TabCompras({ uid }: { uid: string }) {
         }));
     };
 
+    // Filtro global de busca aplicado à lista de pedidos
+    const pedidosFiltrados = pedidos.filter(pedido => {
+        if (!termoBusca) return true;
+        const termo = termoBusca.toLowerCase();
+        const numPed = String(pedido.numeroPedido || "").toLowerCase();
+        const forn = String(pedido.fornecedor || "").toLowerCase();
+        const obs = String(pedido.observacao || "").toLowerCase();
+        return numPed.includes(termo) || forn.includes(termo) || obs.includes(termo);
+    });
+
     // 1. REGISTRAR PEDIDO DE COMPRA (Pendente - Aguardando Entrega)
     const finalizarCompra = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -194,7 +209,6 @@ export function TabCompras({ uid }: { uid: string }) {
         try {
             const dataCompraIso = new Date().toISOString();
 
-            // Identifica o operador ativo
             let operadorNome = "Administrador";
             const operadorSalvo = localStorage.getItem("operadorAtivoPdv");
             if (operadorSalvo) {
@@ -226,18 +240,20 @@ export function TabCompras({ uid }: { uid: string }) {
                 valorTotalGeral: valorTotalGeral,
                 quantidadeItens: itensCompra.length,
                 itens: itensCompra,
-                status: "pendente", // 👈 AGUARDANDO ENTREGA FÍSICA
+                status: "pendente",
                 operador: operadorNome,
                 dataCompra: dataCompraIso
             });
 
-            // Contas a Pagar Financeira
+            // Contas a Pagar Financeira (Com descrição limpa e número isolado)
             const novoPagamentoRef = doc(collection(db, "lojistas", uid, "pagamentos_financeiro"));
             await setDoc(novoPagamentoRef, {
-                descricao: `Compra: ${nomeFornecedor} (Ped #${numeroPedidoFormatado})`,
+                numeroDespesa: numeroPedidoFormatado,
+                descricao: `Compra: ${nomeFornecedor}`,
                 valor: valorTotalGeral,
                 vencimento: dataCompraIso.split('T')[0],
                 status: "pendente",
+                tipo: "compra",
                 pedidoId: novoPedidoRef.id,
                 createdAt: dataCompraIso
             });
@@ -249,7 +265,7 @@ export function TabCompras({ uid }: { uid: string }) {
         }
     };
 
-    // 2. CONFIRMAR RECEBIMENTO (Baixa Física, Entrada no Estoque, CMP e Extrato)
+    // 2. CONFIRMAR RECEBIMENTO
     const confirmarRecebimentoMercadoria = async (pedido: any) => {
         if (!uid) return;
         if (pedido.status === "recebido") {
@@ -269,7 +285,6 @@ export function TabCompras({ uid }: { uid: string }) {
                 const valorTotalItem = Number(item.valorTotalItem);
                 const custoUnitarioNovaCompra = Number(item.valorUnitarioCalculado);
 
-                // Grava em compras_insumos
                 const novaCompraRef = doc(collection(db, "lojistas", uid, "compras_insumos"));
                 await setDoc(novaCompraRef, {
                     pedidoId: pedido.id,
@@ -286,7 +301,6 @@ export function TabCompras({ uid }: { uid: string }) {
                     dataCompra: dataRecebimentoIso
                 });
 
-                // Custo Médio Ponderado (CMP) e Atualização de Estoque
                 const insumoRef = doc(db, "lojistas", uid, "insumos_composicao", item.insumoId);
                 const insumoDocSnap = await getDoc(insumoRef);
                 const dadosAtuais = insumoDocSnap.exists() ? insumoDocSnap.data() : {};
@@ -305,7 +319,6 @@ export function TabCompras({ uid }: { uid: string }) {
                     updatedAt: dataRecebimentoIso
                 });
 
-                // 📜 Registro no Extrato de Movimentações
                 const movRef = doc(collection(db, "lojistas", uid, "movimentacoes_estoque"));
                 await setDoc(movRef, {
                     idItem: item.insumoId,
@@ -323,7 +336,6 @@ export function TabCompras({ uid }: { uid: string }) {
                 });
             }
 
-            // Atualiza o pedido para "recebido"
             await updateDoc(pedidoRef, {
                 status: "recebido",
                 dataRecebimento: dataRecebimentoIso
@@ -357,29 +369,28 @@ export function TabCompras({ uid }: { uid: string }) {
             {/* Container da Tabela de Pedidos */}
             <div style={{ background: theme.bgApp, borderRadius: '12px', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', tableLayout: 'fixed' }}>
                         <thead>
                             <tr style={{ background: theme.bgCard, borderBottom: `1px solid ${theme.border}`, color: theme.textSec }}>
                                 <th style={{ padding: '14px 16px', width: '50px' }}></th>
-                                <th style={{ padding: '14px 16px' }}>Data</th>
-                                <th style={{ padding: '14px 16px' }}>Pedido</th>
-                                <th style={{ padding: '14px 16px' }}>Fornecedor</th>
-                                <th style={{ padding: '14px 16px' }}>Status</th>
-                                <th style={{ padding: '14px 16px' }}>Qtd Itens</th>
-                                <th style={{ padding: '14px 16px' }}>Responsável</th>
-                                <th style={{ padding: '14px 16px', textAlign: 'right' }}>Valor Total</th>
-                                <th style={{ padding: '14px 16px', textAlign: 'center' }}>Ações</th>
+                                <th style={{ padding: '14px 16px', width: '12%' }}>Pedido</th>
+                                <th style={{ padding: '14px 16px', width: '30%' }}>Fornecedor</th>
+                                <th style={{ padding: '14px 16px', width: '10%' }}>Qtd Itens</th>
+                                <th style={{ padding: '14px 16px', width: '12%' }}>Data</th>
+                                <th style={{ padding: '14px 16px', width: '12%', textAlign: 'right' }}>Valor Total</th>
+                                <th style={{ padding: '14px 16px', width: '12%', textAlign: 'center' }}>Status</th>
+                                <th style={{ padding: '14px 16px', width: '12%', textAlign: 'center' }}>Ações</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {pedidos.length === 0 ? (
+                            {pedidosFiltrados.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} style={{ textAlign: 'center', padding: '50px', color: theme.textSec }}>
-                                        Nenhum pedido de compra registrado. 📦
+                                    <td colSpan={8} style={{ textAlign: 'center', padding: '50px', color: theme.textSec }}>
+                                        Nenhum pedido de compra encontrado. 📦
                                     </td>
                                 </tr>
                             ) : (
-                                pedidos.map((pedido) => {
+                                pedidosFiltrados.map((pedido) => {
                                     const estaExpandido = !!pedidosExpandidos[pedido.id];
                                     const isRecebido = pedido.status === "recebido";
 
@@ -394,37 +405,37 @@ export function TabCompras({ uid }: { uid: string }) {
                                                 >
                                                     {estaExpandido ? <FiChevronUp size={18} /> : <FiChevronDown size={18} />}
                                                 </td>
-                                                <td style={{ padding: '14px 16px', color: theme.textSec }}>
-                                                    {new Date(pedido.dataCompra).toLocaleDateString('pt-BR')}
-                                                </td>
-                                                <td style={{ padding: '14px 16px', fontWeight: 'bold', color: theme.primary }}>
+                                                <td style={{ padding: '14px 16px', fontWeight: 'bold', color: theme.primary, whiteSpace: 'nowrap' }}>
                                                     #{pedido.numeroPedido || '----'}
                                                 </td>
-                                                <td style={{ padding: '14px 16px', fontWeight: 'bold' }}>
+                                                <td style={{ padding: '14px 16px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={pedido.fornecedor}>
                                                     {pedido.fornecedor}
                                                 </td>
-                                                <td style={{ padding: '14px 16px' }}>
+                                                <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                                                    {pedido.quantidadeItens} {pedido.quantidadeItens === 1 ? 'item' : 'itens'}
+                                                </td>
+                                                <td style={{ padding: '14px 16px', color: theme.textSec, whiteSpace: 'nowrap' }}>
+                                                    {new Date(pedido.dataCompra).toLocaleDateString('pt-BR')}
+                                                </td>
+                                                <td style={{ padding: '14px 16px', textAlign: 'right', color: '#ef4444', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                                    R$ {Number(pedido.valorTotalGeral).toFixed(2).replace('.', ',')}
+                                                </td>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                                                     <span style={{
-                                                        padding: '4px 8px',
+                                                        display: 'inline-block',
+                                                        width: '85px',
+                                                        textAlign: 'center',
+                                                        padding: '4px 0',
                                                         borderRadius: '4px',
                                                         fontSize: '11px',
                                                         fontWeight: 'bold',
-                                                        color: '#fff',
-                                                        backgroundColor: isRecebido ? '#10b981' : '#f59e0b'
+                                                        backgroundColor: isRecebido ? '#dcfce7' : '#fee2e2',
+                                                        color: isRecebido ? '#166534' : '#991b1b'
                                                     }}>
                                                         {isRecebido ? 'RECEBIDO' : 'PENDENTE'}
                                                     </span>
                                                 </td>
-                                                <td style={{ padding: '14px 16px' }}>
-                                                    {pedido.quantidadeItens} {pedido.quantidadeItens === 1 ? 'item' : 'itens'}
-                                                </td>
-                                                <td style={{ padding: '14px 16px', color: theme.textSec }}>
-                                                    {pedido.operador || 'Admin'}
-                                                </td>
-                                                <td style={{ padding: '14px 16px', textAlign: 'right', color: '#10b981', fontWeight: 'bold' }}>
-                                                    R$ {Number(pedido.valorTotalGeral).toFixed(2).replace('.', ',')}
-                                                </td>
-                                                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                                                     {!isRecebido && (
                                                         <button
                                                             onClick={(e) => {
@@ -435,7 +446,7 @@ export function TabCompras({ uid }: { uid: string }) {
                                                                 backgroundColor: '#10b981',
                                                                 color: '#fff',
                                                                 border: 'none',
-                                                                padding: '6px 12px',
+                                                                padding: '6px 10px',
                                                                 borderRadius: '6px',
                                                                 fontSize: '11px',
                                                                 fontWeight: 'bold',
@@ -446,7 +457,7 @@ export function TabCompras({ uid }: { uid: string }) {
                                                             }}
                                                             title="Confirmar recebimento físico da mercadoria"
                                                         >
-                                                            <FiCheckCircle size={13} /> Confirmar Recebimento
+                                                            <FiCheckCircle size={13} /> Confirmar
                                                         </button>
                                                     )}
                                                 </td>
@@ -454,7 +465,7 @@ export function TabCompras({ uid }: { uid: string }) {
 
                                             {estaExpandido && (
                                                 <tr style={{ background: theme.bgCard, borderBottom: `1px solid ${theme.border}` }}>
-                                                    <td colSpan={9} style={{ padding: '16px 24px' }}>
+                                                    <td colSpan={8} style={{ padding: '16px 24px' }}>
                                                         <div style={{ background: theme.bgApp, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '16px' }}>
                                                             <h4 style={{ fontSize: '13px', margin: '0 0 12px 0', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                                 <FiShoppingCart size={14} /> Detalhes dos Itens do Pedido #{pedido.numeroPedido} {pedido.observacao ? `(Obs: ${pedido.observacao})` : ''}
@@ -475,7 +486,7 @@ export function TabCompras({ uid }: { uid: string }) {
                                                                             <td style={{ padding: '10px', fontWeight: 'bold' }}>{item.dsNomeInsumo}</td>
                                                                             <td style={{ padding: '10px' }}>{item.qtdComprada} {item.unidadeComprada || 'pct'} (Cada contendo {item.fatorConversao} {item.dsUnidadeEstoque})</td>
                                                                             <td style={{ padding: '10px', fontWeight: 'bold', color: theme.primary }}>+ {item.quantidadeTotalEstoque} {item.dsUnidadeEstoque}</td>
-                                                                            <td style={{ padding: '10px', textAlign: 'right', color: '#10b981', fontWeight: 'bold' }}>
+                                                                            <td style={{ padding: '10px', textAlign: 'right', color: '#ef4444', fontWeight: 'bold' }}>
                                                                                 R$ {Number(item.valorTotalItem).toFixed(2).replace('.', ',')}
                                                                             </td>
                                                                             <td style={{ padding: '10px', textAlign: 'right', color: theme.primary, fontWeight: '600' }}>
@@ -553,8 +564,8 @@ export function TabCompras({ uid }: { uid: string }) {
                                     <div style={{ background: theme.bgApp, border: `1px solid ${theme.primary}`, borderRadius: '8px', padding: '12px 16px', fontSize: '12px', color: theme.textSec, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                         <strong style={{ color: theme.textMain }}>💡 Como funciona a conversão inteligente de compra:</strong>
                                         <span>• <strong>Insumo Selecionado:</strong> O sistema puxa automaticamente se o controle dele é feito em metros, unidades, gramas ou mililitros.</span>
-                                        <span>• <strong>Qtd Comprada + Unidade:</strong> Quantos pacotes, caixas, rolos ou unidades comerciais você comprou (ex: <code>1</code> rolo).</span>
-                                        <span>• <strong>Conteúdo / Fator:</strong> Quantas unidades da <strong>unidade base</strong> cada pacote/rolo possui (o helper sugere automaticamente se compatível).</span>
+                                        <span>• <strong>Qtd Comprada + Unidade:</strong> Quantos pacotes, caixas, rolos ou unidades comerciais você comprou.</span>
+                                        <span>• <strong>Conteúdo / Fator:</strong> Quantas unidades da <strong>unidade base</strong> cada pacote/rolo possui.</span>
                                     </div>
                                 )}
 
@@ -670,7 +681,7 @@ export function TabCompras({ uid }: { uid: string }) {
                                                         </span>
                                                     </div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                        <span style={{ fontWeight: 'bold', color: '#10b981' }}>R$ {Number(item.valorTotalItem).toFixed(2).replace('.', ',')}</span>
+                                                        <span style={{ fontWeight: 'bold', color: '#ef4444' }}>R$ {Number(item.valorTotalItem).toFixed(2).replace('.', ',')}</span>
                                                         <div style={{ display: 'flex', gap: '6px' }}>
                                                             <button type="button" onClick={() => iniciarEdicaoItem(index)} style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', border: 'none', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer' }} title="Editar item">
                                                                 <FiEdit2 size={13} />
@@ -689,7 +700,7 @@ export function TabCompras({ uid }: { uid: string }) {
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: theme.bgCard, padding: '14px 18px', borderRadius: '8px', border: `1px solid ${theme.border}` }}>
                                 <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Valor Total Geral do Pedido:</span>
-                                <span style={{ fontSize: '18px', fontWeight: '800', color: '#10b981' }}>
+                                <span style={{ fontSize: '18px', fontWeight: '800', color: '#ef4444' }}>
                                     R$ {valorTotalGeral.toFixed(2).replace('.', ',')}
                                 </span>
                             </div>

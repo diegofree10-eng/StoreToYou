@@ -64,7 +64,7 @@ export async function POST(req: Request) {
             }
         }
 
-        // 2. Monta o objeto com os dados atualizados para o Firestore
+        // 2. Monta o objeto com os dados atualizados para a subcoleção do lojista
         const dadosAtualizados: any = {};
         if (nome !== undefined) {
             dadosAtualizados.dsNomeColaborador = nome;
@@ -90,16 +90,17 @@ export async function POST(req: Request) {
         const colabRef = adminDb.collection("lojistas").doc(lojistaId).collection("colaboradores").doc(colaboradorId);
         await colabRef.set(dadosAtualizados, { merge: true });
 
-        // 4. Atualiza na coleção global "usuarios"
+        // 4. Atualiza na coleção global "usuarios" incluindo as flags booleanas do novo padrão
         const usuarioRef = adminDb.collection("usuarios").doc(uid);
-        const usuarioSnap = await usuarioRef.get();
-        if (usuarioSnap.exists) {
-            await usuarioRef.set({
-                ...(nome !== undefined && { dsNomeColaborador: nome }),
-                ...(cargo !== undefined && { dsCargoColaborador: cargo, role: "colaborador" }),
-                ...(permissoes !== undefined && { permissoes })
-            }, { merge: true });
-        }
+        await usuarioRef.set({
+            role: "colaborador",
+            isTipoContaColaborador: true,  // ✅ Garante a flag booleana de colaborador
+            isTipoContaLogista: false,     // ✅ Garante que não é lojista
+            isTipoContaMaster: false,      // ✅ Garante que não é master
+            ...(nome !== undefined && { dsNomeColaborador: nome }),
+            ...(cargo !== undefined && { dsCargoColaborador: cargo }),
+            ...(permissoes !== undefined && { permissoes })
+        }, { merge: true });
 
         return NextResponse.json({ success: true, message: "Colaborador atualizado com sucesso." }, { status: 200 });
     } catch (error: any) {

@@ -41,6 +41,9 @@ export default function CarrinhoIdentidadeVisual() {
     // 📦 Estado para armazenar a embalagem recomendada/escolhida com estrutura aninhada da API de frete
     const [embalagemAPI, setEmbalagemAPI] = useState<any>(null);
 
+    // 💳 Estado para controlar se o cliente selecionou PIX ou Cartão (Stripe) no checkout
+    const [metodoPagamentoSelecionado, setMetodoPagamentoSelecionado] = useState<'pix' | 'stripe'>('pix');
+
     // ✨ Atualizado para ler o novo padrão booleano isPrecisaFreteProduto
     const isItemDigital = useCallback((item: any) => {
         const precisaFrete = item.isPrecisaFreteProduto ?? true;
@@ -84,6 +87,12 @@ export default function CarrinhoIdentidadeVisual() {
         corTexto: ap?.dscorTextoCard || ap?.corTexto || "#1e293b",
         whatsapp: lojaObj?.nrWhatssapLoja || lojaObj?.whatsapp || ""
     }), [ap, lojaObj]);
+
+    // 🌟 Verificação exata no JSON da loja: pagamentos.dsStripe.ativo
+    const isStripeAtivo = useMemo(() => {
+        const lojaAtual = dadosLoja || dadosLojaContext;
+        return lojaAtual?.pagamentos?.dsStripe?.ativo === true;
+    }, [dadosLoja, dadosLojaContext]);
 
     // ✨ Atualizado para ler estritamente vlPrecoProduto ou vlPrecoBasicoProduto do novo padrão
     const valorSubtotalProdutos = useMemo(() => {
@@ -240,7 +249,11 @@ export default function CarrinhoIdentidadeVisual() {
         const cupomEncontrado = cuponsObj[codigoLimpo];
 
         if (cupomEncontrado && (cupomEncontrado.ativo === true || cupomEncontrado.ativo === "true")) {
-            setDescontoAtivo({ valor: Number(cupomEncontrado.valor), tipo: cupomEncontrado.tipo });
+            // 🌟 Padroniza o tipo para o padrão esperado ("porcentagem" ou "valor_fixo")
+            const tipoBruto = String(cupomEncontrado.tipo || "").toLowerCase();
+            const tipoNormalizado = (tipoBruto.includes("porc") || tipoBruto.includes("%")) ? "porcentagem" : "valor_fixo";
+
+            setDescontoAtivo({ valor: Number(cupomEncontrado.valor), tipo: tipoNormalizado });
             alert("Cupom aplicado com sucesso!");
         } else {
             alert("Cupom inválido ou expirado.");
@@ -266,6 +279,41 @@ export default function CarrinhoIdentidadeVisual() {
     };
 
     const limparCupom = () => { setCupomDigitado(""); setDescontoAtivo({ valor: 0, tipo: "" }); };
+
+    // 🌟 Função para processar o pagamento via Stripe Connect
+    const pagarComStripe = async () => {
+        if (!isLojaAberta) { alert("Loja em férias!"); return; }
+        if (!podeFinalizar) {
+            alert("⚠️ Atenção: Preencha todos os dados obrigatórios e selecione o frete antes de prosseguir com o pagamento.");
+            return;
+        }
+
+        try {
+            // 🌟 Alterado para apontar para o caminho exato onde o arquivo route.ts foi salvo
+            const response = await fetch("/api/checkout/stripe/criar-checkout", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    lojistaId,
+                    safeCart,
+                    cliente,
+                    endereco,
+                    totalGeral,
+                    freteSel
+                })
+            });
+
+            const data = await response.json();
+            if (data.url) {
+                window.location.href = data.url; // Redireciona para o Checkout da Stripe
+            } else {
+                throw new Error(data.error || "Erro ao iniciar sessão de pagamento.");
+            }
+        } catch (error: any) {
+            console.error("Erro no pagamento Stripe:", error);
+            alert("Não foi possível iniciar o pagamento com Cartão. Tente novamente.");
+        }
+    };
 
     useEffect(() => {
         const cepClienteLimpo = (cliente?.dsCepCliente || "").replace(/\D/g, "");
@@ -515,6 +563,7 @@ export default function CarrinhoIdentidadeVisual() {
                 logistica,
                 Cotacao,
                 cupomDigitado,
+                tipoCupomCarrinho: descontoAtivo?.tipo || "valor_fixo",
                 payloadPixBruto,
                 // 🌟 Repassando o objeto completo aninhado gerado pela API de frete
                 embalagemRecomendada: embalagemAPI,
@@ -694,6 +743,11 @@ export default function CarrinhoIdentidadeVisual() {
                             config={config}
                             temFrete={temFrete}
                             freteSel={freteSel}
+                            // 🌟 Parâmetros repassados para suportar a Stripe corretamente
+                            isStripeAtivo={isStripeAtivo}
+                            onPagarComStripe={pagarComStripe}
+                            metodoPagamentoSelecionado={metodoPagamentoSelecionado}
+                            setMetodoPagamentoSelecionado={setMetodoPagamentoSelecionado}
                         />
                     }
                     bloco6={
